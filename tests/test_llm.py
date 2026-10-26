@@ -64,31 +64,55 @@ def test_data_url(tmp_path):
     assert llm.data_url(p) == "data:image/png;base64,aGk="
 
 
-SAM_TEXT = "<0f>0<|box;x1=10;y1=20;x2=14;y2=24;w=64;h=64|><|mask;x=0;y=0;data=5,5,!!!!!(QO(0lu8?|>\n"
-
-
 def event(type, **kw):
     return SimpleNamespace(type=type, **kw)
 
 
-def test_segment(fake, tmp_path):
-    img = tmp_path / "t.png"
-    img.write_bytes(b"png")
-    fake.responses.create.return_value = iter([
-        event("response.content_part.done", part=SimpleNamespace(type="output_text", text=SAM_TEXT)),
-        event("response.completed", response=SimpleNamespace(usage={"total_tokens": 9})),
-    ])
-    (mask,) = llm.segment(img, "pond", purpose="t")
-    assert mask.object_id == "0" and (mask.bounds.left, mask.bounds.top) == (10, 20)
-    assert mask.mask.width == 5
-    content = fake.responses.create.call_args.kwargs["input"][0]["content"]
-    assert content[1] == {"type": "input_text", "text": "pond"}
-    assert json.loads(llm.LOG_PATH.read_text())["model"] == llm.SAM
+@pytest.fixture
+def img(tmp_path):
+    p = tmp_path / "t.png"
+    p.write_bytes(b"png")
+    return p
 
 
-def test_segment_failure_raises(fake, tmp_path):
-    img = tmp_path / "t.png"
-    img.write_bytes(b"png")
-    fake.responses.create.return_value = iter([event("response.failed")])
+def test_sam_raw(fake, img):
+    fake.responses.create.return_value = SimpleNamespace(output_text="MASKS", usage={"total_tokens": 9})
+    assert llm.sam_raw(img, "pond", purpose="t") == "MASKS"
+    kw = fake.responses.create.call_args.kwargs
+    assert kw["model"] == llm.SAM and kw["metadata"] == {"include_confidence": "true"}
+    assert kw["input"][0]["content"][1] == {"type": "input_text", "text": "pond"}
+    assert "stream" not in kw and not fake.responses.stream.called
+    row = json.loads(llm.LOG_PATH.read_text())
+    assert row["model"] == llm.SAM and row["usage"] == {"total_tokens": 9}
+
+
+def test_sam_raw_without_confidence(fake, img):
+    fake.responses.create.return_value = SimpleNamespace(output_text="M", usage=None)
+    llm.sam_raw(img, "pond", include_confidence=False)
+    assert "metadata" not in fake.responses.create.call_args.kwargs
+
+
+def stream_events(fake, *events):
+    fake.responses.create.return_value = SimpleNamespace(output_text="", usage=None)
+    fake.responses.stream.return_value.__enter__.return_value = iter(events)
+
+
+def test_sam_raw_falls_back_to_stream_deltas(fake, img):
+    stream_events(fake, event("response.output_text.delta", delta="MA"),
+                  event("response.output_text.delta", delta="SKS"),
+                  event("response.content_part.done", part=SimpleNamespace(type="output_text", text="MASKS")),
+                  event("response.completed", response=SimpleNamespace(usage={"total_tokens": 3})))
+    assert llm.sam_raw(img, "pond") == "MASKS"
+    assert fake.responses.stream.call_args.kwargs["model"] == llm.SAM
+    assert json.loads(llm.LOG_PATH.read_text())["usage"] == {"total_tokens": 3}
+
+
+def test_sam_raw_stream_uses_content_part_without_deltas(fake, img):
+    stream_events(fake, event("response.content_part.done", part=SimpleNamespace(type="output_text", text="M")))
+    assert llm.sam_raw(img, "pond") == "M"
+
+
+def test_sam_raw_stream_failure_raises(fake, img):
+    stream_events(fake, event("response.failed"))
     with pytest.raises(RuntimeError):
-        llm.segment(img, "pond")
+        llm.sam_raw(img, "pond")

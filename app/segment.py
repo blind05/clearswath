@@ -4,37 +4,58 @@ import hashlib
 import json
 from pathlib import Path
 
-import geopandas as gpd
 import numpy as np
-from meta_sam_parser import decode_mask_to_raster
+from meta_sam_parser import CompletedOutcome, decode_mask_to_raster, image_segmentation_format
 from rasterio.features import shapes
 from rasterio.transform import Affine
-from shapely.geometry import shape
+from rasterio.warp import transform_geom
+from shapely.geometry import mapping, shape
 
 from app import geo, imagery, llm
 
 CACHE = Path(__file__).resolve().parent.parent / "data" / "cache"
+# One noun phrase per SAM request; a list in one phrase matches nothing.
 PHRASES = {
-    "water": "pond, lake, stream or river",
-    "building": "house or building",
-    "habitat": "forest or wetland",
+    "water": ["pond", "creek", "river"],
+    "building": ["building"],
+    "habitat": ["tree line"],
 }
 
 
-def _polygons(masks: list, meta: dict) -> list:
-    """SAM mask records (pixel coords on the tile) -> polygons in lon/lat."""
-    tile = Affine(*meta["transform"])
+def masks_to_polygons(text: str, width: int, height: int, transform, crs, min_area=50,
+                      simplify=0.5, min_confidence=0.0) -> list:
+    """SAM output text (pixel coords on the tile) -> polygons in lon/lat.
+
+    min_area and simplify are in tile CRS units (square meters / meters for NAIP in UTM).
+    """
+    parser = image_segmentation_format().create_parser()
+    parser.push(text)
+    tile = Affine(*transform)
     polys = []
-    for rec in masks:
-        m = rec.mask
-        raster = np.frombuffer(decode_mask_to_raster(m), dtype=np.uint8).reshape(m.height, m.width)
-        # Masks are cropped to their box; place them at the box corner.
+    for rec in parser.finish(CompletedOutcome()).result.records:
+        if rec.kind != "mask" or (rec.confidence is not None and rec.confidence < min_confidence):
+            continue
+        m, top, left = rec.mask, rec.bounds.top, rec.bounds.left
         # TODO(verify): assumes SAM reports pixels of the PNG as sent, not a resized frame
-        t = tile * Affine.translation(rec.bounds.left, rec.bounds.top)
-        polys += [shape(g) for g, _ in shapes(raster, mask=raster == 1, transform=t)]
-    if not polys:
-        return []
-    return list(gpd.GeoSeries(polys, crs=meta["crs"]).to_crs(4326))
+        crop = np.frombuffer(decode_mask_to_raster(m), dtype=np.uint8).reshape(m.height, m.width)
+        canvas = np.zeros((height, width), dtype=np.uint8)
+        r0, c0 = max(top, 0), max(left, 0)
+        r1, c1 = min(top + m.height, height), min(left + m.width, width)
+        if r1 <= r0 or c1 <= c0:
+            continue
+        canvas[r0:r1, c0:c1] = crop[r0 - top:r1 - top, c0 - left:c1 - left]
+        for g, _ in shapes(canvas, mask=canvas == 1, transform=tile):
+            p = shape(g)
+            if p.area >= min_area:
+                polys.append(shape(transform_geom(crs, "EPSG:4326", mapping(p.simplify(simplify)))))
+    return polys
+
+
+def segment_tile(png, phrase: str, **kw) -> list:
+    """One SAM call for one phrase on a tile from imagery.fetch_tile -> lon/lat polygons."""
+    meta = json.loads(Path(png).with_suffix(".json").read_text())
+    text = llm.sam_raw(png, phrase, purpose=f"segment:{phrase}")
+    return masks_to_polygons(text, meta["width"], meta["height"], meta["transform"], meta["crs"], **kw)
 
 
 def find_hazards(field_path) -> dict:
@@ -52,8 +73,7 @@ def find_hazards(field_path) -> dict:
     def sam(hazard):
         if not png.exists():
             imagery.fetch_tile(field_path, png)
-        meta = json.loads(png.with_suffix(".json").read_text())
-        return _polygons(llm.segment(png, PHRASES[hazard], purpose=f"segment:{hazard}"), meta)
+        return [p for phrase in PHRASES[hazard] for p in segment_tile(png, phrase)]
 
     out = {h: cached(h, lambda h=h: sam(h)) for h in PHRASES}
     usgs = cached("water_usgs", lambda: imagery.usgs_water(field_path))

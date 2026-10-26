@@ -9,7 +9,6 @@ from functools import cache
 from pathlib import Path
 
 from dotenv import load_dotenv
-from meta_sam_parser import CompletedOutcome, image_segmentation_format
 from openai import OpenAI
 
 BASE_URL = "https://api.meta.ai/v1"
@@ -68,26 +67,46 @@ def chat_json(messages: list[dict], schema: dict, name: str, *,
     return json.loads(resp.choices[0].message.content)
 
 
-def segment(image_path: str | Path, phrase: str, *, purpose: str = "") -> list:
-    """SAM noun-phrase segmentation of one image. Returns meta_sam_parser mask records."""
+def sam_raw(png: str | Path, phrase: str, include_confidence: bool = True, *, purpose: str = "") -> str:
+    """Raw SAM output text for ONE noun phrase on one image. Lists like "pond, creek" match nothing."""
     start = time.perf_counter()
-    # TODO(verify): request shape. The SAM protocol only says the noun phrase goes in input_text.
-    stream = client().responses.create(model=SAM, stream=True, input=[{"role": "user", "content": [
-        {"type": "input_image", "image_url": data_url(image_path)},
+    req = {"model": SAM, "input": [{"role": "user", "content": [
+        {"type": "input_image", "image_url": data_url(png)},
         {"type": "input_text", "text": phrase},
-    ]}])
-    text, usage = "", None
-    for ev in stream:
-        if ev.type == "response.content_part.done" and ev.part.type == "output_text":
-            text += ev.part.text  # the live SAM API only finalizes text this way
-        elif ev.type == "response.completed":
-            usage = ev.response.usage
-        elif ev.type in ("response.failed", "response.incomplete", "error"):
-            raise RuntimeError(f"SAM request ended with {ev.type}")
+    ]}]}
+    if include_confidence:
+        req["metadata"] = {"include_confidence": "true"}  # TODO(verify): confidence via metadata
+    resp = client().responses.create(**req)
+    text, usage = resp.output_text, resp.usage
+    if not text:
+        text, usage = _sam_stream(req)
     log_call(SAM, purpose, time.perf_counter() - start, usage)
-    parser = image_segmentation_format().create_parser()
-    parser.push(text)
-    return [r for r in parser.finish(CompletedOutcome()).result.records if r.kind == "mask"]
+    return text
+
+
+def _sam_stream(req: dict) -> tuple[str, object]:
+    """Streaming fallback: output_text deltas, else content_part.done (what the live API sent before)."""
+    deltas, parts, usage = "", "", None
+    with client().responses.stream(**req) as stream:
+        for ev in stream:
+            if ev.type == "response.output_text.delta":
+                deltas += ev.delta
+            elif ev.type == "response.content_part.done" and ev.part.type == "output_text":
+                parts += ev.part.text
+            elif ev.type == "response.completed":
+                usage = ev.response.usage
+            elif ev.type in ("response.failed", "response.incomplete", "error"):
+                raise RuntimeError(f"SAM request ended with {ev.type}")
+    return deltas or parts, usage
+
+
+def transcribe(audio_path: str | Path, *, purpose: str = "") -> str:
+    start = time.perf_counter()
+    # TODO(verify): OpenAI-style transcription endpoint on api.meta.ai
+    with Path(audio_path).open("rb") as f:
+        resp = client().audio.transcriptions.create(model=VOICE, file=f)
+    log_call(VOICE, purpose, time.perf_counter() - start, getattr(resp, "usage", None))
+    return resp.text
 
 
 def data_url(path: str | Path) -> str:
