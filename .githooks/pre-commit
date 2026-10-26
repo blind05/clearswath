@@ -1,0 +1,11 @@
+#!/bin/sh
+# Blocks .env, API keys and failing tests from being committed.
+if git diff --cached --name-only | grep -qE '(^|/)\.env$'; then
+  echo "pre-commit: .env is staged. Run: git restore --staged .env" >&2
+  exit 1
+fi
+if git diff --cached -U0 -- . ':!.env.example' | grep -E '^\+' | grep -qE 'MODEL_API_KEY *= *["'"'"']?[A-Za-z0-9_-]{20,}'; then
+  echo "pre-commit: an API key is staged." >&2
+  exit 1
+fi
+uv run pytest -q || { echo "pre-commit: tests failing." >&2; exit 1; }

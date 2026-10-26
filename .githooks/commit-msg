@@ -1,0 +1,13 @@
+#!/bin/sh
+# Strips AI attribution lines, then enforces "type: summary" commit messages.
+msg="$1"
+grep -viE '^(co-authored-by:|claude-session:|generated (with|by) |.*https://claude\.ai/code/session)' "$msg" > "$msg.tmp" || true
+mv "$msg.tmp" "$msg"
+# trim trailing blank lines left behind
+printf '%s\n' "$(cat "$msg")" > "$msg.tmp" && mv "$msg.tmp" "$msg"
+first=$(head -n1 "$msg")
+case "$first" in Merge*|Revert*) exit 0 ;; esac
+if ! printf '%s\n' "$first" | grep -qE '^(feat|fix|test|docs|chore|refactor|style|perf)(\([a-z0-9-]+\))?: .{3,72}$'; then
+  echo "commit-msg: use 'type: summary', e.g. 'feat: buffer engine'." >&2
+  exit 1
+fi
