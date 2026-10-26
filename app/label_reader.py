@@ -1,0 +1,117 @@
+"""Pesticide label (PDF or image) -> LabelRules. Every kept rule's quote is found in the label text."""
+
+from pathlib import Path
+from typing import Literal
+
+import pymupdf
+from pydantic import BaseModel, ValidationError
+
+from app import llm
+
+KINDS = ["buffer", "wind", "rain", "rate", "other"]
+TARGETS = ["water", "building", "habitat"]
+APPLIES_TO = ["all", "aerial", "ground"]
+BUFFER_UNITS = {"ft", "m"}
+
+
+class LabelRule(BaseModel):
+    kind: Literal["buffer", "wind", "rain", "rate", "other"]
+    target: Literal["water", "building", "habitat"] | None
+    applies_to: Literal["all", "aerial", "ground"]
+    value: float | None
+    unit: str | None
+    summary: str
+    quote: str
+    page: int
+
+
+class LabelRules(BaseModel):
+    product_name: str | None
+    epa_reg_no: str | None
+    rules: list[LabelRule]
+    dropped: list[dict]  # model rules that failed checks, each with a "reason"
+    source: Literal["pdf", "image"]  # image text is the model's own transcription
+
+
+RULE_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "kind": {"type": "string", "enum": KINDS},
+        "target": {"type": ["string", "null"], "enum": [*TARGETS, None]},
+        "applies_to": {"type": "string", "enum": APPLIES_TO},
+        "value": {"type": ["number", "null"]},
+        "unit": {"type": ["string", "null"]},
+        "summary": {"type": "string"},
+        "quote": {"type": "string"},
+        "page": {"type": "integer"},
+    },
+    "required": ["kind", "target", "applies_to", "value", "unit", "summary", "quote", "page"],
+    "additionalProperties": False,
+}
+SCHEMA = {
+    "type": "object",
+    "properties": {
+        "product_name": {"type": ["string", "null"]},
+        "epa_reg_no": {"type": ["string", "null"]},
+        "rules": {"type": "array", "items": RULE_SCHEMA},
+    },
+    "required": ["product_name", "epa_reg_no", "rules"],
+    "additionalProperties": False,
+}
+
+
+def _norm(s: str) -> str:
+    for a, b in (("’", "'"), ("‘", "'"), ("“", '"'), ("”", '"'), ("­", "")):
+        s = s.replace(a, b)
+    return " ".join(s.split()).lower()
+
+
+def _pages(path: Path) -> tuple[list[str], str]:
+    if path.suffix.lower() == ".pdf":
+        with pymupdf.open(path) as doc:
+            return [p.get_text() for p in doc], "pdf"
+    msg = llm.chat([{"role": "user", "content": [
+        {"type": "text", "text": "Transcribe all text on this pesticide label exactly, word for word."},
+        {"type": "image_url", "image_url": {"url": llm.data_url(path)}},
+    ]}], purpose="label_ocr")
+    return [msg.content or ""], "image"
+
+
+def _check(rule: dict, pages: list[str]) -> str | None:
+    """Fixes rule["page"] if the quote is on another page. Returns a reason to drop, or None."""
+    quote = _norm(rule.get("quote") or "")
+    if not quote:
+        return "empty quote"
+    claimed = rule.get("page")
+    order = [claimed] + [n for n in range(1, len(pages) + 1) if n != claimed]
+    found = next((n for n in order if 1 <= n <= len(pages) and quote in _norm(pages[n - 1])), None)
+    if found is None:
+        return "quote not found in label text"
+    rule["page"] = found
+    if rule.get("kind") == "buffer":
+        if rule.get("target") is None:
+            return "buffer without a target"
+        if rule.get("value") is None or (rule.get("unit") or "").lower() not in BUFFER_UNITS:
+            return "buffer without a distance in ft or m"
+        rule["unit"] = rule["unit"].lower()
+    return None
+
+
+def read_label(path: str | Path) -> LabelRules:
+    path = Path(path)
+    pages, source = _pages(path)
+    text = "\n\n".join(f"=== Page {n} ===\n{t}" for n, t in enumerate(pages, 1))
+    out = llm.chat_json([{"role": "system", "content": llm.load_prompt("label")},
+                         {"role": "user", "content": text}], SCHEMA, "label_rules", purpose="label")
+    rules, dropped = [], []
+    for r in out["rules"]:
+        reason = _check(r, pages)
+        if not reason:
+            try:
+                rules.append(LabelRule(**r))
+                continue
+            except ValidationError as e:
+                reason = f"invalid fields: {', '.join(str(x['loc'][0]) for x in e.errors())}"
+        dropped.append({**r, "reason": reason})
+    return LabelRules(product_name=out["product_name"], epa_reg_no=out["epa_reg_no"],
+                      rules=rules, dropped=dropped, source=source)
