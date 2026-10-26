@@ -99,3 +99,8 @@ def test_label(client, monkeypatch):
     monkeypatch.setattr(label_reader, "read_label", lambda p: lr)
     r = client.post("/api/label", files={"label": ("x.pdf", b"%PDF")})
     assert r.status_code == 200 and r.json()["epa_reg_no"] == "1-2"
+
+
+def test_serves_page(client):
+    r = client.get("/")
+    assert r.status_code == 200 and "<title>ClearSwath</title>" in r.text

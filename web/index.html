@@ -1,0 +1,167 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ClearSwath</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+      integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="">
+<style>
+  :root { --go: #1a7f37; --adjust: #b35900; --nogo: #c62828; --ink: #1d2327; --muted: #5f6b73;
+          --line: #d8dee2; --bg: #f5f7f6; --card: #fff; }
+  * { box-sizing: border-box; }
+  body { margin: 0; font: 15px/1.45 system-ui, -apple-system, Segoe UI, sans-serif; color: var(--ink); background: var(--bg); }
+  header { padding: 12px 20px; background: #12352a; color: #fff; display: flex; align-items: baseline; gap: 12px; }
+  header h1 { margin: 0; font-size: 20px; }
+  header span { opacity: .8; font-size: 14px; }
+  main { display: grid; grid-template-columns: 380px 1fr; height: calc(100vh - 50px); }
+  aside { overflow-y: auto; padding: 16px; border-right: 1px solid var(--line); background: var(--card); }
+  #map { height: 100%; }
+  form { display: grid; gap: 10px; }
+  label { display: grid; gap: 4px; font-weight: 600; font-size: 13px; }
+  input, select, button { font: inherit; }
+  input[type=month], select { padding: 6px; border: 1px solid var(--line); border-radius: 6px; }
+  .row { display: flex; gap: 8px; }
+  .row > * { flex: 1; }
+  button { padding: 9px; border: 0; border-radius: 6px; background: #12352a; color: #fff; font-weight: 600; cursor: pointer; }
+  button.secondary { background: #e4ebe8; color: var(--ink); }
+  button:disabled { opacity: .6; cursor: wait; }
+  #status { margin: 16px 0 8px; padding: 14px; border-radius: 8px; color: #fff; font-size: 28px; font-weight: 800; text-align: center; letter-spacing: .04em; }
+  .go { background: var(--go); } .adjust { background: var(--adjust); } .no-go { background: var(--nogo); }
+  .acres { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; text-align: center; margin-bottom: 12px; }
+  .acres div { background: var(--bg); border-radius: 6px; padding: 6px; }
+  .acres b { display: block; font-size: 18px; }
+  .acres small { color: var(--muted); }
+  .warn { background: #fff4e5; border: 2px solid var(--adjust); border-radius: 8px; padding: 10px 12px; margin-bottom: 12px; }
+  .warn h3 { margin: 0 0 6px; font-size: 14px; color: var(--adjust); }
+  .warn ul { margin: 0; padding-left: 18px; }
+  h2 { font-size: 14px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); margin: 16px 0 6px; }
+  .reason { border-left: 4px solid var(--line); padding: 4px 10px; margin-bottom: 8px; }
+  .reason.label { border-color: #1565c0; } .reason.bulletin { border-color: var(--nogo); } .reason.rule\:water { border-color: #0097a7; }
+  .reason blockquote { margin: 4px 0; font-style: italic; color: var(--muted); }
+  .tag { font-size: 11px; font-weight: 700; text-transform: uppercase; color: var(--muted); }
+  .meta { color: var(--muted); font-size: 13px; }
+  .error { color: var(--nogo); font-weight: 600; }
+  a.kml { display: block; text-align: center; margin-top: 12px; padding: 9px; border: 2px solid #12352a; border-radius: 6px; color: #12352a; font-weight: 700; text-decoration: none; }
+  @media (max-width: 800px) { main { grid-template-columns: 1fr; height: auto; } #map { height: 60vh; } }
+</style>
+</head>
+<body>
+<header><h1>ClearSwath</h1><span>Pesticide label + field &rarr; legal spray zone</span></header>
+<main>
+  <aside>
+    <form id="form">
+      <label>Field outline (GeoJSON)<input type="file" name="field" accept=".geojson,.json" required></label>
+      <label>Pesticide label (PDF or photo)<input type="file" name="label" accept=".pdf,.png,.jpg,.jpeg,.webp" required></label>
+      <div class="row">
+        <label>Month<input type="month" name="month" required></label>
+        <label>Method<select name="method"><option value="drone">Drone</option><option value="ground">Ground</option></select></label>
+      </div>
+      <div class="row">
+        <button type="submit">Plan spray</button>
+        <button type="button" class="secondary" id="demo">Try demo</button>
+      </div>
+    </form>
+    <p id="busy" class="meta" hidden>Reading label, finding hazards and checking bulletins&hellip;</p>
+    <p id="error" class="error" role="alert"></p>
+    <section id="result" hidden aria-live="polite"></section>
+  </aside>
+  <div id="map" aria-label="Map of the field and spray zone"></div>
+</main>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+        integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+<script>
+const $ = (s) => document.querySelector(s);
+const form = $("#form");
+form.month.value = new Date().toISOString().slice(0, 7);
+
+const map = L.map("map").setView([42, -93], 5);
+L.tileLayer("https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}", {
+  maxZoom: 19, attribution: "Imagery &copy; Esri, Maxar, Earthstar Geographics",
+}).addTo(map);
+const control = L.control.layers(null, null, { collapsed: false }).addTo(map);
+let overlays = [];
+
+const STYLES = {
+  spray_zone: ["Spray zone", { color: "#1a7f37", fillOpacity: 0.35, weight: 1 }],
+  no_spray: ["No spray", { color: "#c62828", fillOpacity: 0.4, weight: 1 }],
+  restricted: ["Bulletin area", { color: "#6a1b9a", fillOpacity: 0.25, dashArray: "4" }],
+  water: ["Water", { color: "#29b6f6", fillOpacity: 0.5, weight: 2 }],
+  building: ["Buildings", { color: "#ffb300", fillOpacity: 0.5, weight: 1 }],
+  habitat: ["Habitat", { color: "#7cb342", fillOpacity: 0.3, weight: 1 }],
+  field: ["Field", { color: "#fff", fill: false, weight: 3 }],
+};
+
+function el(tag, attrs = {}, ...kids) {
+  const e = document.createElement(tag);
+  Object.entries(attrs).forEach(([k, v]) => (k === "class" ? (e.className = v) : e.setAttribute(k, v)));
+  kids.flat().forEach((k) => k != null && e.append(k));
+  return e;
+}
+
+function drawMap(layers) {
+  overlays.forEach((l) => { map.removeLayer(l); control.removeLayer(l); });
+  overlays = [];
+  for (const [key, [name, style]] of Object.entries(STYLES)) {
+    const data = layers[key];
+    if (!data || (data.features && !data.features.length)) continue;
+    const layer = L.geoJSON(data, { style }).addTo(map);
+    control.addOverlay(layer, name);
+    overlays.push(layer);
+    if (key === "field") map.fitBounds(layer.getBounds(), { padding: [30, 30] });
+  }
+}
+
+function render(r) {
+  const out = $("#result");
+  const status = { go: "GO", adjust: "ADJUST", "no-go": "NO-GO" }[r.status];
+  const acres = r.acres;
+  out.replaceChildren(...[
+    el("div", { id: "status", class: r.status }, status),
+    el("div", { class: "acres" },
+      el("div", {}, el("b", {}, acres.field_acres.toFixed(1)), el("small", {}, "field ac")),
+      el("div", {}, el("b", {}, acres.spray_acres.toFixed(1)), el("small", {}, "sprayable ac")),
+      el("div", {}, el("b", {}, acres.excluded_acres.toFixed(1)), el("small", {}, "excluded ac"))),
+    r.warnings.length ? el("div", { class: "warn", role: "alert" },
+      el("h3", {}, "Check before spraying"), el("ul", {}, r.warnings.map((w) => el("li", {}, w)))) : null,
+    el("h2", {}, "Why"),
+    r.reasons.length ? r.reasons.map((x) => el("div", { class: `reason ${x.source}` },
+      el("div", { class: "tag" }, x.source === "label" ? `Label p.${x.page} · ${x.distance_ft} ft from ${x.target}` : x.source),
+      el("div", {}, x.summary),
+      x.quote ? el("blockquote", {}, `“${x.quote}”`) : null)) : el("p", { class: "meta" }, "No hazards or limitations affect this field."),
+    el("h2", {}, "Product"),
+    el("p", {}, `${r.label.product_name || "Unknown product"} · EPA Reg. No. ${r.label.epa_reg_no || "not found"}`),
+    el("p", { class: "meta" }, r.bulletin.citation),
+    el("p", { class: "meta" }, `Imagery ${r.imagery_date || "unknown"} · water from ${r.water_source} · ${r.method}, ${r.month}`),
+    el("a", { class: "kml", href: `/api/kml/${r.run_id}`, download: "" }, "Download KML for sprayer"),
+  ].flat().filter(Boolean));
+  out.hidden = false;
+  drawMap(r.layers);
+}
+
+async function call(url, opts) {
+  $("#error").textContent = "";
+  $("#busy").hidden = false;
+  form.querySelectorAll("button").forEach((b) => (b.disabled = true));
+  try {
+    const res = await fetch(url, opts);
+    const body = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(typeof body.detail === "string" ? body.detail : `Request failed (${res.status})`);
+    render(body);
+  } catch (e) {
+    $("#error").textContent = e.message;
+  } finally {
+    $("#busy").hidden = true;
+    form.querySelectorAll("button").forEach((b) => (b.disabled = false));
+  }
+}
+
+form.addEventListener("submit", (e) => {
+  e.preventDefault();
+  call("/api/plan", { method: "POST", body: new FormData(form) });
+});
+$("#demo").addEventListener("click", () =>
+  call(`/api/demo?month=${form.month.value}&method=${form.method.value}`));
+</script>
+</body>
+</html>
