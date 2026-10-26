@@ -49,13 +49,7 @@ def _plan(run_id: str, field_path: Path, label_path: Path, month: str, method: s
         raise HTTPException(422, str(e)) from e
     except (LookupError, RuntimeError) as e:  # no imagery, missing key, model failure
         raise HTTPException(502, str(e)) from e
-    plan, label, centre = result["plan"], result["label"], result["field"].centroid
-    geo.save_shapes([plan["spray_zone"], plan["no_spray"]], RUNS / run_id / "plan.geojson",
-                    [{"name": "Spray zone"}, {"name": "No spray"}])
-    job = {"product_name": label.product_name, "epa_reg_no": label.epa_reg_no,
-           "area_treated_acres": plan["spray_acres"], "location": f"{centre.y:.5f}, {centre.x:.5f}",
-           "method": plan["method"]}
-    (RUNS / run_id / "job.json").write_text(json.dumps(job))
+    pipeline.save_run(result, RUNS / run_id)
     return {"run_id": run_id, **pipeline.to_json(result)}
 
 
