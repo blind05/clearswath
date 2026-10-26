@@ -69,20 +69,57 @@ def test_fetch_tile_no_imagery(field_path, monkeypatch):
         imagery.fetch_tile(field_path, "unused.png")
 
 
-def test_usgs_water(field_path, monkeypatch):
-    pond = box(-93.0, 42.0, -92.999, 42.001)
-    creek = LineString([(-93.0, 42.0), (-92.99, 42.01)])
+def test_fetch_tile_max_px_and_skip(field_path, naip, tmp_path, monkeypatch):
+    out = tmp_path / "f.png"
+    meta = imagery.fetch_tile(field_path, out, max_px=200)
+    assert max(meta["width"], meta["height"]) == 200
+    monkeypatch.setattr(imagery.Client, "open", lambda *a, **kw: pytest.fail("refetched"))
+    assert imagery.fetch_tile(field_path, out) == meta
 
+
+POND = box(-93.0, 42.0, -92.999, 42.001)
+CREEK = LineString([(-93.0, 42.0), (-92.99, 42.01)])
+
+
+def fake_nhd(monkeypatch, results):
+    """results: layer -> GeoDataFrame, or an exception to raise."""
     class FakeNHD:
         def __init__(self, layer):
             self.layer = layer
 
         def bygeom(self, bounds):
-            if self.layer == "flowline_hr":
-                raise pygeoogc.exceptions.ZeroMatchedError("none")
-            return gpd.GeoDataFrame(geometry=[pond, None], crs=4326)
+            r = results[self.layer]
+            if isinstance(r, Exception):
+                raise r
+            return r
 
     monkeypatch.setattr(imagery.pynhd, "NHD", FakeNHD)
-    assert imagery.usgs_water(field_path) == [pond]
-    FakeNHD.bygeom = lambda self, b: gpd.GeoDataFrame(geometry=[pond if self.layer == "waterbody_hr" else creek], crs=4326)
-    assert imagery.usgs_water(field_path) == [pond, creek]
+
+
+def test_usgs_water(field_path, monkeypatch):
+    fake_nhd(monkeypatch, {"waterbody_hr": gpd.GeoDataFrame(geometry=[POND, None], crs=4326),
+                           "flowline_hr": pygeoogc.exceptions.ZeroMatchedError("none")})
+    assert imagery.usgs_water(field_path) == [POND]
+
+
+def test_usgs_water_streams_become_areas(field_path, monkeypatch):
+    fake_nhd(monkeypatch, {"waterbody_hr": gpd.GeoDataFrame(geometry=[POND], crs=4326),
+                           "flowline_hr": gpd.GeoDataFrame(geometry=[CREEK], crs=4326).to_crs(UTM)})
+    pond, creek = imagery.usgs_water(field_path)
+    assert pond == POND
+    assert creek.geom_type == "Polygon" and creek.contains(CREEK.interpolate(0.5, normalized=True))
+    utm = gpd.GeoSeries([creek, CREEK], crs=4326).to_crs(gpd.GeoSeries([CREEK], crs=4326).estimate_utm_crs())
+    assert utm[0].area / utm[1].length == pytest.approx(2 * imagery.STREAM_BUFFER_M, rel=0.05)
+
+
+def test_usgs_water_one_layer_down(field_path, monkeypatch):
+    fake_nhd(monkeypatch, {"waterbody_hr": ConnectionError("503"),
+                           "flowline_hr": gpd.GeoDataFrame(geometry=[CREEK], crs=4326)})
+    [creek] = imagery.usgs_water(field_path)
+    assert creek.geom_type == "Polygon"
+
+
+def test_usgs_water_both_down_raises(field_path, monkeypatch):
+    fake_nhd(monkeypatch, {"waterbody_hr": ConnectionError("503"), "flowline_hr": ValueError("bad")})
+    with pytest.raises(RuntimeError, match="waterbody_hr.*flowline_hr"):
+        imagery.usgs_water(field_path)

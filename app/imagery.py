@@ -21,13 +21,14 @@ from app import geo
 STAC_URL = "https://planetarycomputer.microsoft.com/api/stac/v1"
 MARGIN_M = 150  # catch hazards just outside the field that a buffer reaches into
 MAX_PX = 1024
+STREAM_BUFFER_M = 3  # flowlines become areas so they merge with the other water shapes
 
 
-def _bounds(field_path) -> tuple[float, float, float, float]:
-    """Field bounds plus MARGIN_M, in lon/lat."""
+def _bounds(field_path, margin_m=MARGIN_M) -> tuple[float, float, float, float]:
+    """Field bounds plus margin_m, in lon/lat."""
     s = gpd.GeoSeries([geo.load_field(field_path)], crs=4326)
     utm = s.estimate_utm_crs()
-    return tuple(s.to_crs(utm).buffer(MARGIN_M).to_crs(4326).total_bounds)
+    return tuple(s.to_crs(utm).buffer(margin_m).to_crs(4326).total_bounds)
 
 
 def _newest_naip(bounds):
@@ -39,14 +40,20 @@ def _newest_naip(bounds):
     return max(items, key=lambda i: i.datetime)
 
 
-def fetch_tile(field_path, out_png) -> dict:
-    """Writes out_png (RGB) and out_png.json (crs, transform, date, width, height). Returns the sidecar."""
-    bounds = _bounds(field_path)
+def fetch_tile(field_path, out_png, margin_m=MARGIN_M, max_px=MAX_PX) -> dict:
+    """Writes out_png (RGB) and its .json sidecar (crs, transform, date, width, height). Returns the sidecar.
+
+    Skips the download when both files already exist."""
+    out_png = Path(out_png)
+    sidecar = out_png.with_suffix(".json")
+    if out_png.exists() and sidecar.exists():
+        return json.loads(sidecar.read_text())
+    bounds = _bounds(field_path, margin_m)
     item = _newest_naip(bounds)
     with rasterio.open(item.assets["image"].href) as src:
         window = from_bounds(*transform_bounds(4326, src.crs, *bounds), src.transform)
         window = window.round_offsets().round_lengths()
-        scale = min(1.0, MAX_PX / max(window.width, window.height))
+        scale = min(1.0, max_px / max(window.width, window.height))
         width, height = max(1, round(window.width * scale)), max(1, round(window.height * scale))
         rgb = src.read([1, 2, 3], window=window, out_shape=(3, height, width),
                        boundless=True, resampling=Resampling.average)
@@ -54,22 +61,34 @@ def fetch_tile(field_path, out_png) -> dict:
                                                                 window.height / height)
         crs = src.crs.to_string()
 
-    out_png = Path(out_png)
     out_png.parent.mkdir(parents=True, exist_ok=True)
     Image.fromarray(np.moveaxis(rgb, 0, -1).astype(np.uint8)).save(out_png)
     meta = {"crs": crs, "transform": list(transform)[:6], "date": item.datetime.date().isoformat(),
             "width": width, "height": height}
-    out_png.with_suffix(".json").write_text(json.dumps(meta))
+    sidecar.write_text(json.dumps(meta))
     return meta
 
 
 def usgs_water(field_path) -> list:
-    """NHD high-res waterbodies (polygons) and flowlines (lines) near the field, in lon/lat."""
+    """NHD high-res waterbodies and flowlines near the field, as lon/lat areas (streams buffered).
+
+    One layer failing doesn't stop the other; both failing raises, so an outage never reads as "no water".
+    """
     bounds = _bounds(field_path)
-    shapes = []
+    shapes, errors = [], []
     for layer in ("waterbody_hr", "flowline_hr"):
         try:
-            shapes += list(pynhd.NHD(layer).bygeom(bounds).geometry)
+            shapes += list(pynhd.NHD(layer).bygeom(bounds).to_crs(4326).geometry)
         except pygeoogc.exceptions.ZeroMatchedError:  # pynhd's own subclasses this
             pass  # nothing of that kind nearby
-    return [s for s in shapes if s is not None and not s.is_empty]
+        except Exception as e:
+            errors.append(f"{layer}: {e}")
+    if len(errors) == 2:
+        raise RuntimeError(f"USGS water lookup failed: {'; '.join(errors)}")
+    s = gpd.GeoSeries([g for g in shapes if g is not None and not g.is_empty], crs=4326)
+    if s.empty:
+        return []
+    utm = s.estimate_utm_crs()
+    lines = s.geom_type.isin(["LineString", "MultiLineString"])
+    s[lines] = s[lines].to_crs(utm).buffer(STREAM_BUFFER_M).to_crs(4326)
+    return list(s)
