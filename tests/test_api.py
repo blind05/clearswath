@@ -4,7 +4,7 @@ import pytest
 from fastapi.testclient import TestClient
 from shapely.geometry import Polygon, box, mapping
 
-from app import api, label_reader, pipeline, records
+from app import api, imagery, label_reader, llm, pipeline, records
 from app.label_reader import LabelRules
 
 FIELD = box(-93.0, 42.0, -92.99, 42.01)
@@ -57,14 +57,22 @@ def test_plan_missing_label(client):
     assert r.status_code == 422
 
 
-@pytest.mark.parametrize("err, code", [(ValueError("no polygon"), 422), (LookupError("no NAIP"), 502)])
-def test_plan_maps_errors(client, monkeypatch, err, code):
+@pytest.mark.parametrize("err, code, shown", [
+    (imagery.NoImageryError("No NAIP imagery covers this"), 502, True),
+    (llm.MissingKeyError("MODEL_API_KEY is not set."), 502, True),
+    (ValueError("No polygon found in /srv/secret/field.geojson"), 422, False),
+    (RuntimeError("upstream 500: internal details"), 502, False),
+    (KeyError("plan"), 502, False),  # a bug, not missing imagery
+])
+def test_plan_maps_errors(client, monkeypatch, caplog, err, code, shown):
     def boom(*a):
         raise err
 
     monkeypatch.setattr(pipeline, "run", boom)
     r = post_plan(client)
-    assert r.status_code == code and str(err) in r.json()["detail"]
+    assert r.status_code == code and (str(err) in r.json()["detail"]) == shown
+    if not shown:
+        assert str(err) in caplog.text
 
 
 def test_kml_round_trip(client):
@@ -190,7 +198,7 @@ def test_agent_endpoint_validates(client, fake_agent):
 
 def test_agent_endpoint_maps_errors(client, monkeypatch):
     def boom(*a):
-        raise LookupError("No NAIP imagery")
+        raise imagery.NoImageryError("No NAIP imagery")
 
     monkeypatch.setattr(api.agent, "run", boom)
     r = post_agent(client)

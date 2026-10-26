@@ -86,14 +86,15 @@ def test_contradicting_answer_is_replaced(field_path, steps, monkeypatch):
     assert "replaced" in out["trace"][-1]["note"]
 
 
-def test_model_failure_falls_back(field_path, steps, monkeypatch):
+def test_model_failure_falls_back(field_path, steps, monkeypatch, caplog):
     def boom(*a, **kw):
-        raise RuntimeError("tools not supported")
+        raise RuntimeError("upstream said: secret-ish details")
 
     monkeypatch.setattr(llm, "chat", boom)
     out = agent.run(field_path, "label.pdf", "2026-11")
-    assert out["mode"] == "pipeline" and out["decision"] == "adjust"
-    assert out["answer"].startswith("ADJUST:") and "tools not supported" in out["trace"][0]["note"]
+    assert out["mode"] == "pipeline" and out["decision"] == "adjust" and out["answer"].startswith("ADJUST:")
+    assert "RuntimeError" in out["trace"][0]["note"]
+    assert "secret-ish" not in json.dumps(out["trace"]) and "secret-ish" in caplog.text
 
 
 def test_tool_errors_propagate(field_path, steps, monkeypatch):

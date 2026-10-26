@@ -24,6 +24,10 @@ MAX_PX = 1024
 STREAM_BUFFER_M = 3  # flowlines become areas so they merge with the other water shapes
 
 
+class NoImageryError(LookupError):
+    """No NAIP tile covers the field; the message is safe to show users."""
+
+
 def _bounds(field_path, margin_m=MARGIN_M) -> tuple[float, float, float, float]:
     """Field bounds plus margin_m, in lon/lat."""
     s = gpd.GeoSeries([geo.load_field(field_path)], crs=4326)
@@ -35,7 +39,7 @@ def _newest_naip(bounds):
     catalog = Client.open(STAC_URL, modifier=planetary_computer.sign_inplace)
     items = list(catalog.search(collections=["naip"], bbox=bounds).items())
     if not items:
-        raise LookupError(f"No NAIP imagery covers {bounds}")
+        raise NoImageryError(f"No NAIP imagery covers {bounds}")
     # ponytail: newest single tile; fields straddling two NAIP tiles get clipped, mosaic if that bites
     return max(items, key=lambda i: i.datetime)
 

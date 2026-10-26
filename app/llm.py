@@ -21,12 +21,16 @@ PROMPTS = Path(__file__).resolve().parent / "prompts"
 LOG_PATH = ROOT / "data" / "logs" / "calls.jsonl"
 
 
+class MissingKeyError(RuntimeError):
+    """No MODEL_API_KEY; the message is safe to show users."""
+
+
 @cache
 def client() -> OpenAI:
     load_dotenv(ROOT / ".env")
     key = os.getenv("MODEL_API_KEY")
     if not key:
-        raise RuntimeError("MODEL_API_KEY is not set. Copy .env.example to .env and add your key.")
+        raise MissingKeyError("MODEL_API_KEY is not set. Copy .env.example to .env and add your key.")
     # The SDK only reads OPENAI_API_KEY on its own, so pass the key explicitly.
     return OpenAI(base_url=BASE_URL, api_key=key)
 

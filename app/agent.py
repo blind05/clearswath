@@ -1,6 +1,7 @@
 """Muse Spark agent over the pipeline steps. The model picks steps and explains; buffers.plan decides."""
 
 import json
+import logging
 import re
 import time
 import uuid
@@ -8,6 +9,7 @@ from pathlib import Path
 
 from app import bulletins, geo, label_reader, llm, pipeline, segment
 
+log = logging.getLogger(__name__)
 RUNS = Path(__file__).resolve().parent.parent / "data" / "runs"
 MAX_STEPS = 8
 STATUS_WORDS = re.compile(r"\b(NO-GO|GO|ADJUST)\b")
@@ -103,7 +105,9 @@ def run(field_path, label_path, month: str, method: str = "drone") -> dict:
     try:
         answer = _agent_loop(job, trace)
     except _ModelError as e:
-        trace.append({"note": f"agent failed ({e.__cause__!r}); ran the pipeline instead"})
+        log.warning("agent model call failed; falling back to pipeline", exc_info=e.__cause__)
+        # type name only: the error text can carry upstream response details
+        trace.append({"note": f"agent unavailable ({type(e.__cause__).__name__}); ran the pipeline instead"})
         answer, mode = None, "pipeline"
 
     if job.result is None:

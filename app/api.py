@@ -1,6 +1,7 @@
 """HTTP API for web/index.html. Run with: uv run uvicorn app.api:app"""
 
 import json
+import logging
 import re
 import uuid
 from datetime import date
@@ -11,7 +12,7 @@ from fastapi import FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.responses import Response
 from fastapi.staticfiles import StaticFiles
 
-from app import agent, geo, label_reader, pipeline, records
+from app import agent, geo, imagery, llm, label_reader, pipeline, records
 
 ROOT = Path(__file__).resolve().parent.parent
 RUNS = ROOT / "data" / "runs"
@@ -22,7 +23,18 @@ METHODS = {"drone", "aerial", "ground"}
 MONTH = re.compile(r"^\d{4}-(0[1-9]|1[0-2])$")
 RUN_ID = re.compile(r"^[0-9a-f]{32}$")
 
+log = logging.getLogger(__name__)
 app = FastAPI(title="ClearSwath")
+
+
+def _http_error(e: Exception) -> HTTPException:
+    """Only messages we wrote reach the browser; anything else is logged and replaced."""
+    if isinstance(e, (llm.MissingKeyError, imagery.NoImageryError)):
+        return HTTPException(502, str(e))
+    log.exception("request failed", exc_info=e)
+    if isinstance(e, ValueError):  # bad field or label file
+        return HTTPException(422, "Could not read the field outline or label. Check the files and try again.")
+    return HTTPException(502, "A model or data service failed. Try again; details are in the server log.")
 
 
 def _save(upload: UploadFile, path: Path) -> Path:
@@ -49,10 +61,8 @@ def _plan(run_id: str, field_path: Path, label_path: Path, month: str, method: s
             out = agent.run(field_path, label_path, month, method)
             return {**pipeline.to_json(out.pop("result")), **out}
         result = pipeline.run(field_path, label_path, month, method)
-    except ValueError as e:  # bad field or label input
-        raise HTTPException(422, str(e)) from e
-    except (LookupError, RuntimeError) as e:  # no imagery, missing key, model failure
-        raise HTTPException(502, str(e)) from e
+    except (ValueError, LookupError, RuntimeError) as e:  # bad input, no imagery, missing key, model failure
+        raise _http_error(e) from e
     pipeline.save_run(result, RUNS / run_id)
     return {"run_id": run_id, **pipeline.to_json(result)}
 
@@ -84,7 +94,7 @@ def label(label: UploadFile = File(...)):
     try:
         return label_reader.read_label(path).model_dump()
     except RuntimeError as e:
-        raise HTTPException(502, str(e)) from e
+        raise _http_error(e) from e
 
 
 @app.post("/api/record")
@@ -102,7 +112,7 @@ def record(run_id: str = Form(...), audio: UploadFile | None = File(None), text:
             raise HTTPException(422, "Send a voice note or type the notes")
         return records.fill_record(text, json.loads(job_path.read_text())).model_dump()
     except RuntimeError as e:  # missing key or model failure
-        raise HTTPException(502, str(e)) from e
+        raise _http_error(e) from e
 
 
 @app.get("/api/demo")
