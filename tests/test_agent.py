@@ -112,3 +112,9 @@ def test_step_cap_and_unknown_tool(field_path, steps, monkeypatch):
     assert out["trace"][0]["result"] == {"error": "unknown tool delete_field"}
     assert any("stopped after" in t.get("note", "") for t in out["trace"])
     assert out["answer"].startswith("ADJUST:")
+
+
+def test_returns_full_result(field_path, steps, monkeypatch):
+    script(monkeypatch, reply(content="ok"))
+    out = agent.run(field_path, "label.pdf", "2026-11")
+    assert out["result"]["plan"]["status"] == out["decision"] and out["result"]["label"] is LABEL

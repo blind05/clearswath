@@ -97,6 +97,7 @@ def _agent_loop(job: _Job, trace: list) -> str | None:
 
 
 def run(field_path, label_path, month: str, method: str = "drone") -> dict:
+    """result is the full pipeline result (as pipeline.run returns), for pipeline.to_json."""
     run_id = uuid.uuid4().hex
     job, trace, mode = _Job(field_path, label_path, month, method), [], "agent"
     try:
@@ -116,4 +117,4 @@ def run(field_path, label_path, month: str, method: str = "drone") -> dict:
         answer = None
     pipeline.save_run(job.result, RUNS / run_id)
     return {"run_id": run_id, "answer": answer or _template(job.result), "decision": decision,
-            "trace": trace, "mode": mode}
+            "trace": trace, "mode": mode, "result": job.result}

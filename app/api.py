@@ -11,7 +11,7 @@ from fastapi import FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.responses import Response
 from fastapi.staticfiles import StaticFiles
 
-from app import geo, label_reader, pipeline, records
+from app import agent, geo, label_reader, pipeline, records
 
 ROOT = Path(__file__).resolve().parent.parent
 RUNS = ROOT / "data" / "runs"
@@ -38,12 +38,16 @@ def _label_suffix(upload: UploadFile) -> str:
     return suffix
 
 
-def _plan(run_id: str, field_path: Path, label_path: Path, month: str, method: str) -> dict:
+def _plan(run_id: str, field_path: Path, label_path: Path, month: str, method: str,
+          use_agent: bool = False) -> dict:
     if not MONTH.match(month):
         raise HTTPException(422, "month must look like 2026-11")
     if method not in METHODS:
         raise HTTPException(422, f"method must be one of {sorted(METHODS)}")
     try:
+        if use_agent:  # the agent saves its own run under its own run_id
+            out = agent.run(field_path, label_path, month, method)
+            return {**pipeline.to_json(out.pop("result")), **out}
         result = pipeline.run(field_path, label_path, month, method)
     except ValueError as e:  # bad field or label input
         raise HTTPException(422, str(e)) from e
@@ -53,14 +57,25 @@ def _plan(run_id: str, field_path: Path, label_path: Path, month: str, method: s
     return {"run_id": run_id, **pipeline.to_json(result)}
 
 
-@app.post("/api/plan")
-def plan(field: UploadFile = File(...), label: UploadFile = File(...),
-         month: str = Form(...), method: str = Form("drone")):
+def _upload_and_plan(field: UploadFile, label: UploadFile, month: str, method: str, use_agent: bool) -> dict:
     run_id = uuid.uuid4().hex
     run = RUNS / run_id
     suffix = _label_suffix(label)
     return _plan(run_id, _save(field, run / "field.geojson"), _save(label, run / f"label{suffix}"),
-                 month, method)
+                 month, method, use_agent)
+
+
+@app.post("/api/plan")
+def plan(field: UploadFile = File(...), label: UploadFile = File(...),
+         month: str = Form(...), method: str = Form("drone")):
+    return _upload_and_plan(field, label, month, method, use_agent=False)
+
+
+@app.post("/api/agent")
+def ask_agent(field: UploadFile = File(...), label: UploadFile = File(...),
+              month: str = Form(...), method: str = Form("drone")):
+    """Same as /api/plan, plus the agent's answer, trace and mode. The decision still comes from buffers.plan."""
+    return _upload_and_plan(field, label, month, method, use_agent=True)
 
 
 @app.post("/api/label")

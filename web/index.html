@@ -43,6 +43,11 @@
   .meta { color: var(--muted); font-size: 13px; }
   .error { color: var(--nogo); font-weight: 600; }
   a.kml { display: block; text-align: center; margin-top: 12px; padding: 9px; border: 2px solid #12352a; border-radius: 6px; color: #12352a; font-weight: 700; text-decoration: none; }
+  label.check { display: flex; align-items: center; gap: 8px; font-weight: 500; }
+  .agent { background: #eef4fb; border-left: 4px solid #1565c0; border-radius: 6px; padding: 8px 12px; margin-bottom: 12px; }
+  .agent p { margin: 4px 0; white-space: pre-line; }
+  .agent details { font-size: 13px; color: var(--muted); }
+  .agent ol { margin: 4px 0; padding-left: 20px; }
   .record { display: grid; gap: 8px; }
   textarea { font: inherit; padding: 6px; border: 1px solid var(--line); border-radius: 6px; resize: vertical; }
   table.rec { width: 100%; border-collapse: collapse; margin-top: 8px; font-size: 13px; }
@@ -63,6 +68,7 @@
         <label>Month<input type="month" name="month" required></label>
         <label>Method<select name="method"><option value="drone">Drone</option><option value="ground">Ground</option></select></label>
       </div>
+      <label class="check"><input type="checkbox" name="agent"> Ask the Muse Spark agent to explain</label>
       <div class="row">
         <button type="submit">Plan spray</button>
         <button type="button" class="secondary" id="demo">Try demo</button>
@@ -130,6 +136,13 @@ function render(r) {
       el("div", {}, el("b", {}, acres.excluded_acres.toFixed(1)), el("small", {}, "excluded ac"))),
     r.warnings.length ? el("div", { class: "warn", role: "alert" },
       el("h3", {}, "Check before spraying"), el("ul", {}, r.warnings.map((w) => el("li", {}, w)))) : null,
+    r.answer ? el("div", { class: "agent" },
+      el("div", { class: "tag" }, r.mode === "agent" ? "Muse Spark agent" : "Agent unavailable · plan summary"),
+      el("p", {}, r.answer),
+      el("details", {}, el("summary", {}, "How it decided"),
+        el("ol", {}, r.trace.map((t) => el("li", {}, t.tool
+          ? `${t.tool}${t.seconds != null ? ` (${t.seconds}s)` : ""}${t.note ? ` — ${t.note}` : ""}`
+          : t.note))))) : null,
     el("h2", {}, "Why"),
     r.reasons.length ? r.reasons.map((x) => el("div", { class: `reason ${x.source}` },
       el("div", { class: "tag" }, x.source === "label" ? `Label p.${x.page} · ${x.distance_ft} ft from ${x.target}` : x.source),
@@ -207,7 +220,9 @@ async function recordApplication(e, runId) {
 
 form.addEventListener("submit", (e) => {
   e.preventDefault();
-  call("/api/plan", { method: "POST", body: new FormData(form) });
+  const body = new FormData(form);
+  body.delete("agent");
+  call(form.agent.checked ? "/api/agent" : "/api/plan", { method: "POST", body });
 });
 $("#demo").addEventListener("click", () =>
   call(`/api/demo?month=${form.month.value}&method=${form.method.value}`));

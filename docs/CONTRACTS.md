@@ -14,9 +14,9 @@ Don't change a contract unless the human asks.
 | `app/bulletins.py` | `check_bulletin(field_path, month, reg_no)` | field, month, product | `{in_pula, prohibited, limitations, restricted, citation, checked}` |
 | `app/buffers.py` | `plan(field, hazards, rules, restricted, method, prohibited)` | shapes and rules | `{status, method, field_acres, spray_acres, excluded_acres, spray_zone, no_spray, reasons}` |
 | `app/pipeline.py` | `run(field_path, label_path, month, method)`, `to_json(result)` | paths and options | full result; JSON with map layers for the page |
-| `app/agent.py` | `run(field_path, label_path, month, method)` | same | `{run_id, answer, decision, trace, mode}` |
+| `app/agent.py` | `run(field_path, label_path, month, method)` | same | `{run_id, answer, decision, trace, mode, result}`; `result` is what `pipeline.run` returns |
 | `app/records.py` | `transcribe(path)`, `fill_record(text, job)` | audio; transcript and job dict | text; `AppRecord` with `missing` list |
-| `app/api.py` | `/api/demo`, `/api/label`, `/api/plan`, `/api/kml/{id}`, `/api/record` | form uploads | JSON for `web/index.html` |
+| `app/api.py` | `/api/demo`, `/api/label`, `/api/plan`, `/api/agent`, `/api/kml/{id}`, `/api/record` | form uploads | JSON for `web/index.html` |
 
 `status` is `go` (nothing removed), `adjust` (some acres removed; the green zone is sprayable)
 or `no-go` (bulletin prohibits, or no sprayable area). It always comes from `buffers.plan`.

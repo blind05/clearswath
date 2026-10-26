@@ -155,3 +155,43 @@ def test_record_from_audio(client, fake_records):
 def test_record_rejects(client, fake_records, data, files, code):
     run_id = post_plan(client).json()["run_id"] if code != 404 else "0" * 32
     assert client.post("/api/record", data={"run_id": run_id, **data}, files=files).status_code == code
+
+
+def post_agent(client, **form):
+    files = {"field": ("f.geojson", json.dumps(mapping(FIELD))), "label": ("label.pdf", b"%PDF")}
+    return client.post("/api/agent", files=files, data={"month": "2026-11", **form})
+
+
+@pytest.fixture
+def fake_agent(monkeypatch):
+    seen = {}
+
+    def run(field_path, label_path, month, method):
+        seen.update(method=method, label=label_path)
+        return {"run_id": "a" * 32, "answer": "ADJUST: stay back from the pond.", "decision": "adjust",
+                "trace": [{"tool": "plan_spray", "result": {"decision": "ADJUST"}, "seconds": 0.1}],
+                "mode": "agent", "result": result()}
+
+    monkeypatch.setattr(api.agent, "run", run)
+    return seen
+
+
+def test_agent_endpoint(client, fake_agent):
+    r = post_agent(client, method="ground")
+    body = r.json()
+    assert r.status_code == 200 and body["status"] == "adjust" and body["decision"] == "adjust"
+    assert body["run_id"] == "a" * 32 and body["mode"] == "agent" and body["trace"][0]["tool"] == "plan_spray"
+    assert "result" not in body and fake_agent["method"] == "ground" and fake_agent["label"].name == "label.pdf"
+
+
+def test_agent_endpoint_validates(client, fake_agent):
+    assert post_agent(client, month="Nov").status_code == 422 and fake_agent == {}
+
+
+def test_agent_endpoint_maps_errors(client, monkeypatch):
+    def boom(*a):
+        raise LookupError("No NAIP imagery")
+
+    monkeypatch.setattr(api.agent, "run", boom)
+    r = post_agent(client)
+    assert r.status_code == 502 and "NAIP" in r.json()["detail"]
