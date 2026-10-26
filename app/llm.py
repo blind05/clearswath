@@ -9,6 +9,7 @@ from functools import cache
 from pathlib import Path
 
 from dotenv import load_dotenv
+from meta_sam_parser import CompletedOutcome, image_segmentation_format
 from openai import OpenAI
 
 BASE_URL = "https://api.meta.ai/v1"
@@ -65,6 +66,28 @@ def chat_json(messages: list[dict], schema: dict, name: str, *,
     fmt = {"type": "json_schema", "json_schema": {"name": name, "schema": schema, "strict": True}}
     resp = _complete(purpose, model=model, messages=messages, response_format=fmt)
     return json.loads(resp.choices[0].message.content)
+
+
+def segment(image_path: str | Path, phrase: str, *, purpose: str = "") -> list:
+    """SAM noun-phrase segmentation of one image. Returns meta_sam_parser mask records."""
+    start = time.perf_counter()
+    # TODO(verify): request shape. The SAM protocol only says the noun phrase goes in input_text.
+    stream = client().responses.create(model=SAM, stream=True, input=[{"role": "user", "content": [
+        {"type": "input_image", "image_url": data_url(image_path)},
+        {"type": "input_text", "text": phrase},
+    ]}])
+    text, usage = "", None
+    for ev in stream:
+        if ev.type == "response.content_part.done" and ev.part.type == "output_text":
+            text += ev.part.text  # the live SAM API only finalizes text this way
+        elif ev.type == "response.completed":
+            usage = ev.response.usage
+        elif ev.type in ("response.failed", "response.incomplete", "error"):
+            raise RuntimeError(f"SAM request ended with {ev.type}")
+    log_call(SAM, purpose, time.perf_counter() - start, usage)
+    parser = image_segmentation_format().create_parser()
+    parser.push(text)
+    return [r for r in parser.finish(CompletedOutcome()).result.records if r.kind == "mask"]
 
 
 def data_url(path: str | Path) -> str:
