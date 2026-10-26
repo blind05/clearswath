@@ -1,10 +1,10 @@
 [project]
 name = "clearswath"
 version = "0.1.0"
-description = "Add your description here"
+description = "Pesticide label + field outline to legal spray zone and application record"
 readme = "README.md"
 authors = [
-    { name = "Hunter <Last name>", email = "you@personal-email.com" }
+    { name = "Hunter Hagedorn", email = "dnilbyt@gmail.com" }
 ]
 requires-python = ">=3.12"
 dependencies = [
