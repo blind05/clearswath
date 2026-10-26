@@ -43,6 +43,12 @@
   .meta { color: var(--muted); font-size: 13px; }
   .error { color: var(--nogo); font-weight: 600; }
   a.kml { display: block; text-align: center; margin-top: 12px; padding: 9px; border: 2px solid #12352a; border-radius: 6px; color: #12352a; font-weight: 700; text-decoration: none; }
+  .record { display: grid; gap: 8px; }
+  textarea { font: inherit; padding: 6px; border: 1px solid var(--line); border-radius: 6px; resize: vertical; }
+  table.rec { width: 100%; border-collapse: collapse; margin-top: 8px; font-size: 13px; }
+  table.rec th { text-align: left; color: var(--muted); font-weight: 600; padding: 3px 8px 3px 0; white-space: nowrap; }
+  table.rec td { padding: 3px 0; }
+  table.rec tr.gap td { color: var(--nogo); font-weight: 700; }
   @media (max-width: 800px) { main { grid-template-columns: 1fr; height: auto; } #map { height: 60vh; } }
 </style>
 </head>
@@ -134,7 +140,15 @@ function render(r) {
     el("p", { class: "meta" }, r.bulletin.citation),
     el("p", { class: "meta" }, `Imagery ${r.imagery_date || "unknown"} · water from ${r.water_source} · ${r.method}, ${r.month}`),
     el("a", { class: "kml", href: `/api/kml/${r.run_id}`, download: "" }, "Download KML for sprayer"),
+    el("h2", {}, "Record application"),
+    el("form", { id: "record", class: "record" },
+      el("label", {}, "Voice note", el("input", { type: "file", name: "audio", accept: "audio/*" })),
+      el("label", {}, "or type notes", el("textarea", { name: "text", rows: "3",
+        placeholder: "Sam Ortiz, cert IA-12345, 12 gallons on soybeans, wind 6 mph NW, 58 degrees" })),
+      el("button", { type: "submit" }, "Fill record")),
+    el("div", { id: "record-out" }),
   ].flat().filter(Boolean));
+  $("#record").addEventListener("submit", (e) => recordApplication(e, r.run_id));
   out.hidden = false;
   drawMap(r.layers);
 }
@@ -153,6 +167,41 @@ async function call(url, opts) {
   } finally {
     $("#busy").hidden = true;
     form.querySelectorAll("button").forEach((b) => (b.disabled = false));
+  }
+}
+
+const RECORD_FIELDS = [
+  ["applicator_name", "Applicator"], ["certification_number", "Certification no."],
+  ["application_date", "Date"], ["start_time", "Start"], ["end_time", "End"],
+  ["product_name", "Product"], ["epa_reg_no", "EPA Reg. No."], ["amount_applied", "Amount applied"],
+  ["rate", "Rate"], ["area_treated_acres", "Area (ac)"], ["crop_or_site", "Crop / site"],
+  ["location", "Location"], ["method", "Method"], ["wind_speed_mph", "Wind (mph)"],
+  ["wind_direction", "Wind from"], ["temperature_f", "Temp (°F)"], ["notes", "Notes"],
+];
+
+async function recordApplication(e, runId) {
+  e.preventDefault();
+  const f = e.target, out = $("#record-out"), body = new FormData();
+  body.append("run_id", runId);
+  if (f.audio.files[0]) body.append("audio", f.audio.files[0]);
+  body.append("text", f.text.value);
+  f.querySelector("button").disabled = true;
+  out.replaceChildren(el("p", { class: "meta" }, "Filling record…"));
+  try {
+    const res = await fetch("/api/record", { method: "POST", body });
+    const rec = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(typeof rec.detail === "string" ? rec.detail : `Request failed (${res.status})`);
+    out.replaceChildren(...[
+      rec.missing.length ? el("div", { class: "warn", role: "alert" }, el("h3", {}, "Still needed"),
+        el("ul", {}, rec.missing.map((k) => el("li", {}, RECORD_FIELDS.find(([f]) => f === k)?.[1] || k)))) : null,
+      el("table", { class: "rec" }, RECORD_FIELDS.map(([k, name]) => el("tr", { class: rec.missing.includes(k) ? "gap" : "" },
+        el("th", {}, name), el("td", {}, rec[k] ?? "—")))),
+      el("p", { class: "meta" }, `Heard: “${rec.transcript}”`),
+    ].filter(Boolean));
+  } catch (err) {
+    out.replaceChildren(el("p", { class: "error" }, err.message));
+  } finally {
+    f.querySelector("button").disabled = false;
   }
 }
 

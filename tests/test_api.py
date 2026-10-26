@@ -4,12 +4,18 @@ import pytest
 from fastapi.testclient import TestClient
 from shapely.geometry import Polygon, box, mapping
 
-from app import api, label_reader, pipeline
+from app import api, label_reader, pipeline, records
 from app.label_reader import LabelRules
 
 FIELD = box(-93.0, 42.0, -92.99, 42.01)
 SPRAY = box(-93.0, 42.0, -92.995, 42.01)
 NO_SPRAY = box(-92.995, 42.0, -92.99, 42.01)
+LABEL = LabelRules(product_name="INTREPID 2F", epa_reg_no="62719-442", rules=[], dropped=[], source="pdf")
+
+
+def result(spray=SPRAY, no_spray=NO_SPRAY, method="drone"):
+    return {"field": FIELD, "label": LABEL,
+            "plan": {"spray_zone": spray, "no_spray": no_spray, "spray_acres": 35.5, "method": method}}
 
 
 @pytest.fixture
@@ -20,7 +26,7 @@ def client(tmp_path, monkeypatch):
 
     def run(field_path, label_path, month, method):
         seen.update(field=field_path, label=label_path, month=month, method=method)
-        return {"plan": {"spray_zone": SPRAY, "no_spray": NO_SPRAY}}
+        return result(method=method)
 
     monkeypatch.setattr(pipeline, "run", run)
     monkeypatch.setattr(pipeline, "to_json", lambda r: {"status": "adjust"})
@@ -70,7 +76,7 @@ def test_kml_round_trip(client):
 
 def test_kml_keeps_holes(client, monkeypatch):
     holed = Polygon(FIELD.exterior.coords, [box(-92.998, 42.002, -92.996, 42.004).exterior.coords])
-    monkeypatch.setattr(pipeline, "run", lambda *a: {"plan": {"spray_zone": holed, "no_spray": Polygon()}})
+    monkeypatch.setattr(pipeline, "run", lambda *a: result(holed, Polygon()))
     run_id = post_plan(client).json()["run_id"]
     text = client.get(f"/api/kml/{run_id}").text
     assert "innerBoundaryIs" in text and text.count("<Placemark") == 1
@@ -104,3 +110,48 @@ def test_label(client, monkeypatch):
 def test_serves_page(client):
     r = client.get("/")
     assert r.status_code == 200 and "<title>ClearSwath</title>" in r.text
+
+
+def test_plan_saves_job(client, tmp_path):
+    run_id = post_plan(client).json()["run_id"]
+    job = json.loads((tmp_path / "runs" / run_id / "job.json").read_text())
+    assert job == {"product_name": "INTREPID 2F", "epa_reg_no": "62719-442", "area_treated_acres": 35.5,
+                   "location": "42.00500, -92.99500", "method": "drone"}
+
+
+@pytest.fixture
+def fake_records(monkeypatch):
+    seen = {}
+    monkeypatch.setattr(records, "transcribe", lambda p: seen.update(audio=p) or "heard text")
+
+    def fill(text, job):
+        seen.update(text=text, job=job)
+        return records.AppRecord(transcript=text, product_name=job["product_name"], missing=["applicator_name"])
+
+    monkeypatch.setattr(records, "fill_record", fill)
+    return seen
+
+
+def test_record_from_text(client, fake_records):
+    run_id = post_plan(client).json()["run_id"]
+    r = client.post("/api/record", data={"run_id": run_id, "text": "Sam, 12 gal"})
+    assert r.status_code == 200 and r.json()["product_name"] == "INTREPID 2F"
+    assert fake_records["text"] == "Sam, 12 gal" and "audio" not in fake_records
+
+
+def test_record_from_audio(client, fake_records):
+    run_id = post_plan(client).json()["run_id"]
+    r = client.post("/api/record", data={"run_id": run_id}, files={"audio": ("note.m4a", b"audio")})
+    assert r.status_code == 200 and fake_records["text"] == "heard text"
+    assert fake_records["audio"].name == "note.m4a"
+
+
+@pytest.mark.parametrize("data, files, code", [
+    ({"text": "x"}, None, 404),
+    ({}, None, 422),
+    ({"text": "   "}, None, 422),
+    ({}, {"audio": ("note.exe", b"x")}, 422),
+])
+def test_record_rejects(client, fake_records, data, files, code):
+    run_id = post_plan(client).json()["run_id"] if code != 404 else "0" * 32
+    assert client.post("/api/record", data={"run_id": run_id, **data}, files=files).status_code == code

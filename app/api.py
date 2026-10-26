@@ -1,5 +1,6 @@
 """HTTP API for web/index.html. Run with: uv run uvicorn app.api:app"""
 
+import json
 import re
 import uuid
 from datetime import date
@@ -10,12 +11,13 @@ from fastapi import FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.responses import Response
 from fastapi.staticfiles import StaticFiles
 
-from app import geo, label_reader, pipeline
+from app import geo, label_reader, pipeline, records
 
 ROOT = Path(__file__).resolve().parent.parent
 RUNS = ROOT / "data" / "runs"
 DEMO = ROOT / "data" / "demo"
 LABEL_SUFFIXES = {".pdf", ".png", ".jpg", ".jpeg", ".webp"}
+AUDIO_SUFFIXES = {".m4a", ".mp3", ".wav", ".webm", ".ogg"}
 METHODS = {"drone", "aerial", "ground"}
 MONTH = re.compile(r"^\d{4}-(0[1-9]|1[0-2])$")
 RUN_ID = re.compile(r"^[0-9a-f]{32}$")
@@ -47,9 +49,13 @@ def _plan(run_id: str, field_path: Path, label_path: Path, month: str, method: s
         raise HTTPException(422, str(e)) from e
     except (LookupError, RuntimeError) as e:  # no imagery, missing key, model failure
         raise HTTPException(502, str(e)) from e
-    plan = result["plan"]
+    plan, label, centre = result["plan"], result["label"], result["field"].centroid
     geo.save_shapes([plan["spray_zone"], plan["no_spray"]], RUNS / run_id / "plan.geojson",
                     [{"name": "Spray zone"}, {"name": "No spray"}])
+    job = {"product_name": label.product_name, "epa_reg_no": label.epa_reg_no,
+           "area_treated_acres": plan["spray_acres"], "location": f"{centre.y:.5f}, {centre.x:.5f}",
+           "method": plan["method"]}
+    (RUNS / run_id / "job.json").write_text(json.dumps(job))
     return {"run_id": run_id, **pipeline.to_json(result)}
 
 
@@ -69,6 +75,24 @@ def label(label: UploadFile = File(...)):
     try:
         return label_reader.read_label(path).model_dump()
     except RuntimeError as e:
+        raise HTTPException(502, str(e)) from e
+
+
+@app.post("/api/record")
+def record(run_id: str = Form(...), audio: UploadFile | None = File(None), text: str = Form("")):
+    job_path = RUNS / run_id / "job.json"
+    if not RUN_ID.match(run_id) or not job_path.exists():
+        raise HTTPException(404, "No such run")
+    try:
+        if audio is not None:
+            suffix = Path(audio.filename or "").suffix.lower()
+            if suffix not in AUDIO_SUFFIXES:
+                raise HTTPException(422, f"Audio must be one of {sorted(AUDIO_SUFFIXES)}")
+            text = records.transcribe(_save(audio, RUNS / run_id / f"note{suffix}"))
+        if not text.strip():
+            raise HTTPException(422, "Send a voice note or type the notes")
+        return records.fill_record(text, json.loads(job_path.read_text())).model_dump()
+    except RuntimeError as e:  # missing key or model failure
         raise HTTPException(502, str(e)) from e
 
 
