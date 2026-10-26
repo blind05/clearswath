@@ -7,3 +7,4 @@ data/cache/
 data/logs/
 .DS_Store
 data/runs/
+cache/
