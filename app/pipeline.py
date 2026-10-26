@@ -32,6 +32,7 @@ def assemble(field, label, hazards: dict, bulletin: dict, month: str, method: st
                         "applied. Check the label yourself.")
     if label.source == "image":
         warnings.append("Label was read from a photo; quotes were checked against a model transcription.")
+    warnings += hazards.get("water_warnings") or []
     if not hazards.get("imagery_date"):
         warnings.append("No aerial imagery date; hazards may be incomplete.")
 

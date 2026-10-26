@@ -73,10 +73,11 @@ def fetch_tile(field_path, out_png, margin_m=MARGIN_M, max_px=MAX_PX) -> dict:
     return meta
 
 
-def usgs_water(field_path) -> list:
+def usgs_water(field_path, failed: list | None = None) -> list:
     """NHD high-res waterbodies and flowlines near the field, as lon/lat areas (streams buffered).
 
-    One layer failing doesn't stop the other; both failing raises, so an outage never reads as "no water".
+    One layer failing doesn't stop the other; its name is appended to `failed` so callers can warn.
+    Both failing raises, so an outage never reads as "no water".
     """
     bounds = _bounds(field_path)
     shapes, errors = [], []
@@ -87,6 +88,8 @@ def usgs_water(field_path) -> list:
             pass  # nothing of that kind nearby
         except Exception as e:
             errors.append(f"{layer}: {e}")
+            if failed is not None:
+                failed.append(layer)
     if len(errors) == 2:
         raise RuntimeError(f"USGS water lookup failed: {'; '.join(errors)}")
     s = gpd.GeoSeries([g for g in shapes if g is not None and not g.is_empty], crs=4326)

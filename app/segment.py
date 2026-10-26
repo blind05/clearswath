@@ -13,6 +13,7 @@ from shapely.geometry import mapping, shape
 
 from app import geo, imagery, llm
 
+USGS_LAYERS = {"waterbody_hr": "pond and lake", "flowline_hr": "stream"}
 CACHE = Path(__file__).resolve().parent.parent / "data" / "cache"
 # One noun phrase per SAM request; a list in one phrase matches nothing.
 PHRASES = {
@@ -76,7 +77,16 @@ def find_hazards(field_path) -> dict:
         return [p for phrase in PHRASES[hazard] for p in segment_tile(png, phrase)]
 
     out = {h: cached(h, lambda h=h: sam(h)) for h in PHRASES}
-    usgs = cached("water_usgs", lambda: imagery.usgs_water(field_path))
+    usgs_path, failed = cache / "water_usgs.geojson", []
+    if usgs_path.exists():
+        usgs = geo.load_shapes(usgs_path)
+    else:
+        usgs = imagery.usgs_water(field_path, failed)
+        if not failed:  # a partial answer is not cached, so the next run retries it
+            geo.save_shapes(usgs, usgs_path)
+    out["water_warnings"] = [f"USGS {USGS_LAYERS[layer]} data was unavailable, so {USGS_LAYERS[layer]} "
+                             "may be missing from the map. Check the field before spraying."
+                             for layer in failed]
     out["water_source"] = "+".join(n for n, s in (("usgs", usgs), ("sam", out["water"])) if s) or "none"
     out["water"] = usgs + out["water"]
     sidecar = png.with_suffix(".json")

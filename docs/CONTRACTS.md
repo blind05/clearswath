@@ -8,8 +8,8 @@ Don't change a contract unless the human asks.
 | `app/llm.py` | `client()`, `chat()`, `chat_json()`, `data_url()`, `load_prompt()` | messages, JSON schema (object root) | model reply; dict matching schema. Logs every call to `data/logs/calls.jsonl` |
 | `app/geo.py` | `load_field()`, `save_shapes()`, `load_shapes()`, `to_feature_collection()` | GeoJSON paths, shapes | shapely shapes in EPSG:4326; GeoJSON dicts |
 | `app/imagery.py` | `fetch_tile(field_path, out_png)` | field GeoJSON | PNG plus `.json` sidecar: crs, transform (6 values, downscaled), date, width, height |
-| `app/imagery.py` | `usgs_water(field_path)` | field GeoJSON | list of water shapes |
-| `app/segment.py` | `find_hazards(field_path)` | field GeoJSON | `{water, building, habitat, imagery_date, water_source}`; cached per field and hazard |
+| `app/imagery.py` | `usgs_water(field_path)` | field GeoJSON, optional `failed` list | list of water shapes; names of layers that errored are appended to `failed` |
+| `app/segment.py` | `find_hazards(field_path)` | field GeoJSON | `{water, building, habitat, imagery_date, water_source, water_warnings}`; cached per field and hazard |
 | `app/label_reader.py` | `read_label(path)` | PDF or image | `LabelRules`: product_name, epa_reg_no, rules (kind, target, applies_to, value, unit, summary, quote, page), dropped, source |
 | `app/bulletins.py` | `check_bulletin(field_path, month, reg_no)` | field, month, product | `{in_pula, prohibited, limitations, restricted, citation, checked}` |
 | `app/buffers.py` | `plan(field, hazards, rules, restricted, method, prohibited)` | shapes and rules | `{status, method, field_acres, spray_acres, excluded_acres, spray_zone, no_spray, reasons}` |

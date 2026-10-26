@@ -115,8 +115,10 @@ def test_usgs_water_streams_become_areas(field_path, monkeypatch):
 def test_usgs_water_one_layer_down(field_path, monkeypatch):
     fake_nhd(monkeypatch, {"waterbody_hr": ConnectionError("503"),
                            "flowline_hr": gpd.GeoDataFrame(geometry=[CREEK], crs=4326)})
-    [creek] = imagery.usgs_water(field_path)
-    assert creek.geom_type == "Polygon"
+    failed = []
+    [creek] = imagery.usgs_water(field_path, failed)
+    assert creek.geom_type == "Polygon" and failed == ["waterbody_hr"]
+    assert len(imagery.usgs_water(field_path)) == 1  # failed is optional
 
 
 def test_usgs_water_both_down_raises(field_path, monkeypatch):

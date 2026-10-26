@@ -88,3 +88,13 @@ def test_to_json_is_serializable(monkeypatch, field_path):
     assert len(out["layers"]["water"]["features"]) == 1
     assert out["layers"]["restricted"]["features"] == []
     assert out["label"]["rules"][0]["page"] == 2
+
+
+def test_water_warnings_reach_the_applicator(monkeypatch, field_path):
+    wire(monkeypatch)
+    monkeypatch.setattr(segment, "find_hazards", lambda p: {
+        "water": [POND], "building": [], "habitat": [], "imagery_date": "2023-07-09",
+        "water_source": "usgs", "water_warnings": ["USGS pond and lake data was unavailable"]})
+    result = pipeline.run(field_path, "label.pdf", "2026-11")
+    assert result["warnings"] == ["USGS pond and lake data was unavailable"]
+    assert result["plan"]["status"] == "adjust"  # warnings never change the decision

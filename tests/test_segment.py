@@ -88,7 +88,7 @@ def test_find_hazards_merges_and_caches(tmp_path, monkeypatch):
 
     pond = box(-93.0, 42.0, -92.999, 42.001)
 
-    def usgs(fp):
+    def usgs(fp, failed):
         calls.append("usgs")
         return [pond]
 
@@ -99,7 +99,7 @@ def test_find_hazards_merges_and_caches(tmp_path, monkeypatch):
     out = segment.find_hazards(field)
     assert out["water_source"] == "usgs+sam" and out["imagery_date"] == "2023-07-09"
     assert out["water"][0].equals(pond) and out["water"][1].equals(sam_pond)
-    assert out["building"] == [] and out["habitat"] == []
+    assert out["building"] == [] and out["habitat"] == [] and out["water_warnings"] == []
     phrases = [p for ps in segment.PHRASES.values() for p in ps]
     assert calls == ["tile", *phrases, "usgs"]
 
@@ -107,3 +107,30 @@ def test_find_hazards_merges_and_caches(tmp_path, monkeypatch):
     again = segment.find_hazards(field)
     assert calls == [] and again["water_source"] == "usgs+sam"
     assert len(again["water"]) == 2
+
+
+def test_partial_usgs_warns_and_is_not_cached(tmp_path, monkeypatch):
+    field = tmp_path / "field.geojson"
+    field.write_text(json.dumps({"type": "Polygon", "coordinates": [[[-93, 42], [-93, 42.01],
+                                                                      [-92.99, 42.01], [-93, 42]]]}))
+    monkeypatch.setattr(segment, "CACHE", tmp_path / "cache")
+
+    def fetch_tile(fp, png):
+        png.parent.mkdir(parents=True, exist_ok=True)
+        png.write_bytes(b"png")
+        png.with_suffix(".json").write_text(json.dumps(META))
+
+    monkeypatch.setattr(imagery, "fetch_tile", fetch_tile)
+    monkeypatch.setattr(segment, "segment_tile", lambda png, phrase: [])
+    calls = []
+
+    def usgs(fp, failed):
+        calls.append("usgs")
+        failed.append("waterbody_hr")
+        return []
+
+    monkeypatch.setattr(imagery, "usgs_water", usgs)
+    out = segment.find_hazards(field)
+    assert len(out["water_warnings"]) == 1 and "pond and lake" in out["water_warnings"][0]
+    segment.find_hazards(field)
+    assert calls == ["usgs", "usgs"]  # retried, not served from cache
