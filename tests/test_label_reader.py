@@ -123,3 +123,14 @@ def test_condition_passes_through(monkeypatch, pdf):
     out = label_reader.read_label(pdf)
     assert [r.condition for r in out.rules] == ["California only", None]
     assert label_reader.RULE_SCHEMA["required"][-1] == "condition"
+
+
+def test_provider_has_its_own_cache_entry(monkeypatch, pdf, cache):
+    seen = []
+    fake_model(monkeypatch, [rule()])
+    real = llm.chat_json
+    monkeypatch.setattr(llm, "chat_json", lambda *a, **kw: seen.append(kw.get("provider")) or real(*a, **kw))
+    label_reader.read_label(pdf)
+    label_reader.read_label(pdf, provider="baseten")
+    label_reader.read_label(pdf, provider="baseten")
+    assert seen == [None, "baseten"] and len(list(cache.iterdir())) == 2

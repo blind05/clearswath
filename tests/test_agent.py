@@ -29,7 +29,7 @@ def field_path(tmp_path, monkeypatch):
 @pytest.fixture
 def steps(monkeypatch):
     calls = []
-    monkeypatch.setattr(label_reader, "read_label", lambda p: calls.append("label") or LABEL)
+    monkeypatch.setattr(label_reader, "read_label", lambda p, provider=None: calls.append("label") or LABEL)
     monkeypatch.setattr(segment, "find_hazards", lambda p: calls.append("hazards") or {
         "water": [POND], "building": [], "habitat": [], "imagery_date": "2023-07-09", "water_source": "usgs"})
     monkeypatch.setattr(bulletins, "check_bulletin", lambda fp, m, reg: calls.append(("bulletin", reg)) or BULLETIN)
@@ -123,8 +123,21 @@ def test_returns_full_result(field_path, steps, monkeypatch):
 
 def test_user_exclusions_reach_the_plan(field_path, steps, monkeypatch):
     ulv = RULE.model_copy(update={"value": 2000.0, "condition": "ULV aerial only"})
-    monkeypatch.setattr(label_reader, "read_label", lambda p: LABEL.model_copy(update={"rules": [RULE, ulv]}))
+    monkeypatch.setattr(label_reader, "read_label", lambda p, provider=None: LABEL.model_copy(update={"rules": [RULE, ulv]}))
     script(monkeypatch, reply(call("plan_spray")), reply(content="ok"))
     assert agent.run(field_path, "label.pdf", "2026-11")["decision"] == "no-go"
     script(monkeypatch, reply(call("plan_spray")), reply(content="ok"))
     assert agent.run(field_path, "label.pdf", "2026-11", excluded_rules=[1])["decision"] == "adjust"
+
+
+def test_provider_reaches_reader_and_model(field_path, steps, monkeypatch):
+    seen = {}
+    monkeypatch.setattr(label_reader, "read_label", lambda p, provider=None: seen.update(reader=provider) or LABEL)
+
+    def chat(messages, tools=None, provider=None, **kw):
+        seen.setdefault("chat", []).append(provider)
+        return reply(content="ok") if len(seen["chat"]) > 1 else reply(call("read_label"))
+
+    monkeypatch.setattr(llm, "chat", chat)
+    agent.run(field_path, "label.pdf", "2026-11", provider="baseten")
+    assert seen == {"reader": "baseten", "chat": ["baseten", "baseten"]}

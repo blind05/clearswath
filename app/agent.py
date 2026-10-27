@@ -33,13 +33,14 @@ class _ModelError(Exception):
 class _Job:
     """The run's state; each tool fills one part, and plan_spray fills in anything still missing."""
 
-    def __init__(self, field_path, label_path, month, method, excluded_rules=()):
+    def __init__(self, field_path, label_path, month, method, excluded_rules=(), provider=None):
         self.field_path, self.label_path, self.month, self.method = field_path, label_path, month, method
+        self.provider = provider
         self.excluded_rules = excluded_rules  # set by the user, never by the model
         self.label = self.hazards = self.bulletin = self.result = None
 
     def read_label(self):
-        self.label = self.label or label_reader.read_label(self.label_path)
+        self.label = self.label or label_reader.read_label(self.label_path, self.provider)
         return {"product": self.label.product_name, "epa_reg_no": self.label.epa_reg_no,
                 "rules": [r.summary for r in self.label.rules], "unverified_rules": len(self.label.dropped)}
 
@@ -81,7 +82,7 @@ def _agent_loop(job: _Job, trace: list) -> str | None:
                 {"role": "user", "content": f"Can I spray this field by {job.method} in {job.month}?"}]
     for _ in range(MAX_STEPS):
         try:
-            msg = llm.chat(messages, tools=TOOLS, purpose="agent")
+            msg = llm.chat(messages, tools=TOOLS, purpose="agent", provider=job.provider)
         except Exception as e:  # any model failure falls back to the pipeline
             raise _ModelError() from e
         if not msg.tool_calls:
@@ -100,10 +101,10 @@ def _agent_loop(job: _Job, trace: list) -> str | None:
     return None
 
 
-def run(field_path, label_path, month: str, method: str = "drone", excluded_rules=()) -> dict:
+def run(field_path, label_path, month: str, method: str = "drone", excluded_rules=(), provider=None) -> dict:
     """result is the full pipeline result (as pipeline.run returns), for pipeline.to_json."""
     run_id = uuid.uuid4().hex
-    job, trace, mode = _Job(field_path, label_path, month, method, excluded_rules), [], "agent"
+    job, trace, mode = _Job(field_path, label_path, month, method, excluded_rules, provider), [], "agent"
     try:
         answer = _agent_loop(job, trace)
     except _ModelError as e:

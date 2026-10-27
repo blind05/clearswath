@@ -102,10 +102,10 @@ def _check(rule: dict, pages: list[str]) -> str | None:
     return None
 
 
-def _read(path: Path) -> dict:
-    """The model's part: page text (a transcription for photos) and raw rules. Cached on disk."""
+def _read(path: Path, provider: str | None) -> dict:
+    """The model's part: page text (a transcription for photos) and raw rules. Cached on disk per model."""
     prompt = llm.load_prompt("label")
-    key = hashlib.sha256(path.read_bytes() + prompt.encode() + llm.SPARK.encode()
+    key = hashlib.sha256(path.read_bytes() + prompt.encode() + llm.spark_model(provider).encode()
                          + json.dumps(SCHEMA, sort_keys=True).encode()).hexdigest()[:20]
     cached = CACHE / f"{key}.json"
     if cached.exists():
@@ -113,16 +113,20 @@ def _read(path: Path) -> dict:
     pages, source = _pages(path)
     text = "\n\n".join(f"=== Page {n} ===\n{t}" for n, t in enumerate(pages, 1))
     out = llm.chat_json([{"role": "system", "content": prompt},
-                         {"role": "user", "content": text}], SCHEMA, "label_rules", purpose="label")
+                         {"role": "user", "content": text}], SCHEMA, "label_rules", purpose="label",
+                        provider=provider)
     raw = {"pages": pages, "source": source, "out": out}
     CACHE.mkdir(parents=True, exist_ok=True)
     cached.write_text(json.dumps(raw))
     return raw
 
 
-def read_label(path: str | Path) -> LabelRules:
-    """Quotes are re-checked on every call, so cached model output never skips verification."""
-    raw = _read(Path(path))
+def read_label(path: str | Path, provider: str | None = None) -> LabelRules:
+    """Quotes are re-checked on every call, so cached model output never skips verification.
+
+    provider picks the Spark that extracts rules (llm.resolve_provider); photos are transcribed on Meta.
+    """
+    raw = _read(Path(path), provider)
     pages, source, out = raw["pages"], raw["source"], raw["out"]
     rules, dropped = [], []
     for r in out["rules"]:
