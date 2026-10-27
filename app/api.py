@@ -171,6 +171,27 @@ def _http_error(e: Exception) -> HTTPException:
     return HTTPException(502, "A model or data service failed. Try again; details are in the server log.")
 
 
+# What the first bytes of each allowed upload type look like (checked after saving, before any use)
+SIGNATURES = {
+    ".pdf": ("a PDF", lambda h: h.startswith(b"%PDF")),
+    ".png": ("a PNG image", lambda h: h.startswith(b"\x89PNG\r\n\x1a\n")),
+    ".jpg": ("a JPEG image", lambda h: h.startswith(b"\xff\xd8\xff")),
+    ".jpeg": ("a JPEG image", lambda h: h.startswith(b"\xff\xd8\xff")),
+    ".webp": ("a WebP image", lambda h: h[:4] == b"RIFF" and h[8:12] == b"WEBP"),
+    ".wav": ("a WAV file", lambda h: h[:4] == b"RIFF" and h[8:12] == b"WAVE"),
+}
+
+
+def _check_type(path: Path) -> None:
+    """Deletes and refuses (415) a file whose content doesn't match its extension."""
+    kind = SIGNATURES.get(path.suffix.lower())
+    with path.open("rb") as f:
+        head = f.read(16)
+    if kind and not kind[1](head):
+        path.unlink(missing_ok=True)
+        raise HTTPException(415, f"That file doesn't look like {kind[0]}.")
+
+
 def _save(upload: UploadFile, path: Path, max_bytes: int) -> Path:
     """Copies an upload in 1 MB pieces, stopping at max_bytes (413) so a huge file is never held whole."""
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -183,6 +204,7 @@ def _save(upload: UploadFile, path: Path, max_bytes: int) -> Path:
                 path.unlink(missing_ok=True)
                 raise HTTPException(413, f"{upload.filename or 'File'} is too large: the limit is {max_bytes // MB} MB.")
             out.write(chunk)
+    _check_type(path)
     return path
 
 

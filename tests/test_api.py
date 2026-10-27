@@ -151,7 +151,7 @@ def test_record_from_text(client, fake_records):
 
 def test_record_from_audio(client, fake_records):
     run_id = post_plan(client).json()["run_id"]
-    r = client.post("/api/record", data={"run_id": run_id}, files={"audio": ("note.wav", b"audio")})
+    r = client.post("/api/record", data={"run_id": run_id}, files={"audio": ("note.wav", b"RIFF\x24\x00\x00\x00WAVEfmt ")})
     assert r.status_code == 200 and fake_records["text"] == "heard text"
     assert fake_records["audio"].name == "note.wav"
 
@@ -213,7 +213,7 @@ def test_record_bad_audio_is_explained(client, monkeypatch):
 
     monkeypatch.setattr(records, "transcribe", bad)
     run_id = post_plan(client).json()["run_id"]
-    r = client.post("/api/record", data={"run_id": run_id}, files={"audio": ("note.wav", b"x")})
+    r = client.post("/api/record", data={"run_id": run_id}, files={"audio": ("note.wav", b"RIFF\x24\x00\x00\x00WAVEfmt ")})
     assert r.status_code == 422 and "16-bit WAV" in r.json()["detail"]
 
 
@@ -454,7 +454,7 @@ def test_oversize_label_and_audio_are_refused(client, monkeypatch):
     assert r.status_code == 413 and "limit is 2 MB" in r.json()["detail"]
     run_id = post_plan(client).json()["run_id"]
     monkeypatch.setattr(api, "AUDIO_MAX", 1 * api.MB)
-    r = client.post("/api/record", data={"run_id": run_id}, files={"audio": ("n.wav", b"RIFF" + b"0" * (2 * api.MB))})
+    r = client.post("/api/record", data={"run_id": run_id}, files={"audio": ("n.wav", b"RIFF\x00\x00\x00\x00WAVE" + b"0" * (2 * api.MB))})
     assert r.status_code == 413
 
 
@@ -573,3 +573,21 @@ def test_bad_field_is_explained(client, monkeypatch):
     monkeypatch.setattr(pipeline, "run", refuse)
     r = post_plan(client)
     assert r.status_code == 422 and "41,158,402 acres" in r.json()["detail"]
+
+
+@pytest.mark.parametrize("name, body", [
+    ("label.pdf", b"<html>not a pdf</html>"),
+    ("label.png", b"%PDF-1.7 pretending"),
+    ("label.jpg", b"GIF89a"),
+    ("label.webp", b"RIFF\x00\x00\x00\x00WAVE"),
+])
+def test_label_content_must_match_its_extension(client, tmp_path, name, body):
+    r = client.post("/api/label", files={"label": (name, body)})
+    assert r.status_code == 415 and "doesn't look like" in r.json()["detail"]
+    assert not list((tmp_path / "runs").rglob("label.*"))  # the mismatched file was deleted
+
+
+def test_audio_content_must_be_wav(client):
+    run_id = post_plan(client).json()["run_id"]
+    r = client.post("/api/record", data={"run_id": run_id}, files={"audio": ("note.wav", b"ID3 an mp3 file")})
+    assert r.status_code == 415 and "WAV" in r.json()["detail"]
