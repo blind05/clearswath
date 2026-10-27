@@ -13,10 +13,11 @@ class NotConfirmableError(ValueError):
 
 
 def run(field_path, label_path, month: str, method: str = "drone", excluded_rules=()) -> dict:
+    field = geo.load_field(field_path)  # validated first: a bad field must not cost a paid label read
     label = label_reader.read_label(label_path)
     hazards = segment.find_hazards(field_path)
     bulletin = bulletins.check_bulletin(field_path, month, label.epa_reg_no)
-    return assemble(geo.load_field(field_path), label, hazards, bulletin, month, method, excluded_rules)
+    return assemble(field, label, hazards, bulletin, month, method, excluded_rules)
 
 
 def confirmable(label) -> list[int]:

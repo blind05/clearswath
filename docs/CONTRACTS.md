@@ -6,7 +6,7 @@ Don't change a contract unless the human asks.
 | Module | Function | Takes | Returns |
 | --- | --- | --- | --- |
 | `app/llm.py` | `client(provider)`, `chat()`, `chat_json()`, `sam_raw()`, `transcribe()`, `data_url()`, `load_prompt()`, `resolve_provider()` | messages, JSON schema (object root), optional `provider` (`meta` or `baseten`, default `LLM_PROVIDER`) | model reply; dict matching schema (on Baseten via one forced tool call). Logs every call to `data/logs/calls.jsonl` |
-| `app/geo.py` | `load_field()`, `save_shapes()`, `load_shapes()`, `to_feature_collection()` | GeoJSON paths, shapes | shapely shapes in EPSG:4326; GeoJSON dicts |
+| `app/geo.py` | `load_field()`, `check_field()`, `save_shapes()`, `load_shapes()`, `to_feature_collection()` | GeoJSON paths, shapes | shapely shapes in EPSG:4326; GeoJSON dicts. `load_field` raises `FieldError` unless the field is a valid polygon in the contiguous US, <= 640 acres (`MAX_FIELD_ACRES`) and <= 2,000 points; `pipeline.run` and `agent.run` check it before any paid call |
 | `app/imagery.py` | `fetch_tile(field_path, out_png)` | field GeoJSON | PNG plus `.json` sidecar: crs, transform (6 values, downscaled), date (newest), dates, empty_fraction, width, height. Gaps are filled from other NAIP images |
 | `app/imagery.py` | `usgs_water(field_path)` | field GeoJSON, optional `failed` list | list of water shapes; names of layers that errored are appended to `failed` |
 | `app/segment.py` | `find_hazards(field_path)` | field GeoJSON | `{water, building, habitat, imagery_date, water_source, water_warnings, imagery_warnings}`; cached per field and hazard |

@@ -186,3 +186,13 @@ def test_loaded_label_is_reverified(tmp_path):
     pipeline.save_inputs(tmp_path / "c", FIELD, raw, {"water": [], "building": [], "habitat": []}, bulletin(), "2026-11")
     _, lbl, *_ = pipeline.load_inputs(tmp_path / "c")
     assert lbl.rules == [] and lbl.dropped[0]["reason"] == "quote not found in label text"
+
+
+def test_bad_field_is_refused_before_any_paid_call(monkeypatch, tmp_path):
+    from app import geo
+
+    p = tmp_path / "huge.geojson"
+    p.write_text(json.dumps(mapping(box(-103.0, 43.0, -96.5, 45.9))))
+    monkeypatch.setattr(label_reader, "read_label", lambda *a, **kw: pytest.fail("paid label read"))
+    with pytest.raises(geo.FieldError):
+        pipeline.run(p, "label.pdf", "2026-11")

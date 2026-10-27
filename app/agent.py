@@ -103,6 +103,7 @@ def _agent_loop(job: _Job, trace: list) -> str | None:
 
 def run(field_path, label_path, month: str, method: str = "drone", excluded_rules=(), provider=None) -> dict:
     """result is the full pipeline result (as pipeline.run returns), for pipeline.to_json."""
+    geo.load_field(field_path)  # validated before any tool can spend on it
     run_id = uuid.uuid4().hex
     job, trace, mode = _Job(field_path, label_path, month, method, excluded_rules, provider), [], "agent"
     try:

@@ -141,3 +141,13 @@ def test_provider_reaches_reader_and_model(field_path, steps, monkeypatch):
     monkeypatch.setattr(llm, "chat", chat)
     agent.run(field_path, "label.pdf", "2026-11", provider="baseten")
     assert seen == {"reader": "baseten", "chat": ["baseten", "baseten"]}
+
+
+def test_agent_refuses_a_bad_field_before_any_tool(monkeypatch, tmp_path):
+    from app import geo
+
+    p = tmp_path / "huge.geojson"
+    p.write_text(json.dumps(mapping(box(-103.0, 43.0, -96.5, 45.9))))
+    monkeypatch.setattr(llm, "chat", lambda *a, **kw: pytest.fail("model called"))
+    with pytest.raises(geo.FieldError):
+        agent.run(p, "label.pdf", "2026-11")

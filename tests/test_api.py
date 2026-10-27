@@ -562,3 +562,14 @@ def test_reads_stay_free(client, monkeypatch):
     monkeypatch.setenv("CLEARSWATH_LIVE_MODE", "off")
     assert client.get("/api/health").status_code == 200
     assert client.head("/api/health").status_code not in (401, 429, 503)  # never gated, whatever it returns
+
+
+def test_bad_field_is_explained(client, monkeypatch):
+    from app import geo
+
+    def refuse(*a):
+        raise geo.FieldError("The field is 41,158,402 acres; the limit is 640. Split it up.")
+
+    monkeypatch.setattr(pipeline, "run", refuse)
+    r = post_plan(client)
+    assert r.status_code == 422 and "41,158,402 acres" in r.json()["detail"]

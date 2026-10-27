@@ -162,7 +162,8 @@ def _http_error(e: Exception) -> HTTPException:
     """Only messages we wrote reach the browser; anything else is logged and replaced."""
     if isinstance(e, (llm.MissingKeyError, imagery.NoImageryError)):
         return HTTPException(502, str(e))
-    if isinstance(e, (llm.BadAudioError, pipeline.NotConfirmableError, label_reader.LabelTooLongError)):
+    if isinstance(e, (llm.BadAudioError, pipeline.NotConfirmableError, label_reader.LabelTooLongError,
+                      geo.FieldError)):
         return HTTPException(422, str(e))
     log.exception("request failed", exc_info=e)
     if isinstance(e, ValueError):  # bad field or label file
