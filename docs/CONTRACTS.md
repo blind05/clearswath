@@ -5,16 +5,16 @@ Don't change a contract unless the human asks.
 
 | Module | Function | Takes | Returns |
 | --- | --- | --- | --- |
-| `app/llm.py` | `client()`, `chat()`, `chat_json()`, `data_url()`, `load_prompt()` | messages, JSON schema (object root) | model reply; dict matching schema. Logs every call to `data/logs/calls.jsonl` |
+| `app/llm.py` | `client(provider)`, `chat()`, `chat_json()`, `sam_raw()`, `transcribe()`, `data_url()`, `load_prompt()`, `resolve_provider()` | messages, JSON schema (object root), optional `provider` (`meta` or `baseten`, default `LLM_PROVIDER`) | model reply; dict matching schema (on Baseten via one forced tool call). Logs every call to `data/logs/calls.jsonl` |
 | `app/geo.py` | `load_field()`, `save_shapes()`, `load_shapes()`, `to_feature_collection()` | GeoJSON paths, shapes | shapely shapes in EPSG:4326; GeoJSON dicts |
 | `app/imagery.py` | `fetch_tile(field_path, out_png)` | field GeoJSON | PNG plus `.json` sidecar: crs, transform (6 values, downscaled), date, width, height |
 | `app/imagery.py` | `usgs_water(field_path)` | field GeoJSON, optional `failed` list | list of water shapes; names of layers that errored are appended to `failed` |
 | `app/segment.py` | `find_hazards(field_path)` | field GeoJSON | `{water, building, habitat, imagery_date, water_source, water_warnings}`; cached per field and hazard |
-| `app/label_reader.py` | `read_label(path)` | PDF or image | `LabelRules`: product_name, epa_reg_no, rules (kind, target, applies_to, value, unit, summary, quote, page, condition), dropped, source |
+| `app/label_reader.py` | `read_label(path, provider=None)` | PDF or image | `LabelRules`: product_name, epa_reg_no, rules (kind, target, applies_to, value, unit, summary, quote, page, condition), dropped, source |
 | `app/bulletins.py` | `check_bulletin(field_path, month, reg_no)` | field, month, product | `{in_pula, prohibited, limitations, restricted, citation, checked}` |
 | `app/buffers.py` | `plan(field, hazards, rules, restricted, method, prohibited)` | shapes and rules | `{status, method, field_acres, spray_acres, excluded_acres, spray_zone, no_spray, reasons}` |
 | `app/pipeline.py` | `run(field_path, label_path, month, method, excluded_rules=())`, `assemble(...)`, `to_json(result)` | paths and options; ids of rules the user unticked | full result; JSON with map layers, `confirm` and `excluded_rules` for the page |
-| `app/agent.py` | `run(field_path, label_path, month, method, excluded_rules=())` | same | `{run_id, answer, decision, trace, mode, result}`; `result` is what `pipeline.run` returns |
+| `app/agent.py` | `run(field_path, label_path, month, method, excluded_rules=(), provider=None)` | same | `{run_id, answer, decision, trace, mode, result}`; `result` is what `pipeline.run` returns |
 | `app/records.py` | `transcribe(path)`, `fill_record(text, job)` | audio; transcript and job dict | text; `AppRecord` with `missing` list |
 | `app/api.py` | `/api/demo`, `/api/label`, `/api/plan`, `/api/agent`, `/api/kml/{id}`, `/api/record` | form uploads | JSON for `web/index.html` |
 

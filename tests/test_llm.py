@@ -13,7 +13,8 @@ from app import llm
 def fake(monkeypatch, tmp_path):
     monkeypatch.setattr(llm, "LOG_PATH", tmp_path / "calls.jsonl")
     c = MagicMock()
-    monkeypatch.setattr(llm, "client", lambda: c)
+    c.names = []
+    monkeypatch.setattr(llm, "client", lambda name="meta": c.names.append(name) or c)
     return c
 
 
@@ -172,3 +173,55 @@ def test_check_wav_rejects_non_wav(tmp_path):
 
 def test_check_wav_accepts_24k(tmp_path):
     assert llm.check_wav(wav(tmp_path / "a.wav", rate=24000, seconds=2)) == 2
+
+
+def tool_reply(*calls):
+    msg = SimpleNamespace(content=None, tool_calls=[
+        SimpleNamespace(function=SimpleNamespace(name=n, arguments=a)) for n, a in calls])
+    return SimpleNamespace(choices=[SimpleNamespace(message=msg)], usage=None)
+
+
+def test_provider_resolution(monkeypatch):
+    assert llm.resolve_provider() == "meta"
+    monkeypatch.setenv("LLM_PROVIDER", "baseten")
+    assert llm.resolve_provider() == "baseten" and llm.spark_model() == llm.SPARK_OPEN
+    assert llm.resolve_provider("meta") == "meta"
+    with pytest.raises(ValueError):
+        llm.resolve_provider("openai")
+
+
+def test_baseten_client(monkeypatch):
+    llm.client.cache_clear()
+    monkeypatch.setattr(llm, "load_dotenv", lambda *a: None)
+    monkeypatch.setenv("BASETEN_API_KEY", "b")
+    c = llm.client("baseten")
+    assert c.api_key == "b" and str(c.base_url).startswith("https://inference.baseten.co/v1")
+    assert c.max_retries == 5
+    monkeypatch.delenv("BASETEN_API_KEY")
+    llm.client.cache_clear()
+    with pytest.raises(llm.MissingKeyError, match="BASETEN_API_KEY"):
+        llm.client("baseten")
+    llm.client.cache_clear()
+
+
+def test_chat_on_baseten(fake):
+    fake.chat.completions.create.return_value = reply("OK")
+    llm.chat([{"role": "user", "content": "hi"}], provider="baseten")
+    assert fake.names == ["baseten"]
+    assert fake.chat.completions.create.call_args.kwargs["model"] == llm.SPARK_OPEN
+
+
+def test_chat_json_on_baseten_forces_one_tool_call(fake):
+    fake.chat.completions.create.return_value = tool_reply(("rules", '{"a": 1}'))
+    schema = {"type": "object", "properties": {"a": {"type": "integer"}}}
+    assert llm.chat_json([], schema, "rules", provider="baseten") == {"a": 1}
+    kw = fake.chat.completions.create.call_args.kwargs
+    assert kw["tools"][0]["function"]["parameters"] is schema and "response_format" not in kw
+    assert kw["tool_choice"] == {"type": "function", "function": {"name": "rules"}}
+
+
+@pytest.mark.parametrize("calls", [(), (("other", "{}"),), (("rules", "{}"), ("rules", "{}"))])
+def test_chat_json_on_baseten_needs_exactly_the_tool(fake, calls):
+    fake.chat.completions.create.return_value = tool_reply(*calls)
+    with pytest.raises(RuntimeError, match="Expected one rules tool call"):
+        llm.chat_json([], {"type": "object"}, "rules", provider="baseten")
