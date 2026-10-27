@@ -115,3 +115,11 @@ def test_cache_key_changes_with_prompt(monkeypatch, pdf, cache):
     monkeypatch.setattr(llm, "load_prompt", lambda name: "a different prompt")
     label_reader.read_label(pdf)
     assert len(list(cache.iterdir())) == 2
+
+
+def test_condition_passes_through(monkeypatch, pdf):
+    fake_model(monkeypatch, [rule(condition="California only"), rule(kind="wind", target=None, value=10, unit="mph",
+                                                                     quote="Do not apply when wind exceeds 10 mph.")])
+    out = label_reader.read_label(pdf)
+    assert [r.condition for r in out.rules] == ["California only", None]
+    assert label_reader.RULE_SCHEMA["required"][-1] == "condition"

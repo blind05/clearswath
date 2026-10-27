@@ -10,6 +10,10 @@ For every rule return:
 - summary: one short plain-English sentence.
 - quote: the exact sentence from the label, copied word for word. Do not paraphrase, fix typos or join text from different places.
 - page: the page number the quote is on.
+- condition: if the rule applies only in some circumstances the label names (a state or region, an
+  application type, an irrigation type, a crop), say so in a few words, e.g. `California only`,
+  `chemigation only`, `rice only`. Null if it always applies to this application method.
+  Don't invent conditions.
 
 Also return product_name and epa_reg_no ("EPA Reg. No.") exactly as printed, or null.
 

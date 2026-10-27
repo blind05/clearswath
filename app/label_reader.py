@@ -26,6 +26,7 @@ class LabelRule(BaseModel):
     summary: str
     quote: str
     page: int
+    condition: str | None = None  # e.g. "ULV aerial only", "New York only"; None = always applies
 
 
 class LabelRules(BaseModel):
@@ -47,8 +48,9 @@ RULE_SCHEMA = {
         "summary": {"type": "string"},
         "quote": {"type": "string"},
         "page": {"type": "integer"},
+        "condition": {"type": ["string", "null"]},
     },
-    "required": ["kind", "target", "applies_to", "value", "unit", "summary", "quote", "page"],
+    "required": ["kind", "target", "applies_to", "value", "unit", "summary", "quote", "page", "condition"],
     "additionalProperties": False,
 }
 SCHEMA = {
