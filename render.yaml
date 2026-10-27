@@ -1,0 +1,14 @@
+# Render blueprint. Keys are entered in the Render dashboard (sync: false), never stored here.
+services:
+  - type: web
+    name: clearswath
+    runtime: docker
+    plan: starter  # free tier sleeps when idle and has 512 MB; see docs/PROJECT_CONTEXT.md section 9
+    healthCheckPath: /api/health
+    envVars:
+      - key: MODEL_API_KEY
+        sync: false
+      - key: BASETEN_API_KEY
+        sync: false
+      - key: LLM_PROVIDER
+        value: meta

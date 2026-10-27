@@ -1,0 +1,20 @@
+# Keep keys, local state and anything not needed at runtime out of the image.
+.env
+.env.*
+!.env.example
+.git
+.venv
+.claude
+.playwright-mcp
+__pycache__
+*.pyc
+.pytest_cache
+cache
+data/cache
+data/runs
+data/logs
+tests
+evals
+scripts
+docs
+src
