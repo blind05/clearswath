@@ -1,14 +1,19 @@
 """HTTP API for web/index.html. Run with: uv run uvicorn app.api:app"""
 
+import hmac
 import json
 import logging
+import os
 import re
+import threading
+import time
 import uuid
+from collections import defaultdict, deque
 from datetime import date
 from pathlib import Path
 
 import simplekml
-from fastapi import FastAPI, File, Form, HTTPException, UploadFile
+from fastapi import Depends, FastAPI, File, Form, HTTPException, Request, UploadFile
 from fastapi.responses import Response
 from fastapi.staticfiles import StaticFiles
 
@@ -25,6 +30,54 @@ RUN_ID = re.compile(r"^[0-9a-f]{32}$")
 
 log = logging.getLogger(__name__)
 app = FastAPI(title="ClearSwath")
+
+# Paid endpoints (model calls) are gated; the cached demo, KML and the page stay open.
+_lock = threading.Lock()
+_hits: dict[str, deque] = defaultdict(deque)  # ip -> request times in the last hour
+_day = {"date": None, "count": 0}
+
+
+def reset_limits() -> None:
+    """Clears the rate-limit and daily counters (tests; they also reset on restart)."""
+    with _lock:
+        _hits.clear()
+        _day.update(date=None, count=0)
+
+
+def _client_ip(request: Request) -> str:
+    # Render's proxy appends the address it saw; the last entry is the one a client can't forge.
+    # TODO(verify): X-Forwarded-For order on Render
+    fwd = request.headers.get("x-forwarded-for")
+    return fwd.split(",")[-1].strip() if fwd else (request.client.host if request.client else "unknown")
+
+
+def paid_access(request: Request) -> None:
+    """Access code, per-IP hourly limit and a global daily cap, checked before any paid model call."""
+    code = os.getenv("ACCESS_CODE")
+    if code:
+        given = request.headers.get("x-access-code", "")
+        if not hmac.compare_digest(given.encode(), code.encode()):
+            raise HTTPException(401, "Live runs need the access code. The demo is open to everyone.")
+    elif os.getenv("RENDER"):  # deployed without a code: refuse rather than spend for anyone
+        raise HTTPException(503, "Live runs aren't switched on for this site yet. Try the demo.")
+    per_hour = int(os.getenv("RATE_LIMIT_PER_HOUR", "20"))
+    daily_cap = int(os.getenv("DAILY_RUN_CAP", "200"))
+    now, ip = time.time(), _client_ip(request)
+    with _lock:
+        if _day["date"] != date.today():
+            _day.update(date=date.today(), count=0)
+        if _day["count"] >= daily_cap:
+            raise HTTPException(503, "Today's live-run budget is used up. The demo still works.")
+        hits = _hits[ip]
+        while hits and now - hits[0] > 3600:
+            hits.popleft()
+        if len(hits) >= per_hour:
+            raise HTTPException(429, "Too many live runs from your address. Try again within the hour, or use the demo.")
+        hits.append(now)
+        _day["count"] += 1
+
+
+PAID = [Depends(paid_access)]
 
 
 def _http_error(e: Exception) -> HTTPException:
@@ -87,20 +140,20 @@ def _upload_and_plan(field: UploadFile, label: UploadFile, month: str, method: s
                  month, method, use_agent, excluded_rules)
 
 
-@app.post("/api/plan")
+@app.post("/api/plan", dependencies=PAID)
 def plan(field: UploadFile = File(...), label: UploadFile = File(...),
          month: str = Form(...), method: str = Form("drone"), excluded_rules: str = Form("")):
     return _upload_and_plan(field, label, month, method, False, excluded_rules)
 
 
-@app.post("/api/agent")
+@app.post("/api/agent", dependencies=PAID)
 def ask_agent(field: UploadFile = File(...), label: UploadFile = File(...),
               month: str = Form(...), method: str = Form("drone"), excluded_rules: str = Form("")):
     """Same as /api/plan, plus the agent's answer, trace and mode. The decision still comes from buffers.plan."""
     return _upload_and_plan(field, label, month, method, True, excluded_rules)
 
 
-@app.post("/api/label")
+@app.post("/api/label", dependencies=PAID)
 def label(label: UploadFile = File(...)):
     path = _save(label, RUNS / uuid.uuid4().hex / f"label{_label_suffix(label)}")
     try:
@@ -109,7 +162,7 @@ def label(label: UploadFile = File(...)):
         raise _http_error(e) from e
 
 
-@app.post("/api/record")
+@app.post("/api/record", dependencies=PAID)
 def record(run_id: str = Form(...), audio: UploadFile | None = File(None), text: str = Form("")):
     job_path = RUNS / run_id / "job.json"
     if not RUN_ID.match(run_id) or not job_path.exists():

@@ -332,3 +332,57 @@ def test_page_pins_its_scripts(client):
 def test_health(client):
     r = client.get("/api/health")
     assert r.status_code == 200 and r.json() == {"ok": True}
+
+
+def test_access_code_gates_paid_endpoints(client, monkeypatch):
+    monkeypatch.setenv("ACCESS_CODE", "s3cret-code")
+    r = post_plan(client)
+    assert r.status_code == 401 and "access code" in r.json()["detail"]
+    files = {"field": ("f.geojson", json.dumps(mapping(FIELD))), "label": ("label.pdf", b"%PDF")}
+    wrong = client.post("/api/plan", files=files, data={"month": "2026-11"}, headers={"X-Access-Code": "nope"})
+    assert wrong.status_code == 401
+    ok = client.post("/api/plan", files=files, data={"month": "2026-11"}, headers={"X-Access-Code": "s3cret-code"})
+    assert ok.status_code == 200
+    for url in ("/api/agent", "/api/label", "/api/record"):
+        assert client.post(url, data={"run_id": "0" * 32, "month": "2026-11"},
+                           files={"label": ("x.pdf", b"%PDF"), "field": ("f.geojson", b"{}")}).status_code == 401
+
+
+def test_free_endpoints_stay_open(client, monkeypatch):
+    monkeypatch.setenv("ACCESS_CODE", "s3cret-code")
+    assert client.get("/api/health").status_code == 200
+    assert client.get("/").status_code == 200
+    assert client.get("/api/demo").status_code == 404  # no demo files in this test: not 401
+    assert client.get("/api/kml/" + "0" * 32).status_code == 404
+
+
+def test_render_without_a_code_refuses_to_spend(client, monkeypatch):
+    monkeypatch.setenv("RENDER", "true")
+    r = post_plan(client)
+    assert r.status_code == 503 and "demo" in r.json()["detail"]
+
+
+def test_per_ip_hourly_limit(client, monkeypatch):
+    monkeypatch.setenv("RATE_LIMIT_PER_HOUR", "2")
+    assert [post_plan(client).status_code for _ in range(3)] == [200, 200, 429]
+    other = client.post("/api/plan", headers={"X-Forwarded-For": "203.0.113.9"}, data={"month": "2026-11"},
+                        files={"field": ("f.geojson", json.dumps(mapping(FIELD))), "label": ("l.pdf", b"%PDF")})
+    assert other.status_code == 200  # a different address has its own budget
+
+
+def test_daily_cap_across_everyone(client, monkeypatch):
+    monkeypatch.setenv("DAILY_RUN_CAP", "2")
+    codes = [client.post("/api/plan", headers={"X-Forwarded-For": f"203.0.113.{i}"}, data={"month": "2026-11"},
+                         files={"field": ("f.geojson", json.dumps(mapping(FIELD))), "label": ("l.pdf", b"%PDF")}
+                         ).status_code for i in range(3)]
+    assert codes == [200, 200, 503]
+
+
+def test_forwarded_for_uses_the_last_hop(client, monkeypatch):
+    monkeypatch.setenv("RATE_LIMIT_PER_HOUR", "1")
+    spoof = {"X-Forwarded-For": "1.1.1.1, 198.51.100.7"}
+    files = lambda: {"field": ("f.geojson", json.dumps(mapping(FIELD))), "label": ("l.pdf", b"%PDF")}  # noqa: E731
+    assert client.post("/api/plan", headers=spoof, data={"month": "2026-11"}, files=files()).status_code == 200
+    # changing the forged first entry doesn't buy a new budget
+    spoof2 = {"X-Forwarded-For": "9.9.9.9, 198.51.100.7"}
+    assert client.post("/api/plan", headers=spoof2, data={"month": "2026-11"}, files=files()).status_code == 429

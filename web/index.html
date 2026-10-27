@@ -206,12 +206,30 @@ function render(r) {
   drawMap(r.layers);
 }
 
+// Live runs spend model credits, so the server may ask for an access code (401). It's asked once and kept
+// in this browser; the cached demo never needs it.
+function storedCode() {
+  try { return localStorage.getItem("clearswath-code") || ""; } catch { return ""; }
+}
+async function liveFetch(url, opts) {
+  const send = () => fetch(url, { ...opts, headers: { ...(opts.headers || {}), "X-Access-Code": storedCode() } });
+  let res = await send();
+  if (res.status === 401) {
+    const code = window.prompt("Live runs need the access code (the demo is free to try):");
+    if (code) {
+      try { localStorage.setItem("clearswath-code", code.trim()); } catch {}
+      res = await send();
+    }
+  }
+  return res;
+}
+
 async function call(url, opts) {
   $("#error").textContent = "";
   $("#busy").hidden = false;
   form.querySelectorAll("button").forEach((b) => (b.disabled = true));
   try {
-    const res = await fetch(url, opts);
+    const res = url.startsWith("/api/demo") ? await fetch(url, opts) : await liveFetch(url, opts);
     const body = await res.json().catch(() => ({}));
     if (!res.ok) throw new Error(typeof body.detail === "string" ? body.detail : `Request failed (${res.status})`);
     render(body);
@@ -257,7 +275,7 @@ async function recordApplication(e, runId) {
   f.querySelector("button").disabled = true;
   out.replaceChildren(el("p", { class: "meta" }, "Filling record…"));
   try {
-    const res = await fetch("/api/record", { method: "POST", body });
+    const res = await liveFetch("/api/record", { method: "POST", body });
     const rec = await res.json().catch(() => ({}));
     if (!res.ok) throw new Error(typeof rec.detail === "string" ? rec.detail : `Request failed (${res.status})`);
     out.replaceChildren(...[
