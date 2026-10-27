@@ -316,3 +316,14 @@ def test_cached_demo_is_offline_and_recomputed(client, cached_demo):
 
 def test_demo_rejects_unknown_field(client):
     assert client.get("/api/demo?field=other").status_code == 422
+
+
+def test_page_pins_its_scripts(client):
+    """Every external script and stylesheet is version-pinned and carries an integrity hash."""
+    import re
+
+    page = client.get("/").text
+    tags = re.findall(r"<(?:script|link)[^>]+(?:src|href)=\"https://[^\"]+\"[^>]*>", page)
+    assert any("leaflet-draw@1.0.4" in t for t in tags) and len(tags) == 4
+    assert all('integrity="sha256-' in t for t in tags)
+    assert "basemap.nationalmap.gov" in page and "remain responsible" in page

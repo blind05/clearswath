@@ -6,6 +6,8 @@
 <title>ClearSwath</title>
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
       integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="">
+<link rel="stylesheet" href="https://unpkg.com/leaflet-draw@1.0.4/dist/leaflet.draw.css"
+      integrity="sha256-XzD3RpaHPv7lzX9qt+2n1j5cWj48O24KsgaGYpKN8x8=" crossorigin="">
 <style>
   :root { --go: #1a7f37; --adjust: #b35900; --nogo: #c62828; --ink: #1d2327; --muted: #5f6b73;
           --line: #d8dee2; --bg: #f5f7f6; --card: #fff; }
@@ -65,7 +67,8 @@
 <main>
   <aside>
     <form id="form">
-      <label>Field outline (GeoJSON)<input type="file" name="field" accept=".geojson,.json" required></label>
+      <p class="meta" id="drawn-note">Draw the field on the map (polygon or rectangle tool, top left), or upload it:</p>
+      <label>Field outline (GeoJSON, optional if drawn)<input type="file" name="field" accept=".geojson,.json"></label>
       <label>Pesticide label (PDF or photo)<input type="file" name="label" accept=".pdf,.png,.jpg,.jpeg,.webp" required></label>
       <div class="row">
         <label>Month<input type="month" name="month" required></label>
@@ -85,16 +88,41 @@
 </main>
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
         integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+<script src="https://unpkg.com/leaflet-draw@1.0.4/dist/leaflet.draw.js"
+        integrity="sha256-siofc4Uwjlra3YWkwthOn8Uj69cNN4aMug/iOHNiRgs=" crossorigin=""></script>
 <script>
 const $ = (s) => document.querySelector(s);
 const form = $("#form");
 form.month.value = new Date().toISOString().slice(0, 7);
 
 const map = L.map("map").setView([42, -93], 5);
-L.tileLayer("https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}", {
-  maxZoom: 19, attribution: "Imagery &copy; Esri, Maxar, Earthstar Geographics",
+// USGS The National Map imagery: public domain; native tiles stop at zoom 16, so higher zooms enlarge them.
+L.tileLayer("https://basemap.nationalmap.gov/arcgis/rest/services/USGSImageryOnly/MapServer/tile/{z}/{y}/{x}", {
+  maxZoom: 19, maxNativeZoom: 16, attribution: "USDA, USGS The National Map: Orthoimagery",
 }).addTo(map);
 const control = L.control.layers(null, null, { collapsed: false }).addTo(map);
+
+// The field the user draws. One shape at a time; drawing again replaces it.
+const drawn = new L.FeatureGroup().addTo(map);
+map.addControl(new L.Control.Draw({
+  draw: { polygon: { allowIntersection: false, showArea: true }, rectangle: { showArea: true },
+          polyline: false, circle: false, marker: false, circlemarker: false },
+  edit: { featureGroup: drawn },
+}));
+map.on(L.Draw.Event.CREATED, (e) => {
+  drawn.clearLayers();
+  drawn.addLayer(e.layer);
+  $("#drawn-note").textContent = "Field drawn on the map (it replaces any uploaded file). Draw again to change it.";
+});
+map.on(L.Draw.Event.DELETED, () => {
+  if (!drawn.getLayers().length) $("#drawn-note").textContent = "Draw the field on the map, or upload it:";
+});
+
+function fieldFile() {
+  const [shape] = drawn.getLayers();
+  if (shape) return new File([JSON.stringify(shape.toGeoJSON())], "drawn.geojson", { type: "application/geo+json" });
+  return form.field.files[0] || null;
+}
 let overlays = [];
 
 const STYLES = {
@@ -164,6 +192,7 @@ function render(r) {
     el("p", { class: "meta" }, r.bulletin.citation),
     el("p", { class: "meta" }, `Imagery ${r.imagery_date || "unknown"} · water from ${r.water_source} · ${r.method}, ${r.month}`),
     el("a", { class: "kml", href: `/api/kml/${r.run_id}`, download: "" }, "Download KML for sprayer"),
+    el("p", { class: "meta notice" }, "Decision support only. You remain responsible for following the label and the official Bulletin."),
     el("h2", {}, "Record application"),
     el("form", { id: "record", class: "record" },
       el("label", {}, "Voice note (WAV)", el("input", { type: "file", name: "audio", accept: ".wav,audio/wav" })),
@@ -256,9 +285,15 @@ $("#result").addEventListener("change", (e) => {
 
 form.addEventListener("submit", (e) => {
   e.preventDefault();
+  const field = fieldFile();  // captured now, so reruns use this field even if the drawing changes
+  if (!field) {
+    $("#error").textContent = "Draw the field on the map or choose a GeoJSON file.";
+    return;
+  }
   const url = form.agent.checked ? "/api/agent" : "/api/plan";
   rerun = (excluded) => {
     const body = new FormData(form);
+    body.set("field", field);
     body.delete("agent");
     body.append("excluded_rules", excluded);
     return call(url, { method: "POST", body });
