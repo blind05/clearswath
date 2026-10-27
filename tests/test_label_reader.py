@@ -1,3 +1,4 @@
+import json
 from types import SimpleNamespace
 
 import pymupdf
@@ -7,6 +8,12 @@ from app import label_reader, llm
 
 PAGES = ["Acme Weed-B-Gone  EPA Reg. No. 123-45\nRead the label.",
          "Do not apply within 25 feet of\nlakes, ponds or streams.\nDo not apply when wind exceeds 10 mph."]
+
+
+@pytest.fixture(autouse=True)
+def cache(tmp_path, monkeypatch):
+    monkeypatch.setattr(label_reader, "CACHE", tmp_path / "label_cache")
+    return tmp_path / "label_cache"
 
 
 @pytest.fixture
@@ -78,3 +85,33 @@ def test_image_uses_transcription(monkeypatch, tmp_path):
     fake_model(monkeypatch, [rule(page=1)])
     out = label_reader.read_label(img)
     assert out.source == "image" and out.rules[0].page == 1
+
+
+def test_model_output_is_cached(monkeypatch, pdf, cache):
+    calls = []
+    fake_model(monkeypatch, [rule()])
+    real = llm.chat_json
+    monkeypatch.setattr(llm, "chat_json", lambda *a, **kw: calls.append(1) or real(*a, **kw))
+    first = label_reader.read_label(pdf)
+    second = label_reader.read_label(pdf)
+    assert len(calls) == 1 and first == second and len(list(cache.iterdir())) == 1
+
+
+def test_cache_still_checks_quotes(monkeypatch, pdf, cache):
+    fake_model(monkeypatch, [rule()])
+    label_reader.read_label(pdf)
+    # a cached rule whose quote is no longer in the page text is dropped on the next read
+    (path,) = cache.iterdir()
+    raw = json.loads(path.read_text())
+    raw["out"]["rules"][0]["quote"] = "Do not apply within 5 feet of water."
+    path.write_text(json.dumps(raw))
+    out = label_reader.read_label(pdf)
+    assert out.rules == [] and out.dropped[0]["reason"] == "quote not found in label text"
+
+
+def test_cache_key_changes_with_prompt(monkeypatch, pdf, cache):
+    fake_model(monkeypatch, [rule()])
+    label_reader.read_label(pdf)
+    monkeypatch.setattr(llm, "load_prompt", lambda name: "a different prompt")
+    label_reader.read_label(pdf)
+    assert len(list(cache.iterdir())) == 2

@@ -1,5 +1,7 @@
 """Pesticide label (PDF or image) -> LabelRules. Every kept rule's quote is found in the label text."""
 
+import hashlib
+import json
 from pathlib import Path
 from typing import Literal
 
@@ -8,6 +10,7 @@ from pydantic import BaseModel, ValidationError
 
 from app import llm
 
+CACHE = Path(__file__).resolve().parent.parent / "data" / "cache" / "labels"
 KINDS = ["buffer", "wind", "rain", "rate", "other"]
 TARGETS = ["water", "building", "habitat"]
 APPLIES_TO = ["all", "aerial", "ground"]
@@ -97,12 +100,28 @@ def _check(rule: dict, pages: list[str]) -> str | None:
     return None
 
 
-def read_label(path: str | Path) -> LabelRules:
-    path = Path(path)
+def _read(path: Path) -> dict:
+    """The model's part: page text (a transcription for photos) and raw rules. Cached on disk."""
+    prompt = llm.load_prompt("label")
+    key = hashlib.sha256(path.read_bytes() + prompt.encode() + llm.SPARK.encode()
+                         + json.dumps(SCHEMA, sort_keys=True).encode()).hexdigest()[:20]
+    cached = CACHE / f"{key}.json"
+    if cached.exists():
+        return json.loads(cached.read_text())
     pages, source = _pages(path)
     text = "\n\n".join(f"=== Page {n} ===\n{t}" for n, t in enumerate(pages, 1))
-    out = llm.chat_json([{"role": "system", "content": llm.load_prompt("label")},
+    out = llm.chat_json([{"role": "system", "content": prompt},
                          {"role": "user", "content": text}], SCHEMA, "label_rules", purpose="label")
+    raw = {"pages": pages, "source": source, "out": out}
+    CACHE.mkdir(parents=True, exist_ok=True)
+    cached.write_text(json.dumps(raw))
+    return raw
+
+
+def read_label(path: str | Path) -> LabelRules:
+    """Quotes are re-checked on every call, so cached model output never skips verification."""
+    raw = _read(Path(path))
+    pages, source, out = raw["pages"], raw["source"], raw["out"]
     rules, dropped = [], []
     for r in out["rules"]:
         reason = _check(r, pages)
