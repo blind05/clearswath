@@ -386,3 +386,34 @@ def test_forwarded_for_uses_the_last_hop(client, monkeypatch):
     # changing the forged first entry doesn't buy a new budget
     spoof2 = {"X-Forwarded-For": "9.9.9.9, 198.51.100.7"}
     assert client.post("/api/plan", headers=spoof2, data={"month": "2026-11"}, files=files()).status_code == 429
+
+
+@pytest.mark.parametrize("value", ["off", "OFF", "0", "false", "no"])
+def test_kill_switch_stops_paid_endpoints(client, monkeypatch, value):
+    monkeypatch.setenv("CLEARSWATH_LIVE_MODE", value)
+    r = post_plan(client)
+    assert r.status_code == 503 and "switched off" in r.json()["detail"]
+    assert client.post("/api/record", data={"run_id": "0" * 32, "text": "x"}).status_code == 503
+
+
+def test_kill_switch_off_by_default_and_when_on(client, monkeypatch):
+    assert post_plan(client).status_code == 200
+    monkeypatch.setenv("CLEARSWATH_LIVE_MODE", "on")
+    assert post_plan(client).status_code == 200
+
+
+def test_cached_demo_ignores_the_kill_switch(client, cached_demo, monkeypatch):
+    monkeypatch.setenv("CLEARSWATH_LIVE_MODE", "off")
+    monkeypatch.setenv("ACCESS_CODE", "s3cret-code")
+    assert client.get("/api/demo?method=ground").status_code == 200
+
+
+def test_uncached_demo_is_gated_like_a_live_run(client, tmp_path, monkeypatch):
+    (tmp_path / "demo").mkdir()
+    (tmp_path / "demo" / "field.geojson").write_text(json.dumps(mapping(FIELD)))
+    (tmp_path / "demo" / "label.pdf").write_bytes(b"%PDF")
+    monkeypatch.setenv("CLEARSWATH_LIVE_MODE", "off")
+    assert client.get("/api/demo").status_code == 503
+    monkeypatch.setenv("CLEARSWATH_LIVE_MODE", "on")
+    monkeypatch.setenv("ACCESS_CODE", "s3cret-code")
+    assert client.get("/api/demo").status_code == 401

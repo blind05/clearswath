@@ -52,7 +52,9 @@ def _client_ip(request: Request) -> str:
 
 
 def paid_access(request: Request) -> None:
-    """Access code, per-IP hourly limit and a global daily cap, checked before any paid model call."""
+    """Kill switch, access code, per-IP hourly limit and a global daily cap, checked before any paid model call."""
+    if os.getenv("CLEARSWATH_LIVE_MODE", "on").strip().lower() in ("off", "0", "false", "no"):
+        raise HTTPException(503, "Live runs are switched off right now. The demo still works.")
     code = os.getenv("ACCESS_CODE")
     if code:
         given = request.headers.get("x-access-code", "")
@@ -186,7 +188,8 @@ DEMO_FIELDS = {"": "field", "corrected": "field_corrected"}
 
 
 @app.get("/api/demo")
-def demo(month: str | None = None, method: str = "drone", excluded_rules: str = "", field: str = ""):
+def demo(request: Request, month: str | None = None, method: str = "drone", excluded_rules: str = "",
+         field: str = ""):
     """The demo field. From data/demo/cache when present (offline, instant; the plan is still recomputed),
     else live. field=corrected is the outline pulled back from the creek."""
     if field not in DEMO_FIELDS:
@@ -210,6 +213,7 @@ def demo(month: str | None = None, method: str = "drone", excluded_rules: str = 
     path = DEMO / f"{name}.geojson"
     if not path.exists() or not labels:
         raise HTTPException(404, f"Demo files missing: add data/demo/{name}.geojson and data/demo/label.pdf")
+    paid_access(request)  # without a cache the demo is a live, paid run: same gate as /api/plan
     month = month or date.today().strftime("%Y-%m")
     out = _plan(uuid.uuid4().hex, path, labels[0], month, method, excluded_rules=excluded_rules)
     return out | {"demo": {"field": field, "cached": False, "month": month}}

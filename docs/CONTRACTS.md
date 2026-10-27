@@ -24,6 +24,7 @@ read from a photo, are listed in `confirm`; the user can untick them (`excluded_
 
 Paid endpoints (`/api/plan`, `/api/agent`, `/api/label`, `/api/record`) need the `X-Access-Code` header when
 `ACCESS_CODE` is set (refused on Render without one), plus a per-IP hourly limit and a daily cap.
+`CLEARSWATH_LIVE_MODE=off` refuses all of them (503); the cached demo keeps working, an uncached demo is gated too.
 
 `/api/demo?field=&method=&excluded_rules=` (`field` empty or `corrected`) serves `data/demo/cache/<field>/inputs.json`
 (built by `scripts/build_demo.py`) offline, recomputing the plan each time; without a cache it runs live.

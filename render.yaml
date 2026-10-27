@@ -12,6 +12,8 @@ services:
         sync: false
       - key: ACCESS_CODE  # required for live runs on Render; without it they're refused (the demo stays open)
         sync: false
+      - key: CLEARSWATH_LIVE_MODE  # set to "off" to stop all paid calls; the cached demo keeps working
+        value: "on"
       - key: RATE_LIMIT_PER_HOUR
         value: "20"
       - key: DAILY_RUN_CAP

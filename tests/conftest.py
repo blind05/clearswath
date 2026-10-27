@@ -12,6 +12,6 @@ def open_live_endpoints(monkeypatch):
     """Tests run as local development: no access code, not on Render, fresh rate-limit counters."""
     from app import api
 
-    for var in ("ACCESS_CODE", "RENDER", "RATE_LIMIT_PER_HOUR", "DAILY_RUN_CAP"):
+    for var in ("ACCESS_CODE", "RENDER", "RATE_LIMIT_PER_HOUR", "DAILY_RUN_CAP", "CLEARSWATH_LIVE_MODE"):
         monkeypatch.delenv(var, raising=False)
     api.reset_limits()
