@@ -48,6 +48,9 @@
   .agent p { margin: 4px 0; white-space: pre-line; }
   .agent details { font-size: 13px; color: var(--muted); }
   .agent ol { margin: 4px 0; padding-left: 20px; }
+  .confirm { background: #fffbe6; border: 1px solid #e6c200; border-radius: 8px; padding: 8px 12px; margin-bottom: 12px; }
+  .confirm h3 { margin: 0 0 4px; font-size: 14px; }
+  .confirm label.check { align-items: flex-start; font-size: 13px; margin: 6px 0; }
   .record { display: grid; gap: 8px; }
   textarea { font: inherit; padding: 6px; border: 1px solid var(--line); border-radius: 6px; resize: vertical; }
   table.rec { width: 100%; border-collapse: collapse; margin-top: 8px; font-size: 13px; }
@@ -136,6 +139,12 @@ function render(r) {
       el("div", {}, el("b", {}, acres.excluded_acres.toFixed(1)), el("small", {}, "excluded ac"))),
     r.warnings.length ? el("div", { class: "warn", role: "alert" },
       el("h3", {}, "Check before spraying"), el("ul", {}, r.warnings.map((w) => el("li", {}, w)))) : null,
+    r.confirm.length ? el("div", { class: "confirm" },
+      el("h3", {}, r.label.source === "image" ? "Confirm rules read from the photo" : "Rules that may not apply to you"),
+      el("p", { class: "meta" }, "Applied unless you untick them. Unticking is recorded in the result."),
+      r.confirm.map((c) => el("label", { class: "check" },
+        el("input", { type: "checkbox", "data-rule": String(c.id), ...(c.applied ? { checked: "" } : {}) }),
+        el("span", {}, `${c.summary} (p.${c.page}${c.condition ? `, only when ${c.condition}` : ""})`)))) : null,
     r.answer ? el("div", { class: "agent" },
       el("div", { class: "tag" }, r.mode === "agent" ? "Muse Spark agent" : "Agent unavailable · plan summary"),
       el("p", {}, r.answer),
@@ -218,14 +227,30 @@ async function recordApplication(e, runId) {
   }
 }
 
+// Re-runs the last request with the rules the user unticked.
+let rerun = null;
+$("#result").addEventListener("change", (e) => {
+  if (!e.target.dataset.rule || !rerun) return;
+  const off = [...document.querySelectorAll("[data-rule]")].filter((b) => !b.checked).map((b) => b.dataset.rule);
+  rerun(off.join(","));
+});
+
 form.addEventListener("submit", (e) => {
   e.preventDefault();
-  const body = new FormData(form);
-  body.delete("agent");
-  call(form.agent.checked ? "/api/agent" : "/api/plan", { method: "POST", body });
+  const url = form.agent.checked ? "/api/agent" : "/api/plan";
+  rerun = (excluded) => {
+    const body = new FormData(form);
+    body.delete("agent");
+    body.append("excluded_rules", excluded);
+    return call(url, { method: "POST", body });
+  };
+  rerun("");
 });
-$("#demo").addEventListener("click", () =>
-  call(`/api/demo?month=${form.month.value}&method=${form.method.value}`));
+$("#demo").addEventListener("click", () => {
+  const q = `month=${form.month.value}&method=${form.method.value}`;
+  rerun = (excluded) => call(`/api/demo?${q}&excluded_rules=${excluded}`);
+  rerun("");
+});
 </script>
 </body>
 </html>

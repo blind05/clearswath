@@ -24,8 +24,8 @@ def client(tmp_path, monkeypatch):
     monkeypatch.setattr(api, "DEMO", tmp_path / "demo")
     seen = {}
 
-    def run(field_path, label_path, month, method):
-        seen.update(field=field_path, label=label_path, month=month, method=method)
+    def run(field_path, label_path, month, method, excluded_rules=()):
+        seen.update(field=field_path, label=label_path, month=month, method=method, excluded=excluded_rules)
         return result(method=method)
 
     monkeypatch.setattr(pipeline, "run", run)
@@ -174,8 +174,8 @@ def post_agent(client, **form):
 def fake_agent(monkeypatch):
     seen = {}
 
-    def run(field_path, label_path, month, method):
-        seen.update(method=method, label=label_path)
+    def run(field_path, label_path, month, method, excluded_rules=()):
+        seen.update(method=method, label=label_path, excluded=excluded_rules)
         return {"run_id": "a" * 32, "answer": "ADJUST: stay back from the pond.", "decision": "adjust",
                 "trace": [{"tool": "plan_spray", "result": {"decision": "ADJUST"}, "seconds": 0.1}],
                 "mode": "agent", "result": result()}
@@ -219,3 +219,26 @@ def test_record_rejects_m4a(client):
     run_id = post_plan(client).json()["run_id"]
     r = client.post("/api/record", data={"run_id": run_id}, files={"audio": ("note.m4a", b"x")})
     assert r.status_code == 422 and ".wav" in r.json()["detail"]
+
+
+def test_excluded_rules_reach_the_pipeline(client):
+    assert post_plan(client, excluded_rules="1, 3").status_code == 200
+    assert client.seen["excluded"] == [1, 3]
+
+
+def test_excluded_rules_reach_the_agent(client, fake_agent):
+    assert post_agent(client, excluded_rules="2").status_code == 200 and fake_agent["excluded"] == [2]
+
+
+def test_excluded_rules_must_be_ids(client):
+    r = post_plan(client, excluded_rules="ulv")
+    assert r.status_code == 422 and "rule ids" in r.json()["detail"]
+
+
+def test_refused_untick_is_explained(client, monkeypatch):
+    def refuse(*a):
+        raise pipeline.NotConfirmableError("Only conditional or photo-read rules can be unticked (rule ids [0]).")
+
+    monkeypatch.setattr(pipeline, "run", refuse)
+    r = post_plan(client, excluded_rules="0")
+    assert r.status_code == 422 and "can be unticked" in r.json()["detail"]

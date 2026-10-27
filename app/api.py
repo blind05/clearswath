@@ -31,7 +31,7 @@ def _http_error(e: Exception) -> HTTPException:
     """Only messages we wrote reach the browser; anything else is logged and replaced."""
     if isinstance(e, (llm.MissingKeyError, imagery.NoImageryError)):
         return HTTPException(502, str(e))
-    if isinstance(e, llm.BadAudioError):
+    if isinstance(e, (llm.BadAudioError, pipeline.NotConfirmableError)):
         return HTTPException(422, str(e))
     log.exception("request failed", exc_info=e)
     if isinstance(e, ValueError):  # bad field or label file
@@ -52,42 +52,52 @@ def _label_suffix(upload: UploadFile) -> str:
     return suffix
 
 
+def _rule_ids(text: str) -> list[int]:
+    """'1,3' -> [1, 3]: the label rules the user unticked."""
+    try:
+        return [int(x) for x in text.split(",") if x.strip()]
+    except ValueError as e:
+        raise HTTPException(422, "excluded_rules must be comma-separated rule ids, e.g. 1,3") from e
+
+
 def _plan(run_id: str, field_path: Path, label_path: Path, month: str, method: str,
-          use_agent: bool = False) -> dict:
+          use_agent: bool = False, excluded_rules: str = "") -> dict:
+    excluded = _rule_ids(excluded_rules)
     if not MONTH.match(month):
         raise HTTPException(422, "month must look like 2026-11")
     if method not in METHODS:
         raise HTTPException(422, f"method must be one of {sorted(METHODS)}")
     try:
         if use_agent:  # the agent saves its own run under its own run_id
-            out = agent.run(field_path, label_path, month, method)
+            out = agent.run(field_path, label_path, month, method, excluded)
             return {**pipeline.to_json(out.pop("result")), **out}
-        result = pipeline.run(field_path, label_path, month, method)
+        result = pipeline.run(field_path, label_path, month, method, excluded)
     except (ValueError, LookupError, RuntimeError) as e:  # bad input, no imagery, missing key, model failure
         raise _http_error(e) from e
     pipeline.save_run(result, RUNS / run_id)
     return {"run_id": run_id, **pipeline.to_json(result)}
 
 
-def _upload_and_plan(field: UploadFile, label: UploadFile, month: str, method: str, use_agent: bool) -> dict:
+def _upload_and_plan(field: UploadFile, label: UploadFile, month: str, method: str, use_agent: bool,
+                     excluded_rules: str) -> dict:
     run_id = uuid.uuid4().hex
     run = RUNS / run_id
     suffix = _label_suffix(label)
     return _plan(run_id, _save(field, run / "field.geojson"), _save(label, run / f"label{suffix}"),
-                 month, method, use_agent)
+                 month, method, use_agent, excluded_rules)
 
 
 @app.post("/api/plan")
 def plan(field: UploadFile = File(...), label: UploadFile = File(...),
-         month: str = Form(...), method: str = Form("drone")):
-    return _upload_and_plan(field, label, month, method, use_agent=False)
+         month: str = Form(...), method: str = Form("drone"), excluded_rules: str = Form("")):
+    return _upload_and_plan(field, label, month, method, False, excluded_rules)
 
 
 @app.post("/api/agent")
 def ask_agent(field: UploadFile = File(...), label: UploadFile = File(...),
-              month: str = Form(...), method: str = Form("drone")):
+              month: str = Form(...), method: str = Form("drone"), excluded_rules: str = Form("")):
     """Same as /api/plan, plus the agent's answer, trace and mode. The decision still comes from buffers.plan."""
-    return _upload_and_plan(field, label, month, method, use_agent=True)
+    return _upload_and_plan(field, label, month, method, True, excluded_rules)
 
 
 @app.post("/api/label")
@@ -118,12 +128,13 @@ def record(run_id: str = Form(...), audio: UploadFile | None = File(None), text:
 
 
 @app.get("/api/demo")
-def demo(month: str | None = None, method: str = "drone"):
+def demo(month: str | None = None, method: str = "drone", excluded_rules: str = ""):
     labels = [p for p in DEMO.glob("label.*") if p.suffix.lower() in LABEL_SUFFIXES]
     field = DEMO / "field.geojson"
     if not field.exists() or not labels:
         raise HTTPException(404, "Demo files missing: add data/demo/field.geojson and data/demo/label.pdf")
-    return _plan(uuid.uuid4().hex, field, labels[0], month or date.today().strftime("%Y-%m"), method)
+    return _plan(uuid.uuid4().hex, field, labels[0], month or date.today().strftime("%Y-%m"), method,
+                 excluded_rules=excluded_rules)
 
 
 @app.get("/api/kml/{run_id}")

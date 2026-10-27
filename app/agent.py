@@ -33,8 +33,9 @@ class _ModelError(Exception):
 class _Job:
     """The run's state; each tool fills one part, and plan_spray fills in anything still missing."""
 
-    def __init__(self, field_path, label_path, month, method):
+    def __init__(self, field_path, label_path, month, method, excluded_rules=()):
         self.field_path, self.label_path, self.month, self.method = field_path, label_path, month, method
+        self.excluded_rules = excluded_rules  # set by the user, never by the model
         self.label = self.hazards = self.bulletin = self.result = None
 
     def read_label(self):
@@ -57,7 +58,8 @@ class _Job:
         self.find_hazards()
         self.check_bulletin()  # reads the label too
         self.result = self.result or pipeline.assemble(geo.load_field(self.field_path), self.label,
-                                                       self.hazards, self.bulletin, self.month, self.method)
+                                                       self.hazards, self.bulletin, self.month, self.method,
+                                                       self.excluded_rules)
         plan = self.result["plan"]
         return {"decision": LABELS[plan["status"]], "field_acres": plan["field_acres"],
                 "spray_acres": plan["spray_acres"], "excluded_acres": plan["excluded_acres"],
@@ -98,10 +100,10 @@ def _agent_loop(job: _Job, trace: list) -> str | None:
     return None
 
 
-def run(field_path, label_path, month: str, method: str = "drone") -> dict:
+def run(field_path, label_path, month: str, method: str = "drone", excluded_rules=()) -> dict:
     """result is the full pipeline result (as pipeline.run returns), for pipeline.to_json."""
     run_id = uuid.uuid4().hex
-    job, trace, mode = _Job(field_path, label_path, month, method), [], "agent"
+    job, trace, mode = _Job(field_path, label_path, month, method, excluded_rules), [], "agent"
     try:
         answer = _agent_loop(job, trace)
     except _ModelError as e:

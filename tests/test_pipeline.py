@@ -98,3 +98,42 @@ def test_water_warnings_reach_the_applicator(monkeypatch, field_path):
     result = pipeline.run(field_path, "label.pdf", "2026-11")
     assert result["warnings"] == ["USGS pond and lake data was unavailable"]
     assert result["plan"]["status"] == "adjust"  # warnings never change the decision
+
+
+ULV = RULE.model_copy(update={"value": 2000.0, "condition": "ULV aerial only",
+                             "quote": "Do not apply within 2000 feet of water."})
+
+
+def test_conditional_rule_applies_until_unticked(monkeypatch, field_path):
+    wire(monkeypatch, lbl=label(rules=[RULE, ULV]))
+    # applied by default: 2000 ft swallows the field
+    strict = pipeline.run(field_path, "label.pdf", "2026-11")
+    assert strict["plan"]["status"] == "no-go" and strict["excluded_rules"] == []
+    out = pipeline.to_json(strict)
+    assert [(c["id"], c["applied"], c["condition"]) for c in out["confirm"]] == [(1, True, "ULV aerial only")]
+
+    # the applicator unticks it: back to the 100 ft rule, and the result says a human did that
+    loose = pipeline.run(field_path, "label.pdf", "2026-11", excluded_rules=[1])
+    assert loose["plan"]["status"] == "adjust"
+    assert [r["distance_ft"] for r in loose["plan"]["reasons"]] == [100]
+    assert loose["warnings"][0].startswith("You unticked: 100 ft from water (label p.2, only when ULV aerial only)")
+    assert pipeline.to_json(loose)["confirm"][0]["applied"] is False
+
+
+def test_unconditional_rule_cannot_be_unticked(monkeypatch, field_path):
+    wire(monkeypatch, lbl=label(rules=[RULE, ULV]))
+    with pytest.raises(pipeline.NotConfirmableError, match=r"rule ids \[0\]"):
+        pipeline.run(field_path, "label.pdf", "2026-11", excluded_rules=[0])
+
+
+def test_photo_rules_all_need_confirmation(monkeypatch, field_path):
+    wire(monkeypatch, lbl=label(source="image"))
+    result = pipeline.run(field_path, "label.png", "2026-11", excluded_rules=[0])
+    assert result["plan"]["status"] == "go"  # the only buffer was unticked
+    assert [c["id"] for c in pipeline.to_json(result)["confirm"]] == [0]
+
+
+def test_conditional_non_buffer_rules_need_no_confirmation(monkeypatch, field_path):
+    rice = RULE.model_copy(update={"kind": "other", "target": None, "condition": "rice only"})
+    wire(monkeypatch, lbl=label(rules=[RULE, rice, ULV]))
+    assert [c["id"] for c in pipeline.to_json(pipeline.run(field_path, "l.pdf", "2026-11"))["confirm"]] == [2]

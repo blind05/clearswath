@@ -119,3 +119,12 @@ def test_returns_full_result(field_path, steps, monkeypatch):
     script(monkeypatch, reply(content="ok"))
     out = agent.run(field_path, "label.pdf", "2026-11")
     assert out["result"]["plan"]["status"] == out["decision"] and out["result"]["label"] is LABEL
+
+
+def test_user_exclusions_reach_the_plan(field_path, steps, monkeypatch):
+    ulv = RULE.model_copy(update={"value": 2000.0, "condition": "ULV aerial only"})
+    monkeypatch.setattr(label_reader, "read_label", lambda p: LABEL.model_copy(update={"rules": [RULE, ulv]}))
+    script(monkeypatch, reply(call("plan_spray")), reply(content="ok"))
+    assert agent.run(field_path, "label.pdf", "2026-11")["decision"] == "no-go"
+    script(monkeypatch, reply(call("plan_spray")), reply(content="ok"))
+    assert agent.run(field_path, "label.pdf", "2026-11", excluded_rules=[1])["decision"] == "adjust"

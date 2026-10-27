@@ -10,13 +10,17 @@ Don't change a contract unless the human asks.
 | `app/imagery.py` | `fetch_tile(field_path, out_png)` | field GeoJSON | PNG plus `.json` sidecar: crs, transform (6 values, downscaled), date, width, height |
 | `app/imagery.py` | `usgs_water(field_path)` | field GeoJSON, optional `failed` list | list of water shapes; names of layers that errored are appended to `failed` |
 | `app/segment.py` | `find_hazards(field_path)` | field GeoJSON | `{water, building, habitat, imagery_date, water_source, water_warnings}`; cached per field and hazard |
-| `app/label_reader.py` | `read_label(path)` | PDF or image | `LabelRules`: product_name, epa_reg_no, rules (kind, target, applies_to, value, unit, summary, quote, page), dropped, source |
+| `app/label_reader.py` | `read_label(path)` | PDF or image | `LabelRules`: product_name, epa_reg_no, rules (kind, target, applies_to, value, unit, summary, quote, page, condition), dropped, source |
 | `app/bulletins.py` | `check_bulletin(field_path, month, reg_no)` | field, month, product | `{in_pula, prohibited, limitations, restricted, citation, checked}` |
 | `app/buffers.py` | `plan(field, hazards, rules, restricted, method, prohibited)` | shapes and rules | `{status, method, field_acres, spray_acres, excluded_acres, spray_zone, no_spray, reasons}` |
-| `app/pipeline.py` | `run(field_path, label_path, month, method)`, `to_json(result)` | paths and options | full result; JSON with map layers for the page |
-| `app/agent.py` | `run(field_path, label_path, month, method)` | same | `{run_id, answer, decision, trace, mode, result}`; `result` is what `pipeline.run` returns |
+| `app/pipeline.py` | `run(field_path, label_path, month, method, excluded_rules=())`, `assemble(...)`, `to_json(result)` | paths and options; ids of rules the user unticked | full result; JSON with map layers, `confirm` and `excluded_rules` for the page |
+| `app/agent.py` | `run(field_path, label_path, month, method, excluded_rules=())` | same | `{run_id, answer, decision, trace, mode, result}`; `result` is what `pipeline.run` returns |
 | `app/records.py` | `transcribe(path)`, `fill_record(text, job)` | audio; transcript and job dict | text; `AppRecord` with `missing` list |
 | `app/api.py` | `/api/demo`, `/api/label`, `/api/plan`, `/api/agent`, `/api/kml/{id}`, `/api/record` | form uploads | JSON for `web/index.html` |
+
+Every label rule is applied. Buffer rules with a `condition` (e.g. "ULV aerial only"), and every rule
+read from a photo, are listed in `confirm`; the user can untick them (`excluded_rules`, ids = indexes into
+`label.rules`). Unticking anything else is refused. A model's condition can only make the plan stricter.
 
 `status` is `go` (nothing removed), `adjust` (some acres removed; the green zone is sprayable)
 or `no-go` (bulletin prohibits, or no sprayable area). It always comes from `buffers.plan`.
