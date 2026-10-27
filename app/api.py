@@ -8,7 +8,7 @@ import re
 import threading
 import time
 import uuid
-from collections import deque
+from collections import OrderedDict, deque
 from datetime import date
 from pathlib import Path
 
@@ -77,8 +77,9 @@ class Guard:
 
 # Paid endpoints (model calls) are gated; the cached demo, KML and the page stay open.
 _lock = threading.Lock()
-_hits: dict[str, deque] = {}  # ip -> request times in the last hour
-_fails: dict[str, deque] = {}  # ip -> wrong access-code times in the last hour
+# ip -> request / wrong-code times in the last hour, least recently hit first (an LRU)
+_hits: OrderedDict[str, deque] = OrderedDict()
+_fails: OrderedDict[str, deque] = OrderedDict()
 MAX_TRACKED = 10_000  # addresses per table; bounds memory when many addresses (e.g. rotating IPv6) hit us
 _day = {"date": None, "count": 0}
 MIN_CODE_LEN = 16  # a shorter ACCESS_CODE could be guessed; it switches live runs off instead
@@ -105,14 +106,12 @@ def _count(table: dict, ip: str, now: float) -> int:
     return len(times)
 
 
-def _add(table: dict, ip: str, now: float) -> None:
-    """Records a hit. When full, drops expired addresses, then the one seen longest ago."""
-    if ip not in table and len(table) >= MAX_TRACKED:
-        for other in list(table):
-            _count(table, other, now)
-        if len(table) >= MAX_TRACKED:
-            del table[min(table, key=lambda k: table[k][-1])]
+def _add(table: OrderedDict, ip: str, now: float) -> None:
+    """Records a hit and marks ip most recent; over MAX_TRACKED, evicts the least recent in O(1)."""
     table.setdefault(ip, deque()).append(now)
+    table.move_to_end(ip)
+    while len(table) > MAX_TRACKED:
+        table.popitem(last=False)
 
 
 def _client_ip(request: Request) -> str:

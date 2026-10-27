@@ -524,3 +524,15 @@ def test_unauthorised_upload_is_refused_before_it_is_parsed(client, monkeypatch)
 def test_guard_counts_each_run_once(client, monkeypatch):
     monkeypatch.setenv("RATE_LIMIT_PER_HOUR", "2")
     assert [post_plan(client).status_code for _ in range(3)] == [200, 200, 429]
+
+
+def test_lru_evicts_the_least_recently_hit(monkeypatch):
+    from collections import OrderedDict
+
+    monkeypatch.setattr(api, "MAX_TRACKED", 2)
+    table = OrderedDict()
+    api._add(table, "a", 1.0)
+    api._add(table, "b", 2.0)
+    api._add(table, "a", 3.0)  # a is now the most recent
+    api._add(table, "c", 4.0)  # evicts b, not a
+    assert list(table) == ["a", "c"] and list(table["a"]) == [1.0, 3.0]
