@@ -134,3 +134,14 @@ def test_provider_has_its_own_cache_entry(monkeypatch, pdf, cache):
     label_reader.read_label(pdf, provider="baseten")
     label_reader.read_label(pdf, provider="baseten")
     assert seen == [None, "baseten"] and len(list(cache.iterdir())) == 2
+
+
+def test_photo_transcription_stays_on_meta(monkeypatch, tmp_path):
+    monkeypatch.setenv("LLM_PROVIDER", "baseten")
+    img = tmp_path / "label.png"
+    img.write_bytes(b"png")
+    seen = {}
+    monkeypatch.setattr(llm, "chat", lambda *a, **kw: seen.update(kw) or SimpleNamespace(content="\n".join(PAGES)))
+    fake_model(monkeypatch, [rule(page=1)])
+    label_reader.read_label(img)
+    assert seen["provider"] == "meta"

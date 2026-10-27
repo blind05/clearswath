@@ -78,7 +78,7 @@ def _pages(path: Path) -> tuple[list[str], str]:
     msg = llm.chat([{"role": "user", "content": [
         {"type": "text", "text": "Transcribe all text on this pesticide label exactly, word for word."},
         {"type": "image_url", "image_url": {"url": llm.data_url(path)}},
-    ]}], purpose="label_ocr")
+    ]}], purpose="label_ocr", provider="meta")  # image input verified on the Meta Model API only
     return [msg.content or ""], "image"
 
 
