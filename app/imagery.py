@@ -70,7 +70,7 @@ def fetch_tile(field_path, out_png, margin_m=MARGIN_M, max_px=MAX_PX) -> dict:
         window = window.round_offsets().round_lengths()
         scale = min(1.0, max_px / max(window.width, window.height))
         width, height = max(1, round(window.width * scale)), max(1, round(window.height * scale))
-        transform = src.window_transform(window) * Affine.scale(window.width / width, window.height / height)
+        transform = src.window_transform(window) @ Affine.scale(window.width / width, window.height / height)
 
     rgb = np.zeros((3, height, width), dtype=np.uint8)
     filled = np.zeros((height, width), dtype=bool)
