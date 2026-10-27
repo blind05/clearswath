@@ -117,7 +117,7 @@ reason. A fixed pipeline runs the same steps without the agent as a safety net.
 6. **Decision support only:** the applicator remains responsible; the UI says so.
 
 Stack: Python 3.12, uv, FastAPI, Leaflet + Leaflet.draw (USGS imagery tiles), geopandas,
-shapely, rasterio, pyproj, pystac-client, planetary-computer, pynhd, PyMuPDF, simplekml,
+shapely, rasterio, pyproj, pystac-client, planetary-computer, PyMuPDF, simplekml,
 meta-sam-parser, pytest. Deployed on Render via Docker. Video tooling (Playwright, Kokoro,
 Remotion) stays out of the app's runtime dependencies.
 

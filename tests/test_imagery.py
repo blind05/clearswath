@@ -4,7 +4,7 @@ from types import SimpleNamespace
 
 import geopandas as gpd
 import numpy as np
-import pygeoogc.exceptions
+import httpx
 import pytest
 import rasterio
 from PIL import Image
@@ -81,30 +81,40 @@ POND = box(-93.0, 42.0, -92.999, 42.001)
 CREEK = LineString([(-93.0, 42.0), (-92.99, 42.01)])
 
 
+def fc(*geoms, more=False):
+    out = {"type": "FeatureCollection", "features": [{"type": "Feature", "geometry": mapping(g) if g else None,
+                                                      "properties": {}} for g in geoms]}
+    if more:
+        out["properties"] = {"exceededTransferLimit": True}
+    return out
+
+
 def fake_nhd(monkeypatch, results):
-    """results: layer -> GeoDataFrame, or an exception to raise."""
-    class FakeNHD:
-        def __init__(self, layer):
-            self.layer = layer
+    """results: layer name -> list of pages (dict = JSON body, int = HTTP status, Exception = raised)."""
+    calls = []
 
-        def bygeom(self, bounds):
-            r = results[self.layer]
-            if isinstance(r, Exception):
-                raise r
-            return r
+    def get(url, params=None, timeout=None):
+        layer = next(k for k, v in imagery.NHD_LAYERS.items() if url.endswith(f"/{v}/query"))
+        calls.append((layer, params["resultOffset"]))
+        pages = results[layer]
+        r = pages[min(len([c for c in calls if c[0] == layer]) - 1, len(pages) - 1)]
+        if isinstance(r, Exception):
+            raise r
+        req = httpx.Request("GET", url)
+        return httpx.Response(r, request=req) if isinstance(r, int) else httpx.Response(200, json=r, request=req)
 
-    monkeypatch.setattr(imagery.pynhd, "NHD", FakeNHD)
+    monkeypatch.setattr(imagery.httpx, "get", get)
+    return calls
 
 
 def test_usgs_water(field_path, monkeypatch):
-    fake_nhd(monkeypatch, {"waterbody_hr": gpd.GeoDataFrame(geometry=[POND, None], crs=4326),
-                           "flowline_hr": pygeoogc.exceptions.ZeroMatchedError("none")})
+    calls = fake_nhd(monkeypatch, {"waterbody_hr": [fc(POND, None)], "flowline_hr": [fc()]})
     assert imagery.usgs_water(field_path) == [POND]
+    assert calls == [("waterbody_hr", 0), ("flowline_hr", 0)]
 
 
 def test_usgs_water_streams_become_areas(field_path, monkeypatch):
-    fake_nhd(monkeypatch, {"waterbody_hr": gpd.GeoDataFrame(geometry=[POND], crs=4326),
-                           "flowline_hr": gpd.GeoDataFrame(geometry=[CREEK], crs=4326).to_crs(UTM)})
+    fake_nhd(monkeypatch, {"waterbody_hr": [fc(POND)], "flowline_hr": [fc(CREEK)]})
     pond, creek = imagery.usgs_water(field_path)
     assert pond == POND
     assert creek.geom_type == "Polygon" and creek.contains(CREEK.interpolate(0.5, normalized=True))
@@ -112,9 +122,15 @@ def test_usgs_water_streams_become_areas(field_path, monkeypatch):
     assert utm[0].area / utm[1].length == pytest.approx(2 * imagery.STREAM_BUFFER_M, rel=0.05)
 
 
-def test_usgs_water_one_layer_down(field_path, monkeypatch):
-    fake_nhd(monkeypatch, {"waterbody_hr": ConnectionError("503"),
-                           "flowline_hr": gpd.GeoDataFrame(geometry=[CREEK], crs=4326)})
+def test_usgs_water_pages(field_path, monkeypatch):
+    calls = fake_nhd(monkeypatch, {"waterbody_hr": [fc(POND, more=True), fc(POND)], "flowline_hr": [fc()]})
+    assert len(imagery.usgs_water(field_path)) == 2
+    assert calls == [("waterbody_hr", 0), ("waterbody_hr", 1), ("flowline_hr", 0)]
+
+
+@pytest.mark.parametrize("down", [httpx.ConnectError("no route"), 503, {"error": {"code": 400, "message": "bad"}}])
+def test_usgs_water_one_layer_down(field_path, monkeypatch, down):
+    fake_nhd(monkeypatch, {"waterbody_hr": [down], "flowline_hr": [fc(CREEK)]})
     failed = []
     [creek] = imagery.usgs_water(field_path, failed)
     assert creek.geom_type == "Polygon" and failed == ["waterbody_hr"]
@@ -122,6 +138,12 @@ def test_usgs_water_one_layer_down(field_path, monkeypatch):
 
 
 def test_usgs_water_both_down_raises(field_path, monkeypatch):
-    fake_nhd(monkeypatch, {"waterbody_hr": ConnectionError("503"), "flowline_hr": ValueError("bad")})
-    with pytest.raises(RuntimeError, match="waterbody_hr.*flowline_hr"):
+    fake_nhd(monkeypatch, {"waterbody_hr": [503], "flowline_hr": [{"error": {"code": 500}}]})
+    with pytest.raises(RuntimeError, match=r"(?s)waterbody_hr.*flowline_hr"):
         imagery.usgs_water(field_path)
+
+
+def test_usgs_water_empty_is_really_empty(field_path, monkeypatch):
+    fake_nhd(monkeypatch, {"waterbody_hr": [fc()], "flowline_hr": [fc()]})
+    failed = []
+    assert imagery.usgs_water(field_path, failed) == [] and failed == []

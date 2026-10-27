@@ -4,10 +4,9 @@ import json
 from pathlib import Path
 
 import geopandas as gpd
+import httpx
 import numpy as np
 import planetary_computer
-import pygeoogc.exceptions
-import pynhd
 import rasterio
 from PIL import Image
 from pystac_client import Client
@@ -15,6 +14,7 @@ from rasterio.enums import Resampling
 from rasterio.transform import Affine
 from rasterio.warp import transform_bounds
 from rasterio.windows import from_bounds
+from shapely.geometry import shape
 
 from app import geo
 
@@ -22,6 +22,8 @@ STAC_URL = "https://planetarycomputer.microsoft.com/api/stac/v1"
 MARGIN_M = 150  # catch hazards just outside the field that a buffer reaches into
 MAX_PX = 1024
 STREAM_BUFFER_M = 3  # flowlines become areas so they merge with the other water shapes
+NHD = "https://hydro.nationalmap.gov/arcgis/rest/services/nhd/MapServer"
+NHD_LAYERS = {"waterbody_hr": 12, "flowline_hr": 6}  # Waterbody / Flowline - Large Scale
 
 
 class NoImageryError(LookupError):
@@ -73,6 +75,27 @@ def fetch_tile(field_path, out_png, margin_m=MARGIN_M, max_px=MAX_PX) -> dict:
     return meta
 
 
+def _nhd_query(layer: str, bounds) -> list:
+    """All features of one NHD layer intersecting bounds, as lon/lat shapes. Raises on any service error."""
+    params = {"geometry": ",".join(map(str, bounds)), "geometryType": "esriGeometryEnvelope", "inSR": 4326,
+              "spatialRel": "esriSpatialRelIntersects", "outSR": 4326, "outFields": "ftype",
+              "returnGeometry": "true", "orderByFields": "OBJECTID", "f": "geojson"}  # stable paging
+    shapes, offset = [], 0
+    while True:
+        r = httpx.get(f"{NHD}/{NHD_LAYERS[layer]}/query", params=params | {"resultOffset": offset},
+                      timeout=120)  # cold queries on this USGS server can take ~1 min
+        r.raise_for_status()
+        data = r.json()
+        if "error" in data:
+            raise ValueError(f"NHD error: {data['error']}")
+        page = data["features"]
+        shapes += [shape(f["geometry"]) for f in page if f.get("geometry")]
+        more = data.get("exceededTransferLimit") or (data.get("properties") or {}).get("exceededTransferLimit")
+        if not (more and page):
+            return shapes
+        offset += len(page)
+
+
 def usgs_water(field_path, failed: list | None = None) -> list:
     """NHD high-res waterbodies and flowlines near the field, as lon/lat areas (streams buffered).
 
@@ -81,12 +104,10 @@ def usgs_water(field_path, failed: list | None = None) -> list:
     """
     bounds = _bounds(field_path)
     shapes, errors = [], []
-    for layer in ("waterbody_hr", "flowline_hr"):
+    for layer in NHD_LAYERS:
         try:
-            shapes += list(pynhd.NHD(layer).bygeom(bounds).to_crs(4326).geometry)
-        except pygeoogc.exceptions.ZeroMatchedError:  # pynhd's own subclasses this
-            pass  # nothing of that kind nearby
-        except Exception as e:
+            shapes += _nhd_query(layer, bounds)
+        except (httpx.HTTPError, ValueError, KeyError) as e:  # an outage must never read as "no water"
             errors.append(f"{layer}: {e}")
             if failed is not None:
                 failed.append(layer)

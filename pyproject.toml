@@ -18,7 +18,6 @@ dependencies = [
     "planetary-computer>=1.0.0",
     "pydantic>=2.14.1",
     "pymupdf>=2.0",
-    "pynhd>=0.20.0",
     "pyproj>=3.8.0",
     "pystac-client>=0.9.1",
     "python-dotenv>=1.2.4",
