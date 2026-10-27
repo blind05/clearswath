@@ -15,3 +15,5 @@ def open_live_endpoints(monkeypatch):
     for var in ("ACCESS_CODE", "RENDER", "RATE_LIMIT_PER_HOUR", "DAILY_RUN_CAP", "CLEARSWATH_LIVE_MODE"):
         monkeypatch.delenv(var, raising=False)
     api.reset_limits()
+    # no background clean-up during tests: it would sweep the real data/cache (tests call clean_up directly)
+    monkeypatch.setattr(api, "_cleaned", {"at": float("inf")})

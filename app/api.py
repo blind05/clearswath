@@ -5,6 +5,7 @@ import json
 import logging
 import os
 import re
+import shutil
 import threading
 import time
 import uuid
@@ -17,7 +18,7 @@ from fastapi import FastAPI, File, Form, HTTPException, Request, UploadFile
 from fastapi.responses import JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 
-from app import agent, geo, imagery, llm, label_reader, pipeline, records
+from app import agent, geo, imagery, llm, label_reader, pipeline, records, segment
 
 ROOT = Path(__file__).resolve().parent.parent
 RUNS = ROOT / "data" / "runs"
@@ -38,6 +39,34 @@ log = logging.getLogger(__name__)
 app = FastAPI(title="ClearSwath")
 
 
+# Disk: uploads and results don't pile up. Run folders hold uploads, KML and the record job.
+RUN_MAX_AGE_S, MAX_RUN_DIRS = 24 * 3600, 2000
+CACHE_MAX_AGE_S, MAX_CACHE_DIRS = 7 * 24 * 3600, 500  # per-field imagery/SAM/USGS caches
+FIELD_CACHE = re.compile(r"^[0-9a-f]{12}$")  # data/cache/<field hash>; labels/ and blt/ are left alone
+_cleaned = {"at": 0.0}
+
+
+def clean_up(now: float | None = None) -> None:
+    """Deletes old run folders and per-field cache folders, oldest first past the count caps."""
+    now = now or time.time()
+    for root, max_age, cap, keep in ((RUNS, RUN_MAX_AGE_S, MAX_RUN_DIRS, RUN_ID),
+                                     (segment.CACHE, CACHE_MAX_AGE_S, MAX_CACHE_DIRS, FIELD_CACHE)):
+        if not root.exists():
+            continue
+        dirs = sorted((d for d in root.iterdir() if d.is_dir() and keep.match(d.name)), key=lambda d: d.stat().st_mtime)
+        for i, d in enumerate(dirs):
+            if now - d.stat().st_mtime > max_age or len(dirs) - i > cap:
+                shutil.rmtree(d, ignore_errors=True)
+
+
+def _clean_up_hourly() -> None:
+    with _lock:
+        if time.time() - _cleaned["at"] < 3600:
+            return
+        _cleaned["at"] = time.time()
+    threading.Thread(target=clean_up, daemon=True).start()  # never makes a request wait
+
+
 FREE_METHODS = {"GET", "HEAD"}  # the free endpoints (demo, KML, health) are all reads
 
 
@@ -53,6 +82,7 @@ class Guard:
     async def __call__(self, scope, receive, send):
         if scope["type"] != "http" or not scope["path"].startswith("/api/"):
             return await self.app(scope, receive, send)
+        _clean_up_hourly()
         request = Request(scope)
         try:
             size = request.headers.get("content-length", "")

@@ -591,3 +591,54 @@ def test_audio_content_must_be_wav(client):
     run_id = post_plan(client).json()["run_id"]
     r = client.post("/api/record", data={"run_id": run_id}, files={"audio": ("note.wav", b"ID3 an mp3 file")})
     assert r.status_code == 415 and "WAV" in r.json()["detail"]
+
+
+def test_clean_up_removes_old_runs_and_field_caches(tmp_path, monkeypatch):
+    import os
+
+    from app import segment
+
+    runs, cache = tmp_path / "runs", tmp_path / "cache"
+    monkeypatch.setattr(api, "RUNS", runs)
+    monkeypatch.setattr(segment, "CACHE", cache)
+    now = 10_000_000.0
+
+    def folder(root, name, age_s):
+        d = root / name
+        d.mkdir(parents=True)
+        (d / "x").write_text("x")
+        os.utime(d, (now - age_s, now - age_s))
+        return d
+
+    old_run, new_run = folder(runs, "a" * 32, 25 * 3600), folder(runs, "b" * 32, 3600)
+    stray = folder(runs, "not-a-run", 99 * 3600)  # only names we create are touched
+    old_field, new_field = folder(cache, "0123456789ab", 8 * 86400), folder(cache, "ba9876543210", 86400)
+    labels, blt = folder(cache, "labels", 99 * 86400), folder(cache, "blt", 99 * 86400)
+    api.clean_up(now)
+    assert not old_run.exists() and new_run.exists() and stray.exists()
+    assert not old_field.exists() and new_field.exists() and labels.exists() and blt.exists()
+
+
+def test_clean_up_caps_the_folder_count(tmp_path, monkeypatch):
+    import os
+
+    monkeypatch.setattr(api, "RUNS", tmp_path / "runs")
+    monkeypatch.setattr(api, "MAX_RUN_DIRS", 3)
+    now = 10_000_000.0
+    for i in range(5):
+        d = tmp_path / "runs" / (f"{i:x}" * 32)[:32]
+        d.mkdir(parents=True)
+        os.utime(d, (now - 100 + i, now - 100 + i))
+    api.clean_up(now)
+    assert sorted(p.name[0] for p in (tmp_path / "runs").iterdir()) == ["2", "3", "4"]  # the 3 newest
+
+
+def test_clean_up_runs_at_most_hourly(client, monkeypatch):
+    calls = []
+    monkeypatch.setattr(api, "clean_up", lambda now=None: calls.append(1))
+    monkeypatch.setattr(api, "_cleaned", {"at": 0.0})
+    for _ in range(3):
+        client.get("/api/health")
+    import time as _t
+    _t.sleep(0.2)  # the clean-up runs in a background thread
+    assert calls == [1]
