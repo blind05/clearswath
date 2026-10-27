@@ -437,3 +437,36 @@ def test_wrong_codes_lock_out_that_address_only(client, monkeypatch):
     assert [plan("guess-%d" % i) for i in range(10)] == [401] * 10
     assert plan("s3cret-code-for-tests") == 429  # locked out even with the right code
     assert plan("s3cret-code-for-tests", ip="198.51.100.8") == 200  # other addresses unaffected
+
+
+def test_oversize_field_is_refused_and_not_kept(client, tmp_path):
+    big = b'{"type": "Polygon", "coordinates": [[' + b"[0, 0], " * 200_000 + b"[0, 0]]]}"
+    r = client.post("/api/plan", files={"field": ("f.geojson", big), "label": ("l.pdf", b"%PDF")},
+                    data={"month": "2026-11"})
+    assert r.status_code == 413 and "limit is 1 MB" in r.json()["detail"]
+    assert not list((tmp_path / "runs").rglob("field.geojson"))  # the partial file was removed
+
+
+def test_oversize_label_and_audio_are_refused(client, monkeypatch):
+    monkeypatch.setattr(api, "LABEL_MAX", 2 * api.MB)
+    r = client.post("/api/label", files={"label": ("x.pdf", b"%PDF" + b"0" * (3 * api.MB))})
+    assert r.status_code == 413 and "limit is 2 MB" in r.json()["detail"]
+    run_id = post_plan(client).json()["run_id"]
+    monkeypatch.setattr(api, "AUDIO_MAX", 1 * api.MB)
+    r = client.post("/api/record", data={"run_id": run_id}, files={"audio": ("n.wav", b"RIFF" + b"0" * (2 * api.MB))})
+    assert r.status_code == 413
+
+
+def test_declared_huge_request_is_refused_before_reading(client):
+    r = client.post("/api/label", content=b"x", headers={"content-length": str(41 * api.MB),
+                                                          "content-type": "application/octet-stream"})
+    assert r.status_code == 413 and "40 MB" in r.json()["detail"]
+
+
+def test_too_many_pages_is_explained(client, monkeypatch):
+    def long_label(*a):
+        raise label_reader.LabelTooLongError("Label PDF has 400 pages; the limit is 80.")
+
+    monkeypatch.setattr(pipeline, "run", long_label)
+    r = post_plan(client)
+    assert r.status_code == 422 and "400 pages" in r.json()["detail"]

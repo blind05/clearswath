@@ -11,6 +11,11 @@ from pydantic import BaseModel, ValidationError
 from app import llm
 
 CACHE = Path(__file__).resolve().parent.parent / "data" / "cache" / "labels"
+MAX_PAGES = 80  # real labels run 20-70 pages; more would be a very large paid prompt
+
+
+class LabelTooLongError(ValueError):
+    """A PDF over MAX_PAGES; the message is safe to show users."""
 KINDS = ["buffer", "wind", "rain", "rate", "other"]
 TARGETS = ["water", "building", "habitat"]
 APPLIES_TO = ["all", "aerial", "ground"]
@@ -76,6 +81,8 @@ def _norm(s: str) -> str:
 def _pages(path: Path) -> tuple[list[str], str]:
     if path.suffix.lower() == ".pdf":
         with pymupdf.open(path) as doc:
+            if len(doc) > MAX_PAGES:  # checked before any model call
+                raise LabelTooLongError(f"Label PDF has {len(doc)} pages; the limit is {MAX_PAGES}.")
             return [p.get_text() for p in doc], "pdf"
     msg = llm.chat([{"role": "user", "content": [
         {"type": "text", "text": "Transcribe all text on this pesticide label exactly, word for word."},

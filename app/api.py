@@ -14,7 +14,7 @@ from pathlib import Path
 
 import simplekml
 from fastapi import Depends, FastAPI, File, Form, HTTPException, Request, UploadFile
-from fastapi.responses import Response
+from fastapi.responses import JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 
 from app import agent, geo, imagery, llm, label_reader, pipeline, records
@@ -28,8 +28,23 @@ METHODS = {"drone", "aerial", "ground"}
 MONTH = re.compile(r"^\d{4}-(0[1-9]|1[0-2])$")
 RUN_ID = re.compile(r"^[0-9a-f]{32}$")
 
+MB = 1024 * 1024
+FIELD_MAX = 1 * MB  # a field outline is a few KB
+LABEL_MAX = int(os.getenv("MAX_LABEL_MB", "10")) * MB
+AUDIO_MAX = int(os.getenv("MAX_AUDIO_MB", "32")) * MB  # Muse Voice Transcribe's own limit
+REQUEST_MAX = 40 * MB
+
 log = logging.getLogger(__name__)
 app = FastAPI(title="ClearSwath")
+
+
+@app.middleware("http")
+async def refuse_huge_requests(request: Request, call_next):
+    """Turns away a declared oversize body before it's read; _save enforces per-file limits while reading."""
+    size = request.headers.get("content-length", "")
+    if size.isdigit() and int(size) > REQUEST_MAX:
+        return JSONResponse({"detail": f"Request too large: the limit is {REQUEST_MAX // MB} MB."}, status_code=413)
+    return await call_next(request)
 
 # Paid endpoints (model calls) are gated; the cached demo, KML and the page stay open.
 _lock = threading.Lock()
@@ -103,7 +118,7 @@ def _http_error(e: Exception) -> HTTPException:
     """Only messages we wrote reach the browser; anything else is logged and replaced."""
     if isinstance(e, (llm.MissingKeyError, imagery.NoImageryError)):
         return HTTPException(502, str(e))
-    if isinstance(e, (llm.BadAudioError, pipeline.NotConfirmableError)):
+    if isinstance(e, (llm.BadAudioError, pipeline.NotConfirmableError, label_reader.LabelTooLongError)):
         return HTTPException(422, str(e))
     log.exception("request failed", exc_info=e)
     if isinstance(e, ValueError):  # bad field or label file
@@ -111,9 +126,18 @@ def _http_error(e: Exception) -> HTTPException:
     return HTTPException(502, "A model or data service failed. Try again; details are in the server log.")
 
 
-def _save(upload: UploadFile, path: Path) -> Path:
+def _save(upload: UploadFile, path: Path, max_bytes: int) -> Path:
+    """Copies an upload in 1 MB pieces, stopping at max_bytes (413) so a huge file is never held whole."""
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_bytes(upload.file.read())
+    written = 0
+    with path.open("wb") as out:
+        while chunk := upload.file.read(MB):
+            written += len(chunk)
+            if written > max_bytes:
+                out.close()
+                path.unlink(missing_ok=True)
+                raise HTTPException(413, f"{upload.filename or 'File'} is too large: the limit is {max_bytes // MB} MB.")
+            out.write(chunk)
     return path
 
 
@@ -155,8 +179,9 @@ def _upload_and_plan(field: UploadFile, label: UploadFile, month: str, method: s
     run_id = uuid.uuid4().hex
     run = RUNS / run_id
     suffix = _label_suffix(label)
-    return _plan(run_id, _save(field, run / "field.geojson"), _save(label, run / f"label{suffix}"),
-                 month, method, use_agent, excluded_rules)
+    field_path = _save(field, run / "field.geojson", FIELD_MAX)
+    label_path = _save(label, run / f"label{suffix}", LABEL_MAX)
+    return _plan(run_id, field_path, label_path, month, method, use_agent, excluded_rules)
 
 
 @app.post("/api/plan", dependencies=PAID)
@@ -174,7 +199,7 @@ def ask_agent(field: UploadFile = File(...), label: UploadFile = File(...),
 
 @app.post("/api/label", dependencies=PAID)
 def label(label: UploadFile = File(...)):
-    path = _save(label, RUNS / uuid.uuid4().hex / f"label{_label_suffix(label)}")
+    path = _save(label, RUNS / uuid.uuid4().hex / f"label{_label_suffix(label)}", LABEL_MAX)
     try:
         return label_reader.read_label(path).model_dump()
     except Exception as e:
@@ -191,7 +216,7 @@ def record(run_id: str = Form(...), audio: UploadFile | None = File(None), text:
             suffix = Path(audio.filename or "").suffix.lower()
             if suffix not in AUDIO_SUFFIXES:
                 raise HTTPException(422, f"Audio must be one of {sorted(AUDIO_SUFFIXES)}")
-            text = records.transcribe(_save(audio, RUNS / run_id / f"note{suffix}"))
+            text = records.transcribe(_save(audio, RUNS / run_id / f"note{suffix}", AUDIO_MAX))
         if not text.strip():
             raise HTTPException(422, "Send a voice note or type the notes")
         return records.fill_record(text, json.loads(job_path.read_text())).model_dump()

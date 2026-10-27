@@ -153,3 +153,14 @@ def test_buffer_unit_spellings_are_normalised(monkeypatch, pdf, unit, stored):
     fake_model(monkeypatch, [rule(unit=unit)])
     out = label_reader.read_label(pdf)
     assert out.dropped == [] and out.rules[0].unit == stored
+
+
+def test_pdf_over_the_page_limit_never_reaches_the_model(monkeypatch, tmp_path):
+    doc = pymupdf.open()
+    for _ in range(label_reader.MAX_PAGES + 1):
+        doc.new_page()
+    p = tmp_path / "long.pdf"
+    doc.save(p)
+    monkeypatch.setattr(llm, "chat_json", lambda *a, **kw: pytest.fail("model called"))
+    with pytest.raises(label_reader.LabelTooLongError, match="81 pages"):
+        label_reader.read_label(p)
