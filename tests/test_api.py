@@ -1,4 +1,5 @@
 import json
+from collections import deque
 
 import pytest
 from fastapi.testclient import TestClient
@@ -470,3 +471,24 @@ def test_too_many_pages_is_explained(client, monkeypatch):
     monkeypatch.setattr(pipeline, "run", long_label)
     r = post_plan(client)
     assert r.status_code == 422 and "400 pages" in r.json()["detail"]
+
+
+def test_counters_never_grow_without_bound(client, monkeypatch):
+    monkeypatch.setenv("ACCESS_CODE", "s3cret-code-for-tests")
+    monkeypatch.setattr(api, "MAX_TRACKED", 50)
+    for i in range(120):  # wrong codes from many addresses
+        client.post("/api/label", files={"label": ("x.pdf", b"%PDF")},
+                    headers={"X-Access-Code": "wrong", "X-Forwarded-For": f"2001:db8::{i:x}"})
+    assert len(api._fails) <= 50
+    # the right code passes the lockout lookup without leaving a failure entry behind
+    api.reset_limits()
+    client.post("/api/label", files={"label": ("x.pdf", b"%PDF")},
+                headers={"X-Access-Code": "s3cret-code-for-tests", "X-Forwarded-For": "203.0.113.200"})
+    assert "203.0.113.200" not in api._fails and "203.0.113.200" in api._hits
+
+
+def test_expired_entries_are_dropped(monkeypatch):
+    table = {"a": deque([0.0]), "b": deque([5000.0])}
+    assert api._count(table, "a", now=4000.0) == 0 and "a" not in table
+    assert api._count(table, "b", now=4000.0) == 1 and "b" in table
+    assert api._count(table, "zzz", now=4000.0) == 0 and "zzz" not in table

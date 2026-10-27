@@ -8,7 +8,7 @@ import re
 import threading
 import time
 import uuid
-from collections import defaultdict, deque
+from collections import deque
 from datetime import date
 from pathlib import Path
 
@@ -48,8 +48,9 @@ async def refuse_huge_requests(request: Request, call_next):
 
 # Paid endpoints (model calls) are gated; the cached demo, KML and the page stay open.
 _lock = threading.Lock()
-_hits: dict[str, deque] = defaultdict(deque)  # ip -> request times in the last hour
-_fails: dict[str, deque] = defaultdict(deque)  # ip -> wrong access-code times in the last hour
+_hits: dict[str, deque] = {}  # ip -> request times in the last hour
+_fails: dict[str, deque] = {}  # ip -> wrong access-code times in the last hour
+MAX_TRACKED = 10_000  # addresses per table; bounds memory when many addresses (e.g. rotating IPv6) hit us
 _day = {"date": None, "count": 0}
 MIN_CODE_LEN = 16  # a shorter ACCESS_CODE could be guessed; it switches live runs off instead
 MAX_FAILS_PER_HOUR = 10
@@ -63,10 +64,26 @@ def reset_limits() -> None:
         _day.update(date=None, count=0)
 
 
-def _recent(times: deque, now: float) -> deque:
+def _count(table: dict, ip: str, now: float) -> int:
+    """Hits from ip in the last hour. Never creates an entry; drops one that has expired."""
+    times = table.get(ip)
+    if times is None:
+        return 0
     while times and now - times[0] > 3600:
         times.popleft()
-    return times
+    if not times:
+        del table[ip]
+    return len(times)
+
+
+def _add(table: dict, ip: str, now: float) -> None:
+    """Records a hit. When full, drops expired addresses, then the one seen longest ago."""
+    if ip not in table and len(table) >= MAX_TRACKED:
+        for other in list(table):
+            _count(table, other, now)
+        if len(table) >= MAX_TRACKED:
+            del table[min(table, key=lambda k: table[k][-1])]
+    table.setdefault(ip, deque()).append(now)
 
 
 def _client_ip(request: Request) -> str:
@@ -87,12 +104,12 @@ def paid_access(request: Request) -> None:
         raise HTTPException(503, "Live runs aren't switched on for this site yet. Try the demo.")
     if code:
         with _lock:  # checked before comparing, so a locked-out address can't keep guessing
-            if len(_recent(_fails[ip], now)) >= MAX_FAILS_PER_HOUR:
+            if _count(_fails, ip, now) >= MAX_FAILS_PER_HOUR:
                 raise HTTPException(429, "Too many wrong access codes from your address. Try again later, or use the demo.")
         given = request.headers.get("x-access-code", "")
         if not hmac.compare_digest(given.encode(), code.encode()):
             with _lock:
-                _fails[ip].append(now)
+                _add(_fails, ip, now)
             log.warning("wrong access code from %s", ip)
             raise HTTPException(401, "Live runs need the access code. The demo is open to everyone.")
     elif os.getenv("RENDER"):  # deployed without a code: refuse rather than spend for anyone
@@ -104,10 +121,9 @@ def paid_access(request: Request) -> None:
             _day.update(date=date.today(), count=0)
         if _day["count"] >= daily_cap:
             raise HTTPException(503, "Today's live-run budget is used up. The demo still works.")
-        hits = _recent(_hits[ip], now)
-        if len(hits) >= per_hour:
+        if _count(_hits, ip, now) >= per_hour:
             raise HTTPException(429, "Too many live runs from your address. Try again within the hour, or use the demo.")
-        hits.append(now)
+        _add(_hits, ip, now)
         _day["count"] += 1
 
 
