@@ -335,13 +335,13 @@ def test_health(client):
 
 
 def test_access_code_gates_paid_endpoints(client, monkeypatch):
-    monkeypatch.setenv("ACCESS_CODE", "s3cret-code")
+    monkeypatch.setenv("ACCESS_CODE", "s3cret-code-for-tests")
     r = post_plan(client)
     assert r.status_code == 401 and "access code" in r.json()["detail"]
     files = {"field": ("f.geojson", json.dumps(mapping(FIELD))), "label": ("label.pdf", b"%PDF")}
     wrong = client.post("/api/plan", files=files, data={"month": "2026-11"}, headers={"X-Access-Code": "nope"})
     assert wrong.status_code == 401
-    ok = client.post("/api/plan", files=files, data={"month": "2026-11"}, headers={"X-Access-Code": "s3cret-code"})
+    ok = client.post("/api/plan", files=files, data={"month": "2026-11"}, headers={"X-Access-Code": "s3cret-code-for-tests"})
     assert ok.status_code == 200
     for url in ("/api/agent", "/api/label", "/api/record"):
         assert client.post(url, data={"run_id": "0" * 32, "month": "2026-11"},
@@ -349,7 +349,7 @@ def test_access_code_gates_paid_endpoints(client, monkeypatch):
 
 
 def test_free_endpoints_stay_open(client, monkeypatch):
-    monkeypatch.setenv("ACCESS_CODE", "s3cret-code")
+    monkeypatch.setenv("ACCESS_CODE", "s3cret-code-for-tests")
     assert client.get("/api/health").status_code == 200
     assert client.get("/").status_code == 200
     assert client.get("/api/demo").status_code == 404  # no demo files in this test: not 401
@@ -404,7 +404,7 @@ def test_kill_switch_off_by_default_and_when_on(client, monkeypatch):
 
 def test_cached_demo_ignores_the_kill_switch(client, cached_demo, monkeypatch):
     monkeypatch.setenv("CLEARSWATH_LIVE_MODE", "off")
-    monkeypatch.setenv("ACCESS_CODE", "s3cret-code")
+    monkeypatch.setenv("ACCESS_CODE", "s3cret-code-for-tests")
     assert client.get("/api/demo?method=ground").status_code == 200
 
 
@@ -415,5 +415,25 @@ def test_uncached_demo_is_gated_like_a_live_run(client, tmp_path, monkeypatch):
     monkeypatch.setenv("CLEARSWATH_LIVE_MODE", "off")
     assert client.get("/api/demo").status_code == 503
     monkeypatch.setenv("CLEARSWATH_LIVE_MODE", "on")
-    monkeypatch.setenv("ACCESS_CODE", "s3cret-code")
+    monkeypatch.setenv("ACCESS_CODE", "s3cret-code-for-tests")
     assert client.get("/api/demo").status_code == 401
+
+
+def test_short_access_code_switches_live_runs_off(client, monkeypatch, caplog):
+    monkeypatch.setenv("ACCESS_CODE", "short123")
+    files = {"field": ("f.geojson", json.dumps(mapping(FIELD))), "label": ("label.pdf", b"%PDF")}
+    r = client.post("/api/plan", files=files, data={"month": "2026-11"}, headers={"X-Access-Code": "short123"})
+    assert r.status_code == 503 and "shorter than 16" in caplog.text
+
+
+def test_wrong_codes_lock_out_that_address_only(client, monkeypatch):
+    monkeypatch.setenv("ACCESS_CODE", "s3cret-code-for-tests")
+    files = lambda: {"field": ("f.geojson", json.dumps(mapping(FIELD))), "label": ("l.pdf", b"%PDF")}  # noqa: E731
+
+    def plan(code, ip="198.51.100.7"):
+        return client.post("/api/plan", files=files(), data={"month": "2026-11"},
+                           headers={"X-Access-Code": code, "X-Forwarded-For": ip}).status_code
+
+    assert [plan("guess-%d" % i) for i in range(10)] == [401] * 10
+    assert plan("s3cret-code-for-tests") == 429  # locked out even with the right code
+    assert plan("s3cret-code-for-tests", ip="198.51.100.8") == 200  # other addresses unaffected

@@ -10,7 +10,7 @@ services:
         sync: false
       - key: BASETEN_API_KEY
         sync: false
-      - key: ACCESS_CODE  # required for live runs on Render; without it they're refused (the demo stays open)
+      - key: ACCESS_CODE  # 16+ random characters (e.g. `openssl rand -base64 18`); shorter or missing = live runs refused
         sync: false
       - key: CLEARSWATH_LIVE_MODE  # set to "off" to stop all paid calls; the cached demo keeps working
         value: "on"

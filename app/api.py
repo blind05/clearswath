@@ -34,14 +34,24 @@ app = FastAPI(title="ClearSwath")
 # Paid endpoints (model calls) are gated; the cached demo, KML and the page stay open.
 _lock = threading.Lock()
 _hits: dict[str, deque] = defaultdict(deque)  # ip -> request times in the last hour
+_fails: dict[str, deque] = defaultdict(deque)  # ip -> wrong access-code times in the last hour
 _day = {"date": None, "count": 0}
+MIN_CODE_LEN = 16  # a shorter ACCESS_CODE could be guessed; it switches live runs off instead
+MAX_FAILS_PER_HOUR = 10
 
 
 def reset_limits() -> None:
     """Clears the rate-limit and daily counters (tests; they also reset on restart)."""
     with _lock:
         _hits.clear()
+        _fails.clear()
         _day.update(date=None, count=0)
+
+
+def _recent(times: deque, now: float) -> deque:
+    while times and now - times[0] > 3600:
+        times.popleft()
+    return times
 
 
 def _client_ip(request: Request) -> str:
@@ -55,24 +65,31 @@ def paid_access(request: Request) -> None:
     """Kill switch, access code, per-IP hourly limit and a global daily cap, checked before any paid model call."""
     if os.getenv("CLEARSWATH_LIVE_MODE", "on").strip().lower() in ("off", "0", "false", "no"):
         raise HTTPException(503, "Live runs are switched off right now. The demo still works.")
+    now, ip = time.time(), _client_ip(request)
     code = os.getenv("ACCESS_CODE")
+    if code and len(code) < MIN_CODE_LEN:
+        log.warning("ACCESS_CODE is shorter than %d characters; live runs are refused", MIN_CODE_LEN)
+        raise HTTPException(503, "Live runs aren't switched on for this site yet. Try the demo.")
     if code:
+        with _lock:  # checked before comparing, so a locked-out address can't keep guessing
+            if len(_recent(_fails[ip], now)) >= MAX_FAILS_PER_HOUR:
+                raise HTTPException(429, "Too many wrong access codes from your address. Try again later, or use the demo.")
         given = request.headers.get("x-access-code", "")
         if not hmac.compare_digest(given.encode(), code.encode()):
+            with _lock:
+                _fails[ip].append(now)
+            log.warning("wrong access code from %s", ip)
             raise HTTPException(401, "Live runs need the access code. The demo is open to everyone.")
     elif os.getenv("RENDER"):  # deployed without a code: refuse rather than spend for anyone
         raise HTTPException(503, "Live runs aren't switched on for this site yet. Try the demo.")
     per_hour = int(os.getenv("RATE_LIMIT_PER_HOUR", "20"))
     daily_cap = int(os.getenv("DAILY_RUN_CAP", "200"))
-    now, ip = time.time(), _client_ip(request)
     with _lock:
         if _day["date"] != date.today():
             _day.update(date=date.today(), count=0)
         if _day["count"] >= daily_cap:
             raise HTTPException(503, "Today's live-run budget is used up. The demo still works.")
-        hits = _hits[ip]
-        while hits and now - hits[0] > 3600:
-            hits.popleft()
+        hits = _recent(_hits[ip], now)
         if len(hits) >= per_hour:
             raise HTTPException(429, "Too many live runs from your address. Try again within the hour, or use the demo.")
         hits.append(now)
