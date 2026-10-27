@@ -21,6 +21,8 @@ Developer Hackathon, Oct 26 - Nov 4, 2026. Architecture and contracts: docs/CONT
 - The GO / ADJUST / NO-GO decision always comes from buffers.plan, never model text.
 
 ## How to work
+- Start every session by re-reading docs/PROJECT_CONTEXT.md section 6 (status) and continue
+  from the next unfinished task. Update that status as work lands.
 - First restate the task in 3 bullets and list files you'll touch. Wait for my OK.
 - Smallest change that does the task. No unrelated refactors.
 - Tests for every behavior change. Tests never call the network or API; mock them.
