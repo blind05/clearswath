@@ -642,3 +642,53 @@ def test_clean_up_runs_at_most_hourly(client, monkeypatch):
     import time as _t
     _t.sleep(0.2)  # the clean-up runs in a background thread
     assert calls == [1]
+
+
+def photo_with_exif() -> bytes:
+    import io
+
+    from PIL import Image
+
+    im = Image.new("RGB", (400, 200), "white")
+    exif = Image.Exif()
+    exif[0x010F] = "PhoneMaker"  # Make
+    exif[0x0112] = 6  # Orientation: rotate 90 degrees to view
+    exif[0x8825] = {1: "N", 2: (44.0, 14.0, 5.0), 3: "W", 4: (96.0, 55.0, 10.0)}  # GPS
+    buf = io.BytesIO()
+    im.save(buf, "JPEG", exif=exif)
+    return buf.getvalue()
+
+
+def test_photo_label_loses_exif_and_gps(client, monkeypatch):
+    import io
+
+    from PIL import Image
+
+    raw = photo_with_exif()
+    assert len(Image.open(io.BytesIO(raw)).getexif()) > 0  # the fixture really has EXIF
+    seen = {}
+    lr = LabelRules(product_name="Acme", epa_reg_no="1-2", rules=[], dropped=[], source="image")
+    monkeypatch.setattr(label_reader, "read_label", lambda p: seen.update(path=p) or lr)
+    assert client.post("/api/label", files={"label": ("photo.jpg", raw)}).status_code == 200
+    stored = Image.open(seen["path"])
+    assert len(stored.getexif()) == 0 and stored.size == (200, 400)  # no metadata, turned upright
+
+
+def test_huge_photo_is_shrunk(client, monkeypatch):
+    import io
+
+    from PIL import Image
+
+    buf = io.BytesIO()
+    Image.new("RGB", (6000, 1500), "white").save(buf, "PNG")
+    seen = {}
+    lr = LabelRules(product_name=None, epa_reg_no=None, rules=[], dropped=[], source="image")
+    monkeypatch.setattr(label_reader, "read_label", lambda p: seen.update(path=p) or lr)
+    assert client.post("/api/label", files={"label": ("big.png", buf.getvalue())}).status_code == 200
+    assert max(Image.open(seen["path"]).size) == api.MAX_IMAGE_SIDE
+
+
+def test_unreadable_image_is_refused(client, tmp_path):
+    r = client.post("/api/label", files={"label": ("photo.jpg", b"\xff\xd8\xff" + b"garbage" * 10)})
+    assert r.status_code == 415 and "couldn't be read" in r.json()["detail"]
+    assert not list((tmp_path / "runs").rglob("label.*"))

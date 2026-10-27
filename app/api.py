@@ -14,6 +14,7 @@ from datetime import date
 from pathlib import Path
 
 import simplekml
+from PIL import Image, ImageOps
 from fastapi import FastAPI, File, Form, HTTPException, Request, UploadFile
 from fastapi.responses import JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
@@ -222,6 +223,25 @@ def _check_type(path: Path) -> None:
         raise HTTPException(415, f"That file doesn't look like {kind[0]}.")
 
 
+IMAGE_FORMATS = {".png": "PNG", ".webp": "WEBP", ".jpg": "JPEG", ".jpeg": "JPEG"}
+MAX_IMAGE_SIDE = 3000  # px; plenty to read a label, and it bounds the model's image cost
+
+
+def _clean_image(path: Path) -> None:
+    """Re-encodes a photo upright, at most MAX_IMAGE_SIDE, with no EXIF (GPS, camera) before it's stored or sent."""
+    try:
+        with Image.open(path) as im:
+            im = ImageOps.exif_transpose(im)  # apply the orientation tag before it's dropped
+            im.thumbnail((MAX_IMAGE_SIDE, MAX_IMAGE_SIDE))
+        fmt = IMAGE_FORMATS[path.suffix.lower()]
+        if fmt == "JPEG" and im.mode not in ("RGB", "L"):
+            im = im.convert("RGB")
+        im.save(path, fmt, quality=90)  # no exif= argument: metadata is not written
+    except (OSError, ValueError, Image.DecompressionBombError) as e:
+        path.unlink(missing_ok=True)
+        raise HTTPException(415, "That image couldn't be read.") from e
+
+
 def _save(upload: UploadFile, path: Path, max_bytes: int) -> Path:
     """Copies an upload in 1 MB pieces, stopping at max_bytes (413) so a huge file is never held whole."""
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -235,6 +255,8 @@ def _save(upload: UploadFile, path: Path, max_bytes: int) -> Path:
                 raise HTTPException(413, f"{upload.filename or 'File'} is too large: the limit is {max_bytes // MB} MB.")
             out.write(chunk)
     _check_type(path)
+    if path.suffix.lower() in IMAGE_FORMATS:
+        _clean_image(path)
     return path
 
 
