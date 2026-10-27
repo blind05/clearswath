@@ -145,3 +145,11 @@ def test_photo_transcription_stays_on_meta(monkeypatch, tmp_path):
     fake_model(monkeypatch, [rule(page=1)])
     label_reader.read_label(img)
     assert seen["provider"] == "meta"
+
+
+@pytest.mark.parametrize("unit, stored", [("feet", "ft"), ("Feet", "ft"), ("foot", "ft"), ("ft", "ft"),
+                                          ("meters", "m"), ("metres", "m"), ("m", "m")])
+def test_buffer_unit_spellings_are_normalised(monkeypatch, pdf, unit, stored):
+    fake_model(monkeypatch, [rule(unit=unit)])
+    out = label_reader.read_label(pdf)
+    assert out.dropped == [] and out.rules[0].unit == stored

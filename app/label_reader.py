@@ -14,7 +14,9 @@ CACHE = Path(__file__).resolve().parent.parent / "data" / "cache" / "labels"
 KINDS = ["buffer", "wind", "rain", "rate", "other"]
 TARGETS = ["water", "building", "habitat"]
 APPLIES_TO = ["all", "aerial", "ground"]
-BUFFER_UNITS = {"ft", "m"}
+# a label says "feet" or "ft"; store the short form buffers.plan expects
+BUFFER_UNITS = {"ft": "ft", "feet": "ft", "foot": "ft", "m": "m", "meter": "m", "meters": "m",
+                "metre": "m", "metres": "m"}
 
 
 class LabelRule(BaseModel):
@@ -96,9 +98,10 @@ def _check(rule: dict, pages: list[str]) -> str | None:
     if rule.get("kind") == "buffer":
         if rule.get("target") is None:
             return "buffer without a target"
-        if rule.get("value") is None or (rule.get("unit") or "").lower() not in BUFFER_UNITS:
+        unit = BUFFER_UNITS.get((rule.get("unit") or "").strip().lower())
+        if rule.get("value") is None or unit is None:
             return "buffer without a distance in ft or m"
-        rule["unit"] = rule["unit"].lower()
+        rule["unit"] = unit
     return None
 
 
