@@ -80,3 +80,21 @@ def test_restricted_area_excluded():
     out = plan(FIELD, {}, [], restricted=[strip])
     assert out["status"] == "adjust" and out["reasons"][0]["source"] == "bulletin"
     assert out["excluded_acres"] == pytest.approx(4.94, abs=0.01)
+
+
+def test_buffer_that_misses_the_field_is_not_a_reason():
+    # the pond is 10 m east of the field: a 25 ft (7.6 m) buffer stops short, a 100 ft one reaches in
+    out = plan(FIELD, {"water": [POND]}, [rule(25, "ft"), rule(100, "ft")])
+    assert out["status"] == "adjust"
+    assert [r["distance_ft"] for r in out["reasons"]] == [100]
+
+
+def test_go_lists_no_reasons_when_nothing_reaches():
+    out = plan(FIELD, {"water": [POND]}, [rule(25, "ft")])
+    assert out["status"] == "go" and out["reasons"] == []
+
+
+def test_far_restricted_area_is_not_a_reason():
+    far = ll(box(X + 5000, Y, X + 5100, Y + 100))[0]
+    out = plan(FIELD, {}, [], restricted=[far])
+    assert out["status"] == "go" and out["reasons"] == []

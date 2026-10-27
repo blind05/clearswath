@@ -36,6 +36,10 @@ def plan(field: Polygon, hazards: dict, rules: list[dict], restricted=(),
     hazards_m = {k: to_utm(hazards.get(k) or []) for k in HAZARD_KINDS}
     zones, reasons = [], []
 
+    def reaches(shapes) -> bool:
+        """A reason is only listed if its zone takes area out of this field."""
+        return any(field_m.intersection(s).area >= 1.0 for s in shapes)  # 1 m2
+
     if prohibited:
         reasons.append({"source": "bulletin", "summary": "Bulletin prohibits this product here."})
         zones.append(field_m)
@@ -45,21 +49,28 @@ def plan(field: Polygon, hazards: dict, rules: list[dict], restricted=(),
         if rule.get("kind") != "buffer" or not shapes or not _applies(rule, method):
             continue
         meters = rule["value"] * M_PER_UNIT[rule["unit"].lower()]
-        zones += [s.buffer(meters) for s in shapes]
+        rule_zones = [s.buffer(meters) for s in shapes]
+        zones += rule_zones
+        if not reaches(rule_zones):
+            continue
         reasons.append({"source": "label", "target": rule["target"],
                         "distance_ft": round(meters / FT_TO_M, 1),
                         "summary": rule.get("summary", ""), "quote": rule["quote"],
                         "page": rule.get("page")})
 
-    if hazards_m["water"] and not any(r.get("target") == "water" for r in reasons):
+    water_rule = any(r.get("kind") == "buffer" and r.get("target") == "water" and _applies(r, method) for r in rules)
+    if hazards_m["water"] and not water_rule:
         # No label buffer for water: still never spray the water itself.
         zones += hazards_m["water"]
-        reasons.append({"source": "rule:water",
-                        "summary": "No label water buffer applies; water itself is excluded."})
+        if reaches(hazards_m["water"]):
+            reasons.append({"source": "rule:water",
+                            "summary": "No label water buffer applies; water itself is excluded."})
 
     if restricted:
-        zones += to_utm(restricted)
-        reasons.append({"source": "bulletin", "summary": "Bulletin restricted area excluded."})
+        restricted_m = to_utm(restricted)
+        zones += restricted_m
+        if reaches(restricted_m):
+            reasons.append({"source": "bulletin", "summary": "Bulletin restricted area excluded."})
 
     blocked = union_all(zones) if zones else Polygon()
     no_spray, spray = field_m.intersection(blocked), field_m.difference(blocked)
