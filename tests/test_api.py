@@ -492,3 +492,35 @@ def test_expired_entries_are_dropped(monkeypatch):
     assert api._count(table, "a", now=4000.0) == 0 and "a" not in table
     assert api._count(table, "b", now=4000.0) == 1 and "b" in table
     assert api._count(table, "zzz", now=4000.0) == 0 and "zzz" not in table
+
+
+def test_chunked_upload_is_cut_off_at_the_limit(client, monkeypatch):
+    monkeypatch.setattr(api, "REQUEST_MAX", 1 * api.MB)
+    sent = []
+
+    def chunks():  # no Content-Length: the declared-size check can't see this
+        for _ in range(8):
+            sent.append(1)
+            yield b"0" * (512 * 1024)
+
+    r = client.post("/api/label", content=chunks(),
+                    headers={"content-type": "multipart/form-data; boundary=x"})
+    assert r.status_code == 413 and "limit is 1 MB" in r.json()["detail"]
+
+
+def test_unauthorised_upload_is_refused_before_it_is_parsed(client, monkeypatch):
+    import starlette.requests
+
+    monkeypatch.setenv("ACCESS_CODE", "s3cret-code-for-tests")
+
+    async def no_parsing(*a, **kw):
+        raise AssertionError("the body was parsed before the access check")
+
+    monkeypatch.setattr(starlette.requests.Request, "form", no_parsing)
+    r = post_plan(client)
+    assert r.status_code == 401
+
+
+def test_guard_counts_each_run_once(client, monkeypatch):
+    monkeypatch.setenv("RATE_LIMIT_PER_HOUR", "2")
+    assert [post_plan(client).status_code for _ in range(3)] == [200, 200, 429]

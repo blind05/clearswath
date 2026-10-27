@@ -13,7 +13,7 @@ from datetime import date
 from pathlib import Path
 
 import simplekml
-from fastapi import Depends, FastAPI, File, Form, HTTPException, Request, UploadFile
+from fastapi import FastAPI, File, Form, HTTPException, Request, UploadFile
 from fastapi.responses import JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 
@@ -38,13 +38,42 @@ log = logging.getLogger(__name__)
 app = FastAPI(title="ClearSwath")
 
 
-@app.middleware("http")
-async def refuse_huge_requests(request: Request, call_next):
-    """Turns away a declared oversize body before it's read; _save enforces per-file limits while reading."""
-    size = request.headers.get("content-length", "")
-    if size.isdigit() and int(size) > REQUEST_MAX:
-        return JSONResponse({"detail": f"Request too large: the limit is {REQUEST_MAX // MB} MB."}, status_code=413)
-    return await call_next(request)
+PAID_PATHS = {"/api/plan", "/api/agent", "/api/label", "/api/record"}
+
+
+class Guard:
+    """Runs before FastAPI reads a body (it parses uploads before route dependencies run):
+    refuses a declared oversize body, gates paid endpoints from the headers alone, and counts the bytes that
+    actually arrive (chunked bodies too), stopping at REQUEST_MAX. _save then enforces per-file limits."""
+
+    def __init__(self, app):
+        self.app = app
+
+    async def __call__(self, scope, receive, send):
+        if scope["type"] != "http" or not scope["path"].startswith("/api/"):
+            return await self.app(scope, receive, send)
+        request = Request(scope)
+        try:
+            size = request.headers.get("content-length", "")
+            if size.isdigit() and int(size) > REQUEST_MAX:
+                raise HTTPException(413, f"Request too large: the limit is {REQUEST_MAX // MB} MB.")
+            if scope["path"] in PAID_PATHS and scope["method"] == "POST":
+                paid_access(request)
+        except HTTPException as e:
+            return await JSONResponse({"detail": e.detail}, status_code=e.status_code)(scope, receive, send)
+
+        received = 0
+
+        async def counted():
+            nonlocal received
+            message = await receive()
+            if message["type"] == "http.request":
+                received += len(message.get("body", b""))
+                if received > REQUEST_MAX:  # FastAPI re-raises this while parsing the form: a 413 response
+                    raise HTTPException(413, f"Request too large: the limit is {REQUEST_MAX // MB} MB.")
+            return message
+
+        await self.app(scope, counted, send)
 
 # Paid endpoints (model calls) are gated; the cached demo, KML and the page stay open.
 _lock = threading.Lock()
@@ -127,7 +156,6 @@ def paid_access(request: Request) -> None:
         _day["count"] += 1
 
 
-PAID = [Depends(paid_access)]
 
 
 def _http_error(e: Exception) -> HTTPException:
@@ -200,20 +228,20 @@ def _upload_and_plan(field: UploadFile, label: UploadFile, month: str, method: s
     return _plan(run_id, field_path, label_path, month, method, use_agent, excluded_rules)
 
 
-@app.post("/api/plan", dependencies=PAID)
+@app.post("/api/plan")  # gated by Guard
 def plan(field: UploadFile = File(...), label: UploadFile = File(...),
          month: str = Form(...), method: str = Form("drone"), excluded_rules: str = Form("")):
     return _upload_and_plan(field, label, month, method, False, excluded_rules)
 
 
-@app.post("/api/agent", dependencies=PAID)
+@app.post("/api/agent")  # gated by Guard
 def ask_agent(field: UploadFile = File(...), label: UploadFile = File(...),
               month: str = Form(...), method: str = Form("drone"), excluded_rules: str = Form("")):
     """Same as /api/plan, plus the agent's answer, trace and mode. The decision still comes from buffers.plan."""
     return _upload_and_plan(field, label, month, method, True, excluded_rules)
 
 
-@app.post("/api/label", dependencies=PAID)
+@app.post("/api/label")  # gated by Guard
 def label(label: UploadFile = File(...)):
     path = _save(label, RUNS / uuid.uuid4().hex / f"label{_label_suffix(label)}", LABEL_MAX)
     try:
@@ -222,7 +250,7 @@ def label(label: UploadFile = File(...)):
         raise _http_error(e) from e
 
 
-@app.post("/api/record", dependencies=PAID)
+@app.post("/api/record")  # gated by Guard
 def record(run_id: str = Form(...), audio: UploadFile | None = File(None), text: str = Form("")):
     job_path = RUNS / run_id / "job.json"
     if not RUN_ID.match(run_id) or not job_path.exists():
@@ -300,4 +328,5 @@ def kml(run_id: str):
                     headers={"Content-Disposition": f'attachment; filename="clearswath-{run_id[:8]}.kml"'})
 
 
+app.add_middleware(Guard)
 app.mount("/", StaticFiles(directory=ROOT / "web", html=True, check_dir=False), name="web")
