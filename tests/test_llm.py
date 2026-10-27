@@ -225,3 +225,13 @@ def test_chat_json_on_baseten_needs_exactly_the_tool(fake, calls):
     fake.chat.completions.create.return_value = tool_reply(*calls)
     with pytest.raises(RuntimeError, match="Expected one rules tool call"):
         llm.chat_json([], {"type": "object"}, "rules", provider="baseten")
+
+
+def test_model_clients_have_a_timeout(monkeypatch):
+    llm.client.cache_clear()
+    monkeypatch.setattr(llm, "load_dotenv", lambda *a: None)
+    monkeypatch.setenv("MODEL_API_KEY", "k")
+    monkeypatch.setenv("BASETEN_API_KEY", "b")
+    for name in ("meta", "baseten"):
+        assert llm.client(name).timeout == llm.MODEL_TIMEOUT_S == 120
+    llm.client.cache_clear()

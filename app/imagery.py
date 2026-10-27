@@ -1,6 +1,7 @@
 """Aerial imagery (NAIP via Planetary Computer) and USGS water features around a field."""
 
 import json
+import os
 from pathlib import Path
 
 import geopandas as gpd
@@ -20,6 +21,11 @@ from shapely.geometry import box, shape
 from app import geo
 
 STAC_URL = "https://planetarycomputer.microsoft.com/api/stac/v1"
+STAC_TIMEOUT_S = 30
+# GDAL reads NAIP over HTTP; without these a stalled read has no time limit. Defaults only: env can override.
+for _k, _v in {"GDAL_HTTP_TIMEOUT": "60", "GDAL_HTTP_CONNECTTIMEOUT": "15", "GDAL_HTTP_MAX_RETRY": "2",
+               "GDAL_HTTP_RETRY_DELAY": "1"}.items():
+    os.environ.setdefault(_k, _v)
 MARGIN_M = 150  # catch hazards just outside the field that a buffer reaches into
 MAX_PX = 1024
 MAX_ITEMS = 8  # NAIP images tried when filling gaps (newest first)
@@ -41,7 +47,7 @@ def _bounds(field_path, margin_m=MARGIN_M) -> tuple[float, float, float, float]:
 
 def _naip_items(bounds) -> list:
     """NAIP images touching bounds: newest first, and on the same date the one covering more of bounds."""
-    catalog = Client.open(STAC_URL, modifier=planetary_computer.sign_inplace)
+    catalog = Client.open(STAC_URL, modifier=planetary_computer.sign_inplace, timeout=STAC_TIMEOUT_S)
     items = list(catalog.search(collections=["naip"], bbox=bounds).items())
     if not items:
         raise NoImageryError(f"No NAIP imagery covers {bounds}")

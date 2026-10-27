@@ -220,3 +220,14 @@ def test_same_date_prefers_the_image_covering_more(field_path, monkeypatch):
                             geometry=mapping(box(w - 1, s_ - 1, e + 1, n + 1)))
     serve(monkeypatch, part, older, full)
     assert [i.id for i in imagery._naip_items(bounds)] == ["ne", "se", "old"]
+
+
+def test_outbound_imagery_calls_have_timeouts(field_path, monkeypatch):
+    import os
+
+    seen = {}
+    monkeypatch.setattr(imagery.Client, "open", lambda *a, **kw: seen.update(kw) or SimpleNamespace(
+        search=lambda **kw: SimpleNamespace(items=lambda: iter([item(2023, "x.tif")]))))
+    imagery._naip_items(imagery._bounds(field_path))
+    assert seen["timeout"] == imagery.STAC_TIMEOUT_S
+    assert os.environ["GDAL_HTTP_TIMEOUT"] and os.environ["GDAL_HTTP_CONNECTTIMEOUT"]

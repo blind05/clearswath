@@ -29,6 +29,8 @@ PROVIDERS = {
     "baseten": ("https://inference.baseten.co/v1", "BASETEN_API_KEY", SPARK_OPEN, 5),  # ~60 requests/min
 }
 
+MODEL_TIMEOUT_S = 120
+
 ROOT = Path(__file__).resolve().parent.parent
 PROMPTS = Path(__file__).resolve().parent / "prompts"
 LOG_PATH = ROOT / "data" / "logs" / "calls.jsonl"
@@ -67,7 +69,8 @@ def spark_model(name: str | None = None) -> str:
 def client(name: str = "meta") -> OpenAI:
     base_url, key_var, _, retries = PROVIDERS[name]
     # The SDK only reads OPENAI_API_KEY on its own, so pass the key explicitly.
-    return OpenAI(base_url=base_url, api_key=_api_key(key_var), max_retries=retries)
+    # 120 s per attempt: a long label read takes ~30 s; the SDK default (600 s) would hold a worker for 10 min
+    return OpenAI(base_url=base_url, api_key=_api_key(key_var), max_retries=retries, timeout=MODEL_TIMEOUT_S)
 
 
 def log_call(model: str, purpose: str, seconds: float, usage) -> None:
