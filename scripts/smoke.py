@@ -1,5 +1,10 @@
-"""Live check against api.meta.ai. Uses the network and your key: `uv run python scripts/smoke.py`."""
+"""Live check of the model APIs. Uses the network and your keys.
 
+uv run python scripts/smoke.py                    # Meta Model API: models, Spark, SAM, voice
+uv run python scripts/smoke.py --provider baseten  # Muse Spark Open on Baseten: chat, JSON, tools
+"""
+
+import argparse
 import sys
 import tempfile
 import wave
@@ -13,6 +18,9 @@ from PIL import Image, ImageDraw  # noqa: E402
 from app import llm  # noqa: E402
 
 results = {}
+ap = argparse.ArgumentParser()
+ap.add_argument("--provider", choices=["meta", "baseten"], default="meta")
+PROVIDER = ap.parse_args().provider
 
 
 def check(name, fn):
@@ -32,21 +40,24 @@ def models():
 
 
 def chat():
-    reply = llm.chat([{"role": "user", "content": 'Reply with exactly "OK".'}], purpose="smoke").content
+    reply = llm.chat([{"role": "user", "content": 'Reply with exactly "OK".'}], purpose="smoke",
+                     provider=PROVIDER).content
     return "OK" in (reply or ""), repr(reply)
 
 
 def chat_json():
     schema = {"type": "object", "properties": {"answer": {"type": "integer"}},
               "required": ["answer"], "additionalProperties": False}
-    out = llm.chat_json([{"role": "user", "content": "What is 2 + 2?"}], schema, "sum", purpose="smoke")
+    out = llm.chat_json([{"role": "user", "content": "What is 2 + 2?"}], schema, "sum", purpose="smoke",
+                        provider=PROVIDER)
     return out.get("answer") == 4, str(out)
 
 
 def tools():
     tool = {"type": "function", "function": {"name": "plan_spray", "description": "Plan the spray job.",
                                              "parameters": {"type": "object", "properties": {}}}}
-    msg = llm.chat([{"role": "user", "content": "Plan the spray job."}], tools=[tool], purpose="smoke")
+    msg = llm.chat([{"role": "user", "content": "Plan the spray job."}], tools=[tool], purpose="smoke",
+                   provider=PROVIDER)
     names = [c.function.name for c in msg.tool_calls or []]
     return names == ["plan_spray"], f"tool calls {names}"
 
@@ -76,14 +87,17 @@ def voice(tmp: Path):
     return isinstance(text, str), f"transcript {text!r}"
 
 
+print(f"provider {PROVIDER} ({llm.spark_model(PROVIDER)})")
 with tempfile.TemporaryDirectory() as d:
     tmp = Path(d)
-    check("models", models)
+    if PROVIDER == "meta":
+        check("models", models)
     check("chat", chat)
     check("chat_json", chat_json)
     check("tool calling", tools)
-    check("sam-3.1", lambda: sam(tmp))
-    check("voice transcribe", lambda: voice(tmp))
+    if PROVIDER == "meta":  # SAM and voice exist only on the Meta Model API
+        check("sam-3.1", lambda: sam(tmp))
+        check("voice transcribe", lambda: voice(tmp))
 
 print("PASS" if all(results.values()) else "FAIL")
 sys.exit(0 if all(results.values()) else 1)

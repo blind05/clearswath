@@ -1,6 +1,6 @@
 """Label reader recall and precision against answer keys. Live, costs credits (cached after the first run).
 
-uv run python scripts/eval_labels.py [evals/labels/<key>.json ...]
+uv run python scripts/eval_labels.py [--provider meta|baseten] [evals/labels/<key>.json ...]
 """
 
 import json
@@ -67,13 +67,14 @@ def score(preds: list[dict], keys: list[dict], also_valid: list[dict] = ()) -> d
             "bad_condition": bad_condition}
 
 
-def main(paths: list[str]) -> None:
-    from app import label_reader
+def main(paths: list[str], provider: str | None = None) -> None:
+    from app import label_reader, llm
 
+    print(f"provider {llm.resolve_provider(provider)} ({llm.spark_model(provider)})")
     paths = paths or sorted(str(p) for p in (ROOT / "evals" / "labels").glob("*.json"))
     for path in paths:
         key = json.loads(Path(path).read_text())
-        out = label_reader.read_label(ROOT / key["pdf"])
+        out = label_reader.read_label(ROOT / key["pdf"], provider)
         preds = [r.model_dump() for r in out.rules if r.kind in key["scored_kinds"]]
         s = score(preds, key["rules"], key.get("also_valid", []))
         flag = "" if key.get("reviewed") else "  (answer key NOT reviewed; don't report)"
@@ -94,4 +95,10 @@ def main(paths: list[str]) -> None:
 
 
 if __name__ == "__main__":
-    main(sys.argv[1:])
+    import argparse
+
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--provider", choices=["meta", "baseten"])
+    ap.add_argument("keys", nargs="*")
+    args = ap.parse_args()
+    main(args.keys, args.provider)
