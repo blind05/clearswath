@@ -1,0 +1,56 @@
+{
+  "product_name": "Warrior II with Zeon Technology",
+  "epa_reg_no": "100-1295",
+  "pdf": "data/labels/warrior_ii.pdf",
+  "source_url": "https://www3.epa.gov/pesticides/chem_search/ppls/000100-01295-20250703.pdf",
+  "label_date": "2025-07-03",
+  "reviewed": false,
+  "review_note": "Drafted by the coding agent from the label text; Hunter must review before any number from it is reported.",
+  "page_note": "Pages are PDF page numbers (what read_label reports). The label's printed page numbers are 2 lower.",
+  "scored_kinds": ["buffer", "wind", "rain"],
+  "not_scored": [
+    "Rates per crop (dozens of rows; not a where/when rule).",
+    "Temperature inversions (p11, kind other, no number)."
+  ],
+  "also_valid_note": "Real label rules that don't matter for the South Dakota demo. Extracting them is not an error (precision), and missing them is not a miss (recall).",
+  "also_valid": [
+    {"kind": "buffer", "target": "water", "applies_to": "all", "value": 25, "unit": "ft", "page": 14,
+     "quote": "In the state of New York, a 25 ft vegetated, non-cropped buffer strip untraversed by drainage tiles must be maintained between a treated field and a coastal salt marsh or stream that drains into a coastal salt marsh, for both aerial or ground application."},
+    {"kind": "buffer", "target": "water", "applies_to": "all", "value": 10, "unit": "ft", "page": 13,
+     "quote": "For Western irrigated agriculture, a maintained vegetative filter strip of at least 10 feet wide is required."},
+    {"kind": "wind", "target": null, "applies_to": "ground", "value": 15, "unit": "mph", "page": 11,
+     "quote": "Do not apply when wind speeds exceed 15 miles per hour at the application site."},
+    {"kind": "wind", "target": null, "applies_to": "all", "value": null, "unit": null, "page": 17,
+     "quote": "Do not apply when wind speed favors drift beyond the area intended for treatment or non-uniform distribution of treated water."}
+  ],
+  "rules": [
+    {
+      "kind": "buffer", "target": "water", "applies_to": "ground", "value": 25, "unit": "ft", "page": 14,
+      "quote": "Do not apply within 25 feet of aquatic habitats (such as, but not limited to, lakes, reservoirs, rivers, streams, marshes, ponds, estuaries, and commercial fish ponds)."
+    },
+    {
+      "kind": "buffer", "target": "water", "applies_to": "aerial", "value": 150, "unit": "ft", "page": 14,
+      "note": "Non-ULV aerial: the one that applies to a spray drone.",
+      "quote": "Do not apply within 150 feet of aquatic habitats (such as, but not limited to, lakes, reservoirs, rivers, streams, marshes, ponds, estuaries, and commercial fish ponds)."
+    },
+    {
+      "kind": "buffer", "target": "water", "applies_to": "aerial", "value": 450, "unit": "ft", "page": 14,
+      "note": "ULV aerial only. The rule schema cannot say 'ULV only', so buffers.plan would apply it to every aerial run.",
+      "quote": "Do not apply within 450 feet of aquatic habitats (such as, but not limited to, lakes, reservoirs, rivers, streams, marshes, ponds, estuaries, and commercial fish ponds)."
+    },
+    {
+      "kind": "buffer", "target": "water", "applies_to": "all", "value": 25, "unit": "ft", "page": 13,
+      "note": "Vegetative filter strip to down-gradient aquatic habitat (15 ft or less under listed conditions).",
+      "quote": "Only apply products containing Lambda-cyhalothrin onto fields where a maintained vegetative filter strip of at least 25 feet exists between the field edge and where a down gradient aquatic habitat exists."
+    },
+    {
+      "kind": "wind", "target": null, "applies_to": "aerial", "value": 15, "unit": "mph", "page": 11,
+      "quote": "Do not apply when wind speeds exceed 15 mph at the application site."
+    },
+    {
+      "kind": "wind", "target": null, "applies_to": "ground", "value": 15, "unit": "mph", "page": 11,
+      "note": "Stated for ground boom, boomless ground and airblast.",
+      "quote": "Do not apply when wind speeds exceed 15 mph at the application site."
+    }
+  ]
+}

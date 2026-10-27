@@ -128,7 +128,7 @@ Update the Status column as work lands.
 | Day | Goal | Status |
 | --- | --- | --- |
 | Mon Oct 26 | Setup; `llm.py` + smoke test; imagery; SAM + go/no-go test | Done in code (a096b14, 648a64f, c514b76, d12290a, 4dc0467). Smoke test passes live (models, chat, json_schema, tools, SAM, voice) |
-| Tue Oct 27 | Label reader + quote verification + answer-key check | Reader + quote check done (a0b7aaf). No answer keys yet; photo-rule confirmation not built |
+| Tue Oct 27 | Label reader + quote verification + answer-key check | Reader + quote check done (a0b7aaf); reads cached. Warrior II answer key + `scripts/eval_labels.py` drafted (key not yet reviewed by Hunter). Conditional rules (ULV-only, state-only) not handled; photo-rule confirmation not built |
 | Wed Oct 28 | `find_hazards` (SAM + USGS fallback + cache); Muse Spark Open provider | `find_hazards` done (20dc032, a77ec84). Baseten provider not started |
 | Thu Oct 29 | Buffer engine + distance tests + KML | Done (4dc0467, KML in a17fe5a) |
 | Fri Oct 30 | Bulletin check, pipeline, agent | Done (c44426c, 1dd8744, d1ffaa6, 4912ccd, ca77b87). BLT queried live, not cached; agent citation check not built |
