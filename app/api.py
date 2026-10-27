@@ -72,7 +72,7 @@ def _plan(run_id: str, field_path: Path, label_path: Path, month: str, method: s
             out = agent.run(field_path, label_path, month, method, excluded)
             return {**pipeline.to_json(out.pop("result")), **out}
         result = pipeline.run(field_path, label_path, month, method, excluded)
-    except (ValueError, LookupError, RuntimeError) as e:  # bad input, no imagery, missing key, model failure
+    except Exception as e:  # any failure: bad input, no imagery, missing key, model or data service down
         raise _http_error(e) from e
     pipeline.save_run(result, RUNS / run_id)
     return {"run_id": run_id, **pipeline.to_json(result)}
@@ -105,7 +105,7 @@ def label(label: UploadFile = File(...)):
     path = _save(label, RUNS / uuid.uuid4().hex / f"label{_label_suffix(label)}")
     try:
         return label_reader.read_label(path).model_dump()
-    except RuntimeError as e:
+    except Exception as e:
         raise _http_error(e) from e
 
 
@@ -123,7 +123,9 @@ def record(run_id: str = Form(...), audio: UploadFile | None = File(None), text:
         if not text.strip():
             raise HTTPException(422, "Send a voice note or type the notes")
         return records.fill_record(text, json.loads(job_path.read_text())).model_dump()
-    except (ValueError, RuntimeError) as e:  # bad audio, missing key or model failure
+    except HTTPException:
+        raise
+    except Exception as e:  # bad audio, missing key, model failure
         raise _http_error(e) from e
 
 

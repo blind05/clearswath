@@ -242,3 +242,37 @@ def test_refused_untick_is_explained(client, monkeypatch):
     monkeypatch.setattr(pipeline, "run", refuse)
     r = post_plan(client, excluded_rules="0")
     assert r.status_code == 422 and "can be unticked" in r.json()["detail"]
+
+
+class SdkError(Exception):
+    """Like openai.APIConnectionError or a STAC/rasterio error: not a ValueError/RuntimeError subclass."""
+
+
+def test_any_service_error_is_a_friendly_502(client, monkeypatch, caplog):
+    def boom(*a):
+        raise SdkError("upstream said: internal details")
+
+    monkeypatch.setattr(pipeline, "run", boom)
+    r = post_plan(client)
+    assert r.status_code == 502 and "details are in the server log" in r.json()["detail"]
+    assert "internal details" not in r.text and "internal details" in caplog.text
+
+
+def test_record_service_error_is_a_friendly_502(client, monkeypatch):
+    run_id = post_plan(client).json()["run_id"]
+
+    def boom(text, job):
+        raise SdkError("rate limited")
+
+    monkeypatch.setattr(records, "fill_record", boom)
+    r = client.post("/api/record", data={"run_id": run_id, "text": "Sam"})
+    assert r.status_code == 502 and "rate limited" not in r.text
+
+
+def test_label_service_error_is_a_friendly_502(client, monkeypatch):
+    def boom(p):
+        raise SdkError("connection reset")
+
+    monkeypatch.setattr(label_reader, "read_label", boom)
+    r = client.post("/api/label", files={"label": ("x.pdf", b"%PDF")})
+    assert r.status_code == 502 and "connection reset" not in r.text
