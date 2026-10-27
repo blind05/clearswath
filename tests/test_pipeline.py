@@ -145,3 +145,28 @@ def test_imagery_warnings_reach_the_applicator(monkeypatch, field_path):
         "water": [POND], "building": [], "habitat": [], "imagery_date": "2023-07-09",
         "water_source": "usgs", "imagery_warnings": ["Aerial imagery is missing for 37%"]})
     assert pipeline.run(field_path, "label.pdf", "2026-11")["warnings"] == ["Aerial imagery is missing for 37%"]
+
+
+def raw_label():
+    quote = RULE.quote
+    return {"pages": ["Acme EPA Reg. No. 123-45", f"x {quote} y"], "source": "pdf",
+            "out": {"product_name": "Acme", "epa_reg_no": "123-45", "rules": [RULE.model_dump() | {"page": 2}]}}
+
+
+def test_inputs_round_trip_gives_the_same_plan(tmp_path):
+    hazards = {"water": [POND], "building": [], "habitat": [], "imagery_date": "2023-07-09",
+               "water_source": "usgs", "water_warnings": [], "imagery_warnings": []}
+    pipeline.save_inputs(tmp_path / "c", FIELD, raw_label(), hazards, bulletin(), "2026-11")
+    field, lbl, hz, blt, month = pipeline.load_inputs(tmp_path / "c")
+    again = pipeline.assemble(field, lbl, hz, blt, month, "drone")
+    direct = pipeline.assemble(FIELD, label_reader.verify(raw_label()), hazards, bulletin(), "2026-11", "drone")
+    assert month == "2026-11" and lbl.rules[0].quote == RULE.quote
+    assert {k: again["plan"][k] for k in ("status", "spray_acres")} == {k: direct["plan"][k] for k in ("status", "spray_acres")}
+
+
+def test_loaded_label_is_reverified(tmp_path):
+    raw = raw_label()
+    raw["out"]["rules"][0]["quote"] = "Do not apply within 5 feet of water."  # not on the label
+    pipeline.save_inputs(tmp_path / "c", FIELD, raw, {"water": [], "building": [], "habitat": []}, bulletin(), "2026-11")
+    _, lbl, *_ = pipeline.load_inputs(tmp_path / "c")
+    assert lbl.rules == [] and lbl.dropped[0]["reason"] == "quote not found in label text"

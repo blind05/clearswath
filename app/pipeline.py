@@ -3,7 +3,7 @@
 import json
 from pathlib import Path
 
-from shapely.geometry import mapping
+from shapely.geometry import mapping, shape
 
 from app import buffers, bulletins, geo, label_reader, segment
 
@@ -59,6 +59,27 @@ def assemble(field, label, hazards: dict, bulletin: dict, month: str, method: st
 
     return {"field": field, "month": month, "label": label, "hazards": hazards,
             "bulletin": bulletin, "plan": plan, "warnings": warnings, "excluded_rules": excluded}
+
+
+def save_inputs(cache_dir: Path, field, label_raw: dict, hazards: dict, bulletin: dict, month: str) -> None:
+    """Everything a plan needs except the user's choices, as JSON (the demo cache)."""
+    cache_dir = Path(cache_dir)
+    cache_dir.mkdir(parents=True, exist_ok=True)
+    shapes = ("water", "building", "habitat")
+    (cache_dir / "inputs.json").write_text(json.dumps({
+        "month": month, "field": mapping(field), "label_raw": label_raw,
+        "hazards": {k: ([mapping(s) for s in v] if k in shapes else v) for k, v in hazards.items()},
+        "bulletin": bulletin | {"restricted": [mapping(s) for s in bulletin["restricted"]]},
+    }))
+
+
+def load_inputs(cache_dir: Path) -> tuple:
+    """(field, label, hazards, bulletin, month) from save_inputs. The label's quotes are re-verified."""
+    d = json.loads((Path(cache_dir) / "inputs.json").read_text())
+    shapes = ("water", "building", "habitat")
+    hazards = {k: ([shape(g) for g in v] if k in shapes else v) for k, v in d["hazards"].items()}
+    bulletin = d["bulletin"] | {"restricted": [shape(g) for g in d["bulletin"]["restricted"]]}
+    return shape(d["field"]), label_reader.verify(d["label_raw"]), hazards, bulletin, d["month"]
 
 
 def save_run(result: dict, run_dir: Path) -> None:

@@ -132,6 +132,8 @@ function render(r) {
   const status = { go: "GO", adjust: "ADJUST", "no-go": "NO-GO" }[r.status];
   const acres = r.acres;
   out.replaceChildren(...[
+    r.demo ? el("p", { class: "meta" }, `Demo field${r.demo.cached ? ` (saved run, bulletin for ${r.demo.month})` : ""} \u00b7 `,
+      el("a", { href: "#", id: "demo-switch" }, r.demo.field ? "Show the field drawn up to the creek" : "Show the corrected field")) : null,
     el("div", { id: "status", class: r.status }, status),
     el("div", { class: "acres" },
       el("div", {}, el("b", {}, acres.field_acres.toFixed(1)), el("small", {}, "field ac")),
@@ -246,10 +248,23 @@ form.addEventListener("submit", (e) => {
   };
   rerun("");
 });
+let demoField = "";
+function demoRun(excluded) {
+  const q = `month=${form.month.value}&method=${form.method.value}&field=${demoField}`;
+  return call(`/api/demo?${q}&excluded_rules=${excluded}`);
+}
 $("#demo").addEventListener("click", () => {
-  const q = `month=${form.month.value}&method=${form.method.value}`;
-  rerun = (excluded) => call(`/api/demo?${q}&excluded_rules=${excluded}`);
+  demoField = "";
+  rerun = demoRun;
   rerun("");
+});
+// Switch between the demo outlines, keeping the user's unticked rules (same label, same ids).
+$("#result").addEventListener("click", (e) => {
+  if (e.target.id !== "demo-switch") return;
+  e.preventDefault();
+  demoField = demoField ? "" : "corrected";
+  const off = [...document.querySelectorAll("[data-rule]")].filter((b) => !b.checked).map((b) => b.dataset.rule);
+  rerun(off.join(","));
 });
 </script>
 </body>

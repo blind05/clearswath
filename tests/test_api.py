@@ -7,6 +7,7 @@ from shapely.geometry import Polygon, box, mapping
 from app import api, imagery, label_reader, llm, pipeline, records
 from app.label_reader import LabelRules
 
+REAL_TO_JSON = pipeline.to_json  # the client fixture stubs it; the cached demo test needs the real one
 FIELD = box(-93.0, 42.0, -92.99, 42.01)
 SPRAY = box(-93.0, 42.0, -92.995, 42.01)
 NO_SPRAY = box(-92.995, 42.0, -92.99, 42.01)
@@ -276,3 +277,42 @@ def test_label_service_error_is_a_friendly_502(client, monkeypatch):
     monkeypatch.setattr(label_reader, "read_label", boom)
     r = client.post("/api/label", files={"label": ("x.pdf", b"%PDF")})
     assert r.status_code == 502 and "connection reset" not in r.text
+
+
+@pytest.fixture
+def cached_demo(tmp_path, monkeypatch):
+    from shapely.geometry import box as _box
+
+    from app import bulletins, segment
+
+    quote = "Do not apply within 100 feet of water."
+    raw = {"pages": ["Acme", f"x {quote}"], "source": "pdf",
+           "out": {"product_name": "Acme", "epa_reg_no": "1-2", "rules": [
+               {"kind": "buffer", "target": "water", "applies_to": "all", "value": 100, "unit": "ft",
+                "summary": "100 ft from water", "quote": quote, "page": 2, "condition": None}]}}
+    pond = _box(-92.98995, 42.0, -92.9899, 42.01)  # ~4 m east of FIELD's east edge
+    blt = {"in_pula": False, "prohibited": False, "limitations": [], "restricted": [], "citation": "c",
+           "checked": True}
+    for name in ("field", "field_corrected"):
+        pipeline.save_inputs(tmp_path / "demo" / "cache" / name, FIELD, raw,
+                             {"water": [pond], "building": [], "habitat": [], "imagery_date": "2022-08-03"},
+                             blt, "2026-11")
+
+    def offline(*a, **kw):
+        raise AssertionError("the cached demo must not go live")
+
+    for mod, fn in ((pipeline, "run"), (segment, "find_hazards"), (bulletins, "check_bulletin")):
+        monkeypatch.setattr(mod, fn, offline)
+    monkeypatch.setattr(pipeline, "to_json", REAL_TO_JSON)
+
+
+def test_cached_demo_is_offline_and_recomputed(client, cached_demo):
+    r = client.get("/api/demo?method=ground&field=corrected")
+    body = r.json()
+    assert r.status_code == 200 and body["demo"] == {"field": "corrected", "cached": True, "month": "2026-11"}
+    assert body["status"] == "adjust" and body["reasons"][0]["distance_ft"] == 100
+    assert client.get(f"/api/kml/{body['run_id']}").status_code == 200
+
+
+def test_demo_rejects_unknown_field(client):
+    assert client.get("/api/demo?field=other").status_code == 422

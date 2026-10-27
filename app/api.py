@@ -129,14 +129,37 @@ def record(run_id: str = Form(...), audio: UploadFile | None = File(None), text:
         raise _http_error(e) from e
 
 
+DEMO_FIELDS = {"": "field", "corrected": "field_corrected"}
+
+
 @app.get("/api/demo")
-def demo(month: str | None = None, method: str = "drone", excluded_rules: str = ""):
+def demo(month: str | None = None, method: str = "drone", excluded_rules: str = "", field: str = ""):
+    """The demo field. From data/demo/cache when present (offline, instant; the plan is still recomputed),
+    else live. field=corrected is the outline pulled back from the creek."""
+    if field not in DEMO_FIELDS:
+        raise HTTPException(422, f"field must be one of {sorted(k for k in DEMO_FIELDS if k)} or empty")
+    name = DEMO_FIELDS[field]
+    cache = DEMO / "cache" / name
+    if (cache / "inputs.json").exists():
+        if method not in METHODS:
+            raise HTTPException(422, f"method must be one of {sorted(METHODS)}")
+        excluded = _rule_ids(excluded_rules)
+        try:
+            shape_, label, hazards, bulletin, cached_month = pipeline.load_inputs(cache)
+            result = pipeline.assemble(shape_, label, hazards, bulletin, cached_month, method, excluded)
+        except Exception as e:
+            raise _http_error(e) from e
+        run_id = uuid.uuid4().hex
+        pipeline.save_run(result, RUNS / run_id)
+        return {"run_id": run_id, **pipeline.to_json(result),
+                "demo": {"field": field, "cached": True, "month": cached_month}}
     labels = [p for p in DEMO.glob("label.*") if p.suffix.lower() in LABEL_SUFFIXES]
-    field = DEMO / "field.geojson"
-    if not field.exists() or not labels:
-        raise HTTPException(404, "Demo files missing: add data/demo/field.geojson and data/demo/label.pdf")
-    return _plan(uuid.uuid4().hex, field, labels[0], month or date.today().strftime("%Y-%m"), method,
-                 excluded_rules=excluded_rules)
+    path = DEMO / f"{name}.geojson"
+    if not path.exists() or not labels:
+        raise HTTPException(404, f"Demo files missing: add data/demo/{name}.geojson and data/demo/label.pdf")
+    month = month or date.today().strftime("%Y-%m")
+    out = _plan(uuid.uuid4().hex, path, labels[0], month, method, excluded_rules=excluded_rules)
+    return out | {"demo": {"field": field, "cached": False, "month": month}}
 
 
 @app.get("/api/kml/{run_id}")

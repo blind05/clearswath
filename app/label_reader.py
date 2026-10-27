@@ -102,8 +102,9 @@ def _check(rule: dict, pages: list[str]) -> str | None:
     return None
 
 
-def _read(path: Path, provider: str | None) -> dict:
+def read_raw(path: str | Path, provider: str | None = None) -> dict:
     """The model's part: page text (a transcription for photos) and raw rules. Cached on disk per model."""
+    path = Path(path)
     prompt = llm.load_prompt("label")
     key = hashlib.sha256(path.read_bytes() + prompt.encode() + llm.spark_model(provider).encode()
                          + json.dumps(SCHEMA, sort_keys=True).encode()).hexdigest()[:20]
@@ -126,7 +127,11 @@ def read_label(path: str | Path, provider: str | None = None) -> LabelRules:
 
     provider picks the Spark that extracts rules (llm.resolve_provider); photos are transcribed on Meta.
     """
-    raw = _read(Path(path), provider)
+    return verify(read_raw(path, provider))
+
+
+def verify(raw: dict) -> LabelRules:
+    """Checks every rule's quote against the page text; failures go to `dropped`. Pure code, no model."""
     pages, source, out = raw["pages"], raw["source"], raw["out"]
     rules, dropped = [], []
     for r in out["rules"]:
