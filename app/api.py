@@ -38,12 +38,13 @@ log = logging.getLogger(__name__)
 app = FastAPI(title="ClearSwath")
 
 
-PAID_PATHS = {"/api/plan", "/api/agent", "/api/label", "/api/record"}
+FREE_METHODS = {"GET", "HEAD"}  # the free endpoints (demo, KML, health) are all reads
 
 
 class Guard:
     """Runs before FastAPI reads a body (it parses uploads before route dependencies run):
-    refuses a declared oversize body, gates paid endpoints from the headers alone, and counts the bytes that
+    refuses a declared oversize body, gates every non-GET /api/ request from the headers alone (so a new paid
+    endpoint is covered without being listed), and counts the bytes that
     actually arrive (chunked bodies too), stopping at REQUEST_MAX. _save then enforces per-file limits."""
 
     def __init__(self, app):
@@ -57,7 +58,7 @@ class Guard:
             size = request.headers.get("content-length", "")
             if size.isdigit() and int(size) > REQUEST_MAX:
                 raise HTTPException(413, f"Request too large: the limit is {REQUEST_MAX // MB} MB.")
-            if scope["path"] in PAID_PATHS and scope["method"] == "POST":
+            if scope["method"] not in FREE_METHODS:  # deny by default: any write under /api/ is a paid run
                 paid_access(request)
         except HTTPException as e:
             return await JSONResponse({"detail": e.detail}, status_code=e.status_code)(scope, receive, send)

@@ -536,3 +536,29 @@ def test_lru_evicts_the_least_recently_hit(monkeypatch):
     api._add(table, "a", 3.0)  # a is now the most recent
     api._add(table, "c", 4.0)  # evicts b, not a
     assert list(table) == ["a", "c"] and list(table["a"]) == [1.0, 3.0]
+
+
+def test_any_new_api_write_is_gated_without_being_listed(client, monkeypatch):
+    monkeypatch.setenv("ACCESS_CODE", "s3cret-code-for-tests")
+    ran = []
+
+    @api.app.post("/api/test-only-new-endpoint")
+    def new_endpoint():
+        ran.append(1)
+        return {"ok": True}
+
+    # routes are matched in order and "/" is mounted last, so move the new route ahead of the static mount
+    api.app.router.routes.insert(0, api.app.router.routes.pop())
+    try:
+        assert client.post("/api/test-only-new-endpoint").status_code == 401 and ran == []
+        ok = client.post("/api/test-only-new-endpoint", headers={"X-Access-Code": "s3cret-code-for-tests"})
+        assert ok.status_code == 200 and ran == [1]
+    finally:
+        api.app.router.routes[:] = [r for r in api.app.router.routes
+                                    if getattr(r, "path", "") != "/api/test-only-new-endpoint"]
+
+
+def test_reads_stay_free(client, monkeypatch):
+    monkeypatch.setenv("CLEARSWATH_LIVE_MODE", "off")
+    assert client.get("/api/health").status_code == 200
+    assert client.head("/api/health").status_code not in (401, 429, 503)  # never gated, whatever it returns
