@@ -203,6 +203,22 @@ const RECORD_FIELDS = [
   ["wind_direction", "Wind from"], ["temperature_f", "Temp (°F)"], ["notes", "Notes"],
 ];
 
+const PART137_FIELDS = [
+  ["customer_name", "Customer"], ["customer_address", "Customer address"], ["service_date", "Date of service"],
+  ["material", "Material dispensed"], ["quantity", "Quantity"], ["pilot_name", "Pilot"],
+  ["pilot_address", "Pilot address"], ["pilot_certificate_number", "Pilot FAA certificate no."],
+  ["pilot_knowledge_test_date", "Pilot met 137.19(e) on"],
+];
+
+function part137Table(p) {
+  return [
+    el("h2", {}, "FAA Part 137 record"),
+    el("p", { class: "meta" }, "14 CFR 137.71, for commercial agricultural aircraft operators: keep at your home base for at least 12 months."),
+    el("table", { class: "rec" }, PART137_FIELDS.map(([k, name]) => el("tr", { class: p.missing.includes(k) ? "gap" : "" },
+      el("th", {}, name), el("td", {}, p[k] ?? "\u2014")))),
+  ];
+}
+
 async function recordApplication(e, runId) {
   e.preventDefault();
   const f = e.target, out = $("#record-out"), body = new FormData();
@@ -220,8 +236,9 @@ async function recordApplication(e, runId) {
         el("ul", {}, rec.missing.map((k) => el("li", {}, RECORD_FIELDS.find(([f]) => f === k)?.[1] || k)))) : null,
       el("table", { class: "rec" }, RECORD_FIELDS.map(([k, name]) => el("tr", { class: rec.missing.includes(k) ? "gap" : "" },
         el("th", {}, name), el("td", {}, rec[k] ?? "—")))),
+      rec.part137 ? part137Table(rec.part137) : null,
       el("p", { class: "meta" }, `Heard: “${rec.transcript}”`),
-    ].filter(Boolean));
+    ].flat().filter(Boolean));
   } catch (err) {
     out.replaceChildren(el("p", { class: "error" }, err.message));
   } finally {

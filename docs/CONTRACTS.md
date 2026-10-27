@@ -15,7 +15,7 @@ Don't change a contract unless the human asks.
 | `app/buffers.py` | `plan(field, hazards, rules, restricted, method, prohibited)` | shapes and rules | `{status, method, field_acres, spray_acres, excluded_acres, spray_zone, no_spray, reasons}` |
 | `app/pipeline.py` | `run(field_path, label_path, month, method, excluded_rules=())`, `assemble(...)`, `to_json(result)`, `save_inputs()`/`load_inputs()` (demo cache) | paths and options; ids of rules the user unticked | full result; JSON with map layers, `confirm` and `excluded_rules` for the page |
 | `app/agent.py` | `run(field_path, label_path, month, method, excluded_rules=(), provider=None)` | same | `{run_id, answer, decision, trace, mode, result}`; `result` is what `pipeline.run` returns |
-| `app/records.py` | `transcribe(path)`, `fill_record(text, job)` | audio; transcript and job dict | text; `AppRecord` with `missing` list |
+| `app/records.py` | `transcribe(path)`, `fill_record(text, job)` | audio; transcript and job dict | text; `AppRecord` with `missing` list; drone/aerial jobs add `part137` (14 CFR 137.71 items, own `missing` list) |
 | `app/api.py` | `/api/demo`, `/api/label`, `/api/plan`, `/api/agent`, `/api/kml/{id}`, `/api/record` | form uploads | JSON for `web/index.html` |
 
 Every label rule is applied. Buffer rules with a `condition` (e.g. "ULV aerial only"), and every rule

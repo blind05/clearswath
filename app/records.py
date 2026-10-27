@@ -16,13 +16,33 @@ FROM_NOTES = {
     "start_time": "string", "end_time": "string", "amount_applied": "string", "rate": "string",
     "crop_or_site": "string", "wind_speed_mph": "number", "wind_direction": "string",
     "temperature_f": "number", "notes": "string",
+    # FAA Part 137 (14 CFR 137.71) items the plan can't know
+    "customer_name": "string", "customer_address": "string", "pilot_name": "string", "pilot_address": "string",
+    "pilot_certificate_number": "string", "pilot_knowledge_test_date": "string",
 }
+PART137_FROM_NOTES = ["customer_name", "customer_address", "pilot_name", "pilot_address",
+                      "pilot_certificate_number", "pilot_knowledge_test_date"]
+AIR_METHODS = {"drone", "aerial"}
 SCHEMA = {
     "type": "object",
     "properties": {k: {"type": [t, "null"]} for k, t in FROM_NOTES.items()},
     "required": list(FROM_NOTES),
     "additionalProperties": False,
 }
+
+
+class Part137(BaseModel):
+    """14 CFR 137.71: records a commercial agricultural aircraft operator keeps at its home base for 12 months."""
+    customer_name: str | None = None  # person the service was provided for
+    customer_address: str | None = None
+    service_date: str | None = None
+    material: str | None = None  # name of the material dispensed
+    quantity: str | None = None
+    pilot_name: str | None = None
+    pilot_address: str | None = None
+    pilot_certificate_number: str | None = None  # FAA certificate, not the state applicator certification
+    pilot_knowledge_test_date: str | None = None  # date the pilot met 137.19(e)
+    missing: list[str] = []
 
 
 class AppRecord(BaseModel):
@@ -45,6 +65,7 @@ class AppRecord(BaseModel):
     notes: str | None = None
     transcript: str = ""
     missing: list[str] = []
+    part137: Part137 | None = None  # drone and aerial jobs only
 
 
 def transcribe(path: str | Path) -> str:
@@ -57,8 +78,16 @@ def fill_record(text: str, job: dict, today: date | None = None) -> AppRecord:
     found = llm.chat_json([{"role": "system", "content": llm.load_prompt("record")},
                            {"role": "user", "content": f"Today is {today.isoformat()}.\n\nNotes:\n{text}"}],
                           SCHEMA, "app_record", purpose="record")
-    fields = {k: v for k, v in found.items() if k in FROM_NOTES and v not in (None, "")}
+    found = {k: v for k, v in found.items() if k in FROM_NOTES and v not in (None, "")}
+    fields = {k: v for k, v in found.items() if k in AppRecord.model_fields}
     fields |= {k: v for k, v in job.items() if k in AppRecord.model_fields and v not in (None, "")}
     record = AppRecord(**fields, transcript=text)
     record.missing = [k for k in REQUIRED if getattr(record, k) in (None, "")]
+    if record.method in AIR_METHODS:
+        material = record.product_name and (f"{record.product_name} (EPA Reg. No. {record.epa_reg_no})"
+                                            if record.epa_reg_no else record.product_name)
+        p137 = Part137(**{k: found.get(k) for k in PART137_FROM_NOTES}, service_date=record.application_date,
+                       material=material, quantity=record.amount_applied)
+        p137.missing = [k for k in Part137.model_fields if k != "missing" and getattr(p137, k) in (None, "")]
+        record.part137 = p137
     return record

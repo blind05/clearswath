@@ -75,3 +75,7 @@ def test_demo_record_uses_the_plan(client, monkeypatch):
     assert r.status_code == 200 and rec["product_name"] == "Warrior II with Zeon Technology"
     assert rec["epa_reg_no"] == "100-1295" and rec["area_treated_acres"] == pytest.approx(31.17, abs=0.05)
     assert rec["method"] == "drone" and rec["missing"] == ["certification_number"]
+    p137 = rec["part137"]
+    assert p137["material"] == "Warrior II with Zeon Technology (EPA Reg. No. 100-1295)"
+    assert p137["quantity"] == "12 gal" and p137["service_date"] == "2026-11-02"
+    assert "pilot_certificate_number" in p137["missing"]

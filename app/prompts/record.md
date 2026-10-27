@@ -12,3 +12,10 @@ value, and never fill a field from general knowledge.
 - wind_direction: compass direction the wind came from (e.g. "NW").
 - temperature_f: number in degrees Fahrenheit; convert if another unit was used.
 - notes: anything else the applicator said that belongs on the record, briefly. Null if nothing.
+
+For aerial and drone jobs (FAA Part 137):
+- customer_name, customer_address: who the job was done for, only if said.
+- pilot_name, pilot_address: who flew the aircraft or drone, only if said. Don't assume the applicator flew.
+- pilot_certificate_number: the pilot's FAA certificate number. This is NOT the state pesticide applicator
+  certification number (certification_number); never copy one into the other.
+- pilot_knowledge_test_date: YYYY-MM-DD the pilot passed the Part 137 knowledge and skill test, only if said.

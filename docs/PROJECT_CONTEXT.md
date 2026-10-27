@@ -132,7 +132,7 @@ Update the Status column as work lands.
 | Wed Oct 28 | `find_hazards` (SAM + USGS fallback + cache); Muse Spark Open provider | `find_hazards` done (20dc032, a77ec84). Baseten provider built for the label reader and agent (`chat_json` via a forced tool call); not yet run live (needs `BASETEN_API_KEY`) |
 | Thu Oct 29 | Buffer engine + distance tests + KML | Done (4dc0467, KML in a17fe5a) |
 | Fri Oct 30 | Bulletin check, pipeline, agent | Done (c44426c, 1dd8744, d1ffaa6, 4912ccd, ca77b87). BLT queried live, not cached; agent citation check not built |
-| Sat Oct 31 | Voice records, demo data, demo cache, e2e test, Playwright recorder | Records done (e859490, be4a4fa); WAV-only transcribe this session. Demo field (eastern SD, public NAIP; mistake + corrected outlines) and offline demo cache done; drone story verified in the browser (ADJUST -> untick ULV -> corrected GO). Offline e2e test pins the demo story (`tests/test_e2e.py`). Part 137 row and recorder not started |
+| Sat Oct 31 | Voice records, demo data, demo cache, e2e test, Playwright recorder | Records done (e859490, be4a4fa); WAV-only transcribe this session. Demo field (eastern SD, public NAIP; mistake + corrected outlines) and offline demo cache done; drone story verified in the browser (ADJUST -> untick ULV -> corrected GO). Offline e2e test pins the demo story (`tests/test_e2e.py`). Part 137 row done (14 CFR 137.71 items, commercial operators; verified live). Recorder not started |
 | Sun Nov 1 | Web app, polish, deploy to Render | Web page up (08d9ec6) with GeoJSON upload; Leaflet.draw, USGS tiles, Dockerfile, deploy not started |
 | Mon Nov 2 | Evals (both providers), prompt tuning. **Feature freeze tonight** | |
 | Tue Nov 3 | README, video pipeline, record and edit the video | |

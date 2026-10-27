@@ -54,3 +54,27 @@ def test_transcribe_uses_voice_model(monkeypatch, tmp_path):
     seen = {}
     monkeypatch.setattr(llm, "transcribe", lambda p, purpose: seen.update(p=p, purpose=purpose) or "hello")
     assert records.transcribe(audio) == "hello" and seen == {"p": audio, "purpose": "record"}
+
+
+def test_drone_job_gets_a_part137_row(monkeypatch):
+    fake_model(monkeypatch, applicator_name="Sam Ortiz", certification_number="IA-12345",
+               application_date="2026-10-26", amount_applied="12 gal", customer_name="Lund Farms",
+               pilot_name="Ana Diaz", pilot_certificate_number="FAA-4402")
+    p = records.fill_record("...", JOB).part137
+    assert p.material == "INTREPID 2F (EPA Reg. No. 62719-442)" and p.quantity == "12 gal"
+    assert p.service_date == "2026-10-26" and p.customer_name == "Lund Farms"
+    assert p.pilot_name == "Ana Diaz" and p.pilot_certificate_number == "FAA-4402"
+    assert p.missing == ["customer_address", "pilot_address", "pilot_knowledge_test_date"]
+
+
+def test_state_certification_never_becomes_the_pilot_certificate(monkeypatch):
+    fake_model(monkeypatch, applicator_name="Sam Ortiz", certification_number="IA-12345")
+    rec = records.fill_record("...", JOB)
+    assert rec.certification_number == "IA-12345" and rec.part137.pilot_certificate_number is None
+    assert rec.part137.pilot_name is None  # the applicator is not assumed to be the pilot
+    assert "customer_name" not in rec.missing  # Part 137 gaps stay in their own list
+
+
+def test_ground_job_has_no_part137_row(monkeypatch):
+    fake_model(monkeypatch)
+    assert records.fill_record("...", JOB | {"method": "ground"}).part137 is None
