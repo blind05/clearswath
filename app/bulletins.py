@@ -1,17 +1,22 @@
 """EPA Bulletins Live! Two: Pesticide Use Limitation Areas (PULAs) that touch a field."""
 
+import hashlib
 import json
 import re
+import time
 from datetime import date, datetime, timezone
+from pathlib import Path
 
 import httpx
 from shapely import union_all
-from shapely.geometry import shape
+from shapely.geometry import mapping, shape
 
 from app import geo
 
 BLT = "https://blt.epa.gov/arcgis/rest/services/BLT/PesticideUsageLimitationAreas/MapServer"
 BLT_APP = "https://www.epa.gov/endangered-species/bulletins-live-two-view-bulletins"
+CACHE = Path(__file__).resolve().parent.parent / "data" / "cache" / "blt"
+MAX_AGE_S = 7 * 24 * 3600  # EPA updates PULAs; a week covers a demo without hiding real changes
 REG_NO = re.compile(r"^\s*(\d+-\d+)")  # base reg no; drops distributor suffix
 # ponytail: keyword match on limitation text; anything else is listed for the applicator to read
 PROHIBITS = re.compile(r"\bdo not (apply|use)\b", re.I)
@@ -34,7 +39,26 @@ def _month_end_ms(month: str) -> int:
 
 
 def check_bulletin(field_path, month: str, reg_no: str) -> dict:
-    """month is 'YYYY-MM'. Limitations for every application method are included."""
+    """month is 'YYYY-MM'. Limitations for every application method are included.
+
+    Successful checks are cached per field, month and product for MAX_AGE_S; failed ones never are.
+    The citation keeps the date BLT was actually queried."""
+    base = REG_NO.match(reg_no or "")
+    key = hashlib.sha256(Path(field_path).read_bytes()
+                         + f"|{month}|{base[1] if base else reg_no}".encode()).hexdigest()[:20]
+    cached = CACHE / f"{key}.json"
+    if cached.exists() and time.time() - cached.stat().st_mtime < MAX_AGE_S:
+        out = json.loads(cached.read_text())
+        return out | {"restricted": [shape(g) for g in out["restricted"]]}
+    out = _check(field_path, month, reg_no)
+    if out["checked"]:
+        CACHE.mkdir(parents=True, exist_ok=True)
+        cached.write_text(json.dumps(out | {"restricted": [mapping(g) for g in out["restricted"]]}))
+    return out
+
+
+def _check(field_path, month: str, reg_no: str) -> dict:
+    """The live BLT query behind check_bulletin."""
     field = geo.load_field(field_path)
     out = {"in_pula": False, "prohibited": False, "limitations": [], "restricted": [],
            "citation": f"Could not check Bulletins Live! Two. Check by hand at {BLT_APP}",

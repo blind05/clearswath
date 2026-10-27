@@ -10,6 +10,12 @@ FIELD = box(-87.513, 44.741, -87.511, 44.743)
 SEPT_2014 = 1410134400000  # PULA 2's real effective_date
 
 
+@pytest.fixture(autouse=True)
+def cache(tmp_path, monkeypatch):
+    monkeypatch.setattr(bulletins, "CACHE", tmp_path / "blt_cache")
+    return tmp_path / "blt_cache"
+
+
 @pytest.fixture
 def field_path(tmp_path):
     p = tmp_path / "field.geojson"
@@ -115,3 +121,34 @@ def test_bad_month_raises(field_path):
 
 def test_month_end():
     assert bulletins._month_end_ms("2026-12") == 1798761600000  # 2027-01-01
+
+
+def test_checked_result_is_cached(monkeypatch, field_path, cache):
+    calls = fake_blt(monkeypatch, [pula(2, box(-88, 44, -87.512, 45))], [limitation(2, "Do not apply in this area.")])
+    first = bulletins.check_bulletin(field_path, "2026-11", "62719-442")
+    second = bulletins.check_bulletin(field_path, "2026-11", "62719-442")
+    assert len(calls) == 2  # one PULA query + one limitations query, only on the first call
+    assert second["restricted"][0].equals(first["restricted"][0]) and second["citation"] == first["citation"]
+    bulletins.check_bulletin(field_path, "2026-12", "62719-442")  # another month is another entry
+    assert len(calls) == 4 and len(list(cache.iterdir())) == 2
+
+
+def test_failed_check_is_not_cached(monkeypatch, field_path, cache):
+    def down(*a, **kw):
+        raise httpx.ConnectError("down")
+
+    monkeypatch.setattr(bulletins, "_query", down)
+    assert not bulletins.check_bulletin(field_path, "2026-11", "62719-442")["checked"]
+    assert not cache.exists() or not list(cache.iterdir())
+
+
+def test_cache_expires(monkeypatch, field_path, cache):
+    import os
+
+    calls = fake_blt(monkeypatch, [], [])
+    bulletins.check_bulletin(field_path, "2026-11", "62719-442")
+    (path,) = cache.iterdir()
+    old = path.stat().st_mtime - bulletins.MAX_AGE_S - 1
+    os.utime(path, (old, old))
+    bulletins.check_bulletin(field_path, "2026-11", "62719-442")
+    assert len(calls) == 2
