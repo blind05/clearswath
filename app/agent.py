@@ -80,7 +80,7 @@ def _agent_loop(job: _Job, trace: list) -> str | None:
     for _ in range(MAX_STEPS):
         try:
             msg = llm.chat(messages, tools=TOOLS, purpose="agent")
-        except Exception as e:  # TODO(verify): tool calling on api.meta.ai; any model failure falls back
+        except Exception as e:  # any model failure falls back to the pipeline
             raise _ModelError() from e
         if not msg.tool_calls:
             return msg.content

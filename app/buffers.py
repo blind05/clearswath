@@ -9,7 +9,7 @@ M_PER_UNIT = {"ft": FT_TO_M, "feet": FT_TO_M, "foot": FT_TO_M, "m": 1.0, "meters
 SQM_PER_ACRE = 4046.8564224
 MIN_ACRES = 0.01  # below this an area counts as nothing
 # EPA treats drone application as aerial for label purposes.
-METHOD_ALIASES = {"drone": "aerial"}  # TODO(verify): applies_to vocabulary once label_reader exists
+METHOD_ALIASES = {"drone": "aerial"}  # label_reader limits applies_to to all/aerial/ground
 HAZARD_KINDS = ("water", "building", "habitat")
 
 

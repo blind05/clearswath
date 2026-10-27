@@ -67,7 +67,7 @@ def chat(messages: list[dict], tools: list[dict] | None = None, *,
     """Returns the reply message (with .content and .tool_calls)."""
     kwargs = {"model": model, "messages": messages}
     if tools:
-        kwargs["tools"] = tools  # TODO(verify): tool-calling shape on api.meta.ai
+        kwargs["tools"] = tools
     return _complete(purpose, **kwargs).choices[0].message
 
 
@@ -75,7 +75,6 @@ def chat_json(messages: list[dict], schema: dict, name: str, *,
               purpose: str = "", model: str = SPARK) -> dict:
     if schema.get("type") != "object":
         raise ValueError("chat_json schema must have an object root")
-    # TODO(verify): json_schema response_format support on api.meta.ai
     fmt = {"type": "json_schema", "json_schema": {"name": name, "schema": schema, "strict": True}}
     resp = _complete(purpose, model=model, messages=messages, response_format=fmt)
     return json.loads(resp.choices[0].message.content)
@@ -89,7 +88,7 @@ def sam_raw(png: str | Path, phrase: str, include_confidence: bool = True, *, pu
         {"type": "input_text", "text": phrase},
     ]}]}
     if include_confidence:
-        req["metadata"] = {"include_confidence": "true"}  # TODO(verify): confidence via metadata
+        req["metadata"] = {"include_confidence": "true"}
     resp = client().responses.create(**req)
     text, usage = resp.output_text, resp.usage
     if not text:
@@ -135,7 +134,7 @@ def transcribe(audio_path: str | Path, *, purpose: str = "", mode: str = "ENDPOI
                keywords: list[str] | None = None) -> str:
     """Muse Voice Transcribe on a WAV file: multipart `request` JSON + `audio`; text is in `transcript`."""
     check_wav(audio_path)
-    request = {"mode": mode, "model": VOICE, "audioEncoding": "WAV"}  # TODO(verify): modes besides ENDPOINTING
+    request = {"mode": mode, "model": VOICE, "audioEncoding": "WAV"}  # only ENDPOINTING tried live
     if keywords:
         request["keywords"] = keywords
     start = time.perf_counter()
