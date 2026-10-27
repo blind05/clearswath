@@ -90,14 +90,30 @@ def test_to_json_is_serializable(monkeypatch, field_path):
     assert out["label"]["rules"][0]["page"] == 2
 
 
-def test_water_warnings_reach_the_applicator(monkeypatch, field_path):
+def test_missing_water_data_is_no_go(monkeypatch, field_path):
     wire(monkeypatch)
     monkeypatch.setattr(segment, "find_hazards", lambda p: {
         "water": [POND], "building": [], "habitat": [], "imagery_date": "2023-07-09",
-        "water_source": "usgs", "water_warnings": ["USGS pond and lake data was unavailable"]})
+        "water_source": "usgs", "water_warnings": ["USGS stream data was unavailable"]})
     result = pipeline.run(field_path, "label.pdf", "2026-11")
-    assert result["warnings"] == ["USGS pond and lake data was unavailable"]
-    assert result["plan"]["status"] == "adjust"  # warnings never change the decision
+    plan = result["plan"]
+    assert plan["status"] == "no-go" and plan["spray_acres"] == 0 and plan["spray_zone"].is_empty
+    assert {"source": "data", "summary": "USGS stream data was unavailable"} in plan["reasons"]
+    assert result["warnings"] == []  # it's the reason for NO-GO, not repeated as a warning
+
+
+def test_unverified_buffer_rule_is_no_go(monkeypatch, field_path):
+    wire(monkeypatch, lbl=label(dropped=[{"kind": "buffer", "reason": "quote not found in label text"},
+                                         {"kind": "wind", "reason": "quote not found in label text"}]))
+    result = pipeline.run(field_path, "label.pdf", "2026-11")
+    assert result["plan"]["status"] == "no-go"
+    assert any(r["source"] == "data" and r["summary"].startswith("1 buffer rule(s)") for r in result["plan"]["reasons"])
+    assert result["warnings"] == ["1 label rule(s) could not be verified and were not applied. Check the label yourself."]
+
+
+def test_unverified_non_buffer_rule_is_only_a_warning(monkeypatch, field_path):
+    wire(monkeypatch, lbl=label(dropped=[{"kind": "wind", "reason": "quote not found in label text"}]))
+    assert pipeline.run(field_path, "label.pdf", "2026-11")["plan"]["status"] == "adjust"
 
 
 ULV = RULE.model_copy(update={"value": 2000.0, "condition": "ULV aerial only",

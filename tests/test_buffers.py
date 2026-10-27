@@ -104,3 +104,9 @@ def test_a_sliver_below_min_acres_is_neither_excluded_nor_a_reason():
     # the pond is 10 m east of the field and 100 m long; a 10.1 m buffer takes a ~10 m2 sliver (< 0.01 ac)
     out = plan(FIELD, {"water": [POND]}, [rule(10.1, "m")])
     assert out["status"] == "go" and out["excluded_acres"] == 0 and out["reasons"] == []
+
+
+def test_any_gap_is_no_go_with_nothing_sprayable():
+    out = plan(FIELD, {}, [], gaps=["USGS stream data was unavailable"])
+    assert out["status"] == "no-go" and out["spray_acres"] == 0 and out["spray_zone"].is_empty
+    assert out["reasons"] == [{"source": "data", "summary": "USGS stream data was unavailable"}]

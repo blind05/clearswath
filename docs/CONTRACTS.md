@@ -12,7 +12,7 @@ Don't change a contract unless the human asks.
 | `app/segment.py` | `find_hazards(field_path)` | field GeoJSON | `{water, building, habitat, imagery_date, water_source, water_warnings, imagery_warnings}`; cached per field and hazard |
 | `app/label_reader.py` | `read_label(path, provider=None)` (= `verify(read_raw(path, provider))`) | PDF or image | `LabelRules`: product_name, epa_reg_no, rules (kind, target, applies_to, value, unit, summary, quote, page, condition), dropped, source |
 | `app/bulletins.py` | `check_bulletin(field_path, month, reg_no)` | field, month, product | `{in_pula, prohibited, limitations, restricted, citation, checked}` |
-| `app/buffers.py` | `plan(field, hazards, rules, restricted, method, prohibited)` | shapes and rules | `{status, method, field_acres, spray_acres, excluded_acres, spray_zone, no_spray, reasons}` |
+| `app/buffers.py` | `plan(field, hazards, rules, restricted, method, prohibited, gaps=())` | shapes and rules | `{status, method, field_acres, spray_acres, excluded_acres, spray_zone, no_spray, reasons}` |
 | `app/pipeline.py` | `run(field_path, label_path, month, method, excluded_rules=())`, `assemble(...)`, `to_json(result)`, `save_inputs()`/`load_inputs()` (demo cache) | paths and options; ids of rules the user unticked | full result; JSON with map layers, `confirm` and `excluded_rules` for the page |
 | `app/agent.py` | `run(field_path, label_path, month, method, excluded_rules=(), provider=None)` | same | `{run_id, answer, decision, trace, mode, result}`; `result` is what `pipeline.run` returns |
 | `app/records.py` | `transcribe(path)`, `fill_record(text, job)` | audio; transcript and job dict | text; `AppRecord` with `missing` list; drone/aerial jobs add `part137` (14 CFR 137.71 items, own `missing` list) |
@@ -26,7 +26,8 @@ read from a photo, are listed in `confirm`; the user can untick them (`excluded_
 (built by `scripts/build_demo.py`) offline, recomputing the plan each time; without a cache it runs live.
 
 `status` is `go` (nothing removed), `adjust` (some acres removed; the green zone is sprayable)
-or `no-go` (bulletin prohibits, or no sprayable area). It always comes from `buffers.plan`.
+or `no-go` (bulletin prohibits, no sprayable area, or `gaps`: data the plan needs is missing, such as a
+failed USGS water layer or a buffer rule whose quote couldn't be verified; nothing is sprayable then). It always comes from `buffers.plan`.
 
-Every reason in `plan.reasons` has `source` (`label`, `bulletin` or `rule:water`); label
+Every reason in `plan.reasons` has `source` (`label`, `bulletin`, `rule:water` or `data`); label
 reasons also carry `quote`, `page` and `distance_ft`.

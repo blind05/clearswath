@@ -25,8 +25,11 @@ def _acres(geom) -> float:
 
 
 def plan(field: Polygon, hazards: dict, rules: list[dict], restricted=(),
-         method: str = "drone", prohibited: bool = False) -> dict:
-    """restricted: bulletin shapes to exclude. prohibited: bulletin bans the product here."""
+         method: str = "drone", prohibited: bool = False, gaps=()) -> dict:
+    """restricted: bulletin shapes to exclude. prohibited: bulletin bans the product here.
+
+    gaps: missing data the plan needs (e.g. USGS water unavailable). Any gap is NO-GO with nothing sprayable:
+    a zone that couldn't be checked is never handed to a sprayer."""
     utm = gpd.GeoSeries([field], crs=4326).estimate_utm_crs()
 
     def to_utm(shapes):
@@ -42,6 +45,10 @@ def plan(field: Polygon, hazards: dict, rules: list[dict], restricted=(),
 
     if prohibited:
         reasons.append({"source": "bulletin", "summary": "Bulletin prohibits this product here."})
+        zones.append(field_m)
+    for gap in gaps:
+        reasons.append({"source": "data", "summary": gap})
+    if gaps:
         zones.append(field_m)
 
     for rule in rules:
@@ -76,7 +83,7 @@ def plan(field: Polygon, hazards: dict, rules: list[dict], restricted=(),
     no_spray, spray = field_m.intersection(blocked), field_m.difference(blocked)
     spray_acres, excluded_acres = _acres(spray), _acres(no_spray)
 
-    if prohibited or spray_acres < MIN_ACRES:
+    if prohibited or gaps or spray_acres < MIN_ACRES:
         status = "no-go"
     elif excluded_acres >= MIN_ACRES:
         status = "adjust"

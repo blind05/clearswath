@@ -36,8 +36,14 @@ def assemble(field, label, hazards: dict, bulletin: dict, month: str, method: st
     if bad := [i for i in excluded if i not in allowed]:
         raise NotConfirmableError(f"Only conditional or photo-read rules can be unticked (rule ids {bad}).")
     rules = [r for i, r in enumerate(label.rules) if i not in excluded]
+    # Data the plan can't do without. Each makes the plan NO-GO (fail closed) instead of a warning.
+    gaps = list(hazards.get("water_warnings") or [])
+    dropped_buffers = [d for d in label.dropped if d.get("kind") == "buffer"]
+    if dropped_buffers:
+        gaps.append(f"{len(dropped_buffers)} buffer rule(s) on the label could not be verified, so a required "
+                    "setback may be missing. Check the label, or try again.")
     plan = buffers.plan(field, hazards, [r.model_dump() for r in rules],
-                        bulletin["restricted"], method, bulletin["prohibited"])
+                        bulletin["restricted"], method, bulletin["prohibited"], gaps)
 
     warnings = [f"You unticked: {label.rules[i].summary} (label p.{label.rules[i].page}"
                 + (f", only when {label.rules[i].condition}" if label.rules[i].condition else "") + ")."
@@ -48,12 +54,12 @@ def assemble(field, label, hazards: dict, bulletin: dict, month: str, method: st
     for x in unread:
         warnings.append(f"Bulletin limitation (PULA {x['pula_id']}, code {x['code']}) must be read "
                         f"and followed: {x['limitation']}")
-    if label.dropped:
-        warnings.append(f"{len(label.dropped)} label rule(s) could not be verified and were not "
+    if other_dropped := len(label.dropped) - len(dropped_buffers):
+        warnings.append(f"{other_dropped} label rule(s) could not be verified and were not "
                         "applied. Check the label yourself.")
     if label.source == "image":
         warnings.append("Label was read from a photo; quotes were checked against a model transcription.")
-    warnings += (hazards.get("water_warnings") or []) + (hazards.get("imagery_warnings") or [])
+    warnings += hazards.get("imagery_warnings") or []  # water gaps are reasons for NO-GO, not warnings
     if not hazards.get("imagery_date"):
         warnings.append("No aerial imagery date; hazards may be incomplete.")
 
