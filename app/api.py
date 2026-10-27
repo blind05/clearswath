@@ -162,6 +162,12 @@ def demo(month: str | None = None, method: str = "drone", excluded_rules: str = 
     return out | {"demo": {"field": field, "cached": False, "month": month}}
 
 
+@app.get("/api/health")
+def health():
+    """For the host's health check: the app is up. Makes no model or network calls."""
+    return {"ok": True}
+
+
 @app.get("/api/kml/{run_id}")
 def kml(run_id: str):
     path = RUNS / run_id / "plan.geojson"

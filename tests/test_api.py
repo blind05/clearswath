@@ -327,3 +327,8 @@ def test_page_pins_its_scripts(client):
     assert any("leaflet-draw@1.0.4" in t for t in tags) and len(tags) == 4
     assert all('integrity="sha256-' in t for t in tags)
     assert "basemap.nationalmap.gov" in page and "remain responsible" in page
+
+
+def test_health(client):
+    r = client.get("/api/health")
+    assert r.status_code == 200 and r.json() == {"ok": True}
