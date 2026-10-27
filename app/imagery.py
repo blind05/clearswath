@@ -12,15 +12,17 @@ from PIL import Image
 from pystac_client import Client
 from rasterio.enums import Resampling
 from rasterio.transform import Affine
+from rasterio.vrt import WarpedVRT
 from rasterio.warp import transform_bounds
 from rasterio.windows import from_bounds
-from shapely.geometry import shape
+from shapely.geometry import box, shape
 
 from app import geo
 
 STAC_URL = "https://planetarycomputer.microsoft.com/api/stac/v1"
 MARGIN_M = 150  # catch hazards just outside the field that a buffer reaches into
 MAX_PX = 1024
+MAX_ITEMS = 8  # NAIP images tried when filling gaps (newest first)
 STREAM_BUFFER_M = 3  # flowlines become areas so they merge with the other water shapes
 NHD = "https://hydro.nationalmap.gov/arcgis/rest/services/nhd/MapServer"
 NHD_LAYERS = {"waterbody_hr": 12, "flowline_hr": 6}  # Waterbody / Flowline - Large Scale
@@ -37,40 +39,61 @@ def _bounds(field_path, margin_m=MARGIN_M) -> tuple[float, float, float, float]:
     return tuple(s.to_crs(utm).buffer(margin_m).to_crs(4326).total_bounds)
 
 
-def _newest_naip(bounds):
+def _naip_items(bounds) -> list:
+    """NAIP images touching bounds: newest first, and on the same date the one covering more of bounds."""
     catalog = Client.open(STAC_URL, modifier=planetary_computer.sign_inplace)
     items = list(catalog.search(collections=["naip"], bbox=bounds).items())
     if not items:
         raise NoImageryError(f"No NAIP imagery covers {bounds}")
-    # ponytail: newest single tile; fields straddling two NAIP tiles get clipped, mosaic if that bites
-    return max(items, key=lambda i: i.datetime)
+    area = box(*bounds)
+
+    def cover(i):
+        return shape(i.geometry).intersection(area).area if getattr(i, "geometry", None) else 0
+
+    return sorted(items, key=lambda i: (i.datetime, cover(i)), reverse=True)
 
 
 def fetch_tile(field_path, out_png, margin_m=MARGIN_M, max_px=MAX_PX) -> dict:
-    """Writes out_png (RGB) and its .json sidecar (crs, transform, date, width, height). Returns the sidecar.
+    """Writes out_png (RGB) and its .json sidecar (crs, transform, date, dates, empty_fraction, width, height).
 
-    Skips the download when both files already exist."""
+    The grid comes from the newest NAIP image; gaps (a field across an image edge) are filled from the
+    next images, newest first. empty_fraction is what no image covered. Skips the download when cached."""
     out_png = Path(out_png)
     sidecar = out_png.with_suffix(".json")
     if out_png.exists() and sidecar.exists():
         return json.loads(sidecar.read_text())
     bounds = _bounds(field_path, margin_m)
-    item = _newest_naip(bounds)
-    with rasterio.open(item.assets["image"].href) as src:
-        window = from_bounds(*transform_bounds(4326, src.crs, *bounds), src.transform)
+    items = _naip_items(bounds)[:MAX_ITEMS]
+    with rasterio.open(items[0].assets["image"].href) as src:
+        crs = src.crs
+        window = from_bounds(*transform_bounds(4326, crs, *bounds), src.transform)
         window = window.round_offsets().round_lengths()
         scale = min(1.0, max_px / max(window.width, window.height))
         width, height = max(1, round(window.width * scale)), max(1, round(window.height * scale))
-        rgb = src.read([1, 2, 3], window=window, out_shape=(3, height, width),
-                       boundless=True, resampling=Resampling.average)
-        transform = src.window_transform(window) * Affine.scale(window.width / width,
-                                                                window.height / height)
-        crs = src.crs.to_string()
+        transform = src.window_transform(window) * Affine.scale(window.width / width, window.height / height)
+
+    rgb = np.zeros((3, height, width), dtype=np.uint8)
+    filled = np.zeros((height, width), dtype=bool)
+    dates = []
+    for item in items:
+        with rasterio.open(item.assets["image"].href) as src, \
+                WarpedVRT(src, crs=crs, transform=transform, width=width, height=height,
+                          resampling=Resampling.average) as vrt:
+            data = vrt.read([1, 2, 3])
+            # NAIP marks nothing as nodata; outside an image's footprint the pixels are just black
+            valid = (vrt.dataset_mask() > 0) & (data.max(axis=0) > 0) & ~filled
+            if not valid.any():
+                continue
+            rgb[:, valid] = data[:, valid]
+            filled |= valid
+            dates.append(item.datetime.date().isoformat())
+        if filled.all():
+            break
 
     out_png.parent.mkdir(parents=True, exist_ok=True)
-    Image.fromarray(np.moveaxis(rgb, 0, -1).astype(np.uint8)).save(out_png)
-    meta = {"crs": crs, "transform": list(transform)[:6], "date": item.datetime.date().isoformat(),
-            "width": width, "height": height}
+    Image.fromarray(np.moveaxis(rgb, 0, -1)).save(out_png)
+    meta = {"crs": crs.to_string(), "transform": list(transform)[:6], "date": dates[0] if dates else None,
+            "dates": dates, "empty_fraction": round(float(1 - filled.mean()), 4), "width": width, "height": height}
     sidecar.write_text(json.dumps(meta))
     return meta
 

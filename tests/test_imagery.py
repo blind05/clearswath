@@ -147,3 +147,76 @@ def test_usgs_water_empty_is_really_empty(field_path, monkeypatch):
     fake_nhd(monkeypatch, {"waterbody_hr": [fc()], "flowline_hr": [fc()]})
     failed = []
     assert imagery.usgs_water(field_path, failed) == [] and failed == []
+
+
+def serve(monkeypatch, *items):
+    search = SimpleNamespace(items=lambda: iter(items))
+    monkeypatch.setattr(imagery.Client, "open", lambda *a, **kw: SimpleNamespace(search=lambda **kw: search))
+
+
+def item(year, href):
+    return SimpleNamespace(datetime=datetime(year, 7, 1, tzinfo=timezone.utc),
+                           assets={"image": SimpleNamespace(href=str(href))})
+
+
+@pytest.fixture
+def halves(tmp_path):
+    """West-only newer image (value 200, UTM) and a whole-area older image (value 50, lon/lat)."""
+    west = tmp_path / "west.tif"
+    with rasterio.open(west, "w", driver="GTiff", width=600, height=2400, count=4, dtype="uint8", nodata=0,
+                       crs=f"EPSG:{UTM}", transform=from_origin(X - 400, Y + 1400, 1, 1)) as dst:
+        dst.write(np.full((4, 2400, 600), 200, dtype=np.uint8))  # covers x up to X + 200: the west half
+    whole = tmp_path / "whole.tif"
+    w, s_, e, n = gpd.GeoSeries([box(X - 1000, Y - 1000, X + 1400, Y + 1400)], crs=UTM).to_crs(4326).total_bounds
+    with rasterio.open(whole, "w", driver="GTiff", width=1200, height=1200, count=4, dtype="uint8", nodata=0,
+                       crs="EPSG:4326", transform=from_origin(w, n, (e - w) / 1200, (n - s_) / 1200)) as dst:
+        dst.write(np.full((4, 1200, 1200), 50, dtype=np.uint8))
+    return west, whole
+
+
+def test_fetch_tile_fills_gaps_from_older_image(field_path, halves, tmp_path, monkeypatch):
+    west, whole = halves
+    serve(monkeypatch, item(2021, whole), item(2023, west))
+    out = tmp_path / "t.png"
+    meta = imagery.fetch_tile(field_path, out)
+    a = np.asarray(Image.open(out))
+    assert meta["empty_fraction"] == 0 and meta["dates"] == ["2023-07-01", "2021-07-01"]
+    assert meta["date"] == "2023-07-01" and meta["crs"] == f"EPSG:{UTM}"
+    assert a[:, 5, 0].min() == 200 and a[:, -5, 0].max() == 50  # west from the newer, east from the older
+
+
+def test_fetch_tile_reports_what_no_image_covers(field_path, halves, tmp_path, monkeypatch):
+    west, _ = halves
+    serve(monkeypatch, item(2023, west))
+    meta = imagery.fetch_tile(field_path, tmp_path / "t.png")
+    assert meta["dates"] == ["2023-07-01"]
+    assert meta["empty_fraction"] == pytest.approx(0.5, abs=0.05)
+
+
+def test_black_pixels_without_nodata_count_as_gaps(field_path, halves, tmp_path, monkeypatch):
+    """Real NAIP: no nodata value; outside the footprint the pixels are simply 0."""
+    _, whole = halves
+    blackeast = tmp_path / "blackeast.tif"
+    data = np.full((4, 2400, 2400), 200, dtype=np.uint8)
+    data[:, :, 1200:] = 0  # east of X + 200 is black
+    with rasterio.open(blackeast, "w", driver="GTiff", width=2400, height=2400, count=4, dtype="uint8",
+                       crs=f"EPSG:{UTM}", transform=from_origin(X - 1000, Y + 1400, 1, 1)) as dst:
+        dst.write(data)
+    serve(monkeypatch, item(2023, blackeast))
+    assert imagery.fetch_tile(field_path, tmp_path / "a.png")["empty_fraction"] == pytest.approx(0.5, abs=0.05)
+    serve(monkeypatch, item(2023, blackeast), item(2021, whole))
+    meta = imagery.fetch_tile(field_path, tmp_path / "b.png")
+    assert meta["empty_fraction"] == 0 and meta["dates"] == ["2023-07-01", "2021-07-01"]
+
+
+def test_same_date_prefers_the_image_covering_more(field_path, monkeypatch):
+    bounds = imagery._bounds(field_path)
+    w, s_, e, n = bounds
+    part = SimpleNamespace(datetime=datetime(2022, 8, 3, tzinfo=timezone.utc), id="se",
+                           geometry=mapping(box(w, s_, e, (s_ + n) / 2)))
+    full = SimpleNamespace(datetime=datetime(2022, 8, 3, tzinfo=timezone.utc), id="ne",
+                           geometry=mapping(box(w - 1, s_ - 1, e + 1, n + 1)))
+    older = SimpleNamespace(datetime=datetime(2021, 8, 3, tzinfo=timezone.utc), id="old",
+                            geometry=mapping(box(w - 1, s_ - 1, e + 1, n + 1)))
+    serve(monkeypatch, part, older, full)
+    assert [i.id for i in imagery._naip_items(bounds)] == ["ne", "se", "old"]

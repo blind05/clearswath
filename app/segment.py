@@ -89,6 +89,9 @@ def find_hazards(field_path) -> dict:
                              for layer in failed]
     out["water_source"] = "+".join(n for n, s in (("usgs", usgs), ("sam", out["water"])) if s) or "none"
     out["water"] = usgs + out["water"]
-    sidecar = png.with_suffix(".json")
-    out["imagery_date"] = json.loads(sidecar.read_text())["date"] if sidecar.exists() else None
+    meta = json.loads(png.with_suffix(".json").read_text()) if png.with_suffix(".json").exists() else {}
+    out["imagery_date"] = meta.get("date")
+    empty = meta.get("empty_fraction", 0)
+    out["imagery_warnings"] = [f"Aerial imagery is missing for {empty:.0%} of the area around the field, so SAM "
+                               "may have missed water, buildings or tree lines there. Check the map."] if empty > 0.01 else []
     return out

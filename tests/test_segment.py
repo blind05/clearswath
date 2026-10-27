@@ -134,3 +134,21 @@ def test_partial_usgs_warns_and_is_not_cached(tmp_path, monkeypatch):
     assert len(out["water_warnings"]) == 1 and "pond and lake" in out["water_warnings"][0]
     segment.find_hazards(field)
     assert calls == ["usgs", "usgs"]  # retried, not served from cache
+
+
+def test_imagery_gap_becomes_a_warning(tmp_path, monkeypatch):
+    field = tmp_path / "field.geojson"
+    field.write_text(json.dumps({"type": "Polygon", "coordinates": [[[-93, 42], [-93, 42.01],
+                                                                      [-92.99, 42.01], [-93, 42]]]}))
+    monkeypatch.setattr(segment, "CACHE", tmp_path / "cache")
+
+    def fetch_tile(fp, png):
+        png.parent.mkdir(parents=True, exist_ok=True)
+        png.write_bytes(b"png")
+        png.with_suffix(".json").write_text(json.dumps(META | {"empty_fraction": 0.37}))
+
+    monkeypatch.setattr(imagery, "fetch_tile", fetch_tile)
+    monkeypatch.setattr(segment, "segment_tile", lambda png, phrase: [])
+    monkeypatch.setattr(imagery, "usgs_water", lambda fp, failed: [])
+    (w,) = segment.find_hazards(field)["imagery_warnings"]
+    assert "missing for 37%" in w

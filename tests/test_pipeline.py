@@ -137,3 +137,11 @@ def test_conditional_non_buffer_rules_need_no_confirmation(monkeypatch, field_pa
     rice = RULE.model_copy(update={"kind": "other", "target": None, "condition": "rice only"})
     wire(monkeypatch, lbl=label(rules=[RULE, rice, ULV]))
     assert [c["id"] for c in pipeline.to_json(pipeline.run(field_path, "l.pdf", "2026-11"))["confirm"]] == [2]
+
+
+def test_imagery_warnings_reach_the_applicator(monkeypatch, field_path):
+    wire(monkeypatch)
+    monkeypatch.setattr(segment, "find_hazards", lambda p: {
+        "water": [POND], "building": [], "habitat": [], "imagery_date": "2023-07-09",
+        "water_source": "usgs", "imagery_warnings": ["Aerial imagery is missing for 37%"]})
+    assert pipeline.run(field_path, "label.pdf", "2026-11")["warnings"] == ["Aerial imagery is missing for 37%"]
