@@ -28,6 +28,12 @@ def test_matches(pred, ok):
     assert ev.matches(pred, rule()) is ok
 
 
+def test_valueless_rules_match_on_page():
+    drift = {"kind": "wind", "target": None, "applies_to": "all", "value": None, "unit": None}
+    assert ev.matches(drift | {"page": 17}, drift | {"page": 17})
+    assert not ev.matches(drift | {"page": 6}, drift | {"page": 17})
+
+
 def test_score_is_one_to_one():
     keys = [rule(), rule(value=450)]
     s = ev.score([rule(), rule(), rule(value=25)], keys)
@@ -49,6 +55,14 @@ def test_also_valid_counts_for_precision_only():
     s = ev.score([rule(), ny, rule(value=7, kind="rain", target=None, unit="days")], keys, [ny])
     assert s["recall"] == 1.0 and s["precision"] == pytest.approx(2 / 3)
     assert [p["kind"] for p in s["extra"]] == ["rain"]
+
+
+def test_conditions_scored_on_matched_rules():
+    ulv = rule(value=450) | {"conditional": True}
+    s = ev.score([rule(value=450, condition=None), rule(condition="ULV aerial only")], [ulv, rule()])
+    assert s["recall"] == 1.0 and s["conditions"] == 0.0 and len(s["bad_condition"]) == 2
+    s = ev.score([rule(value=450, condition="ULV aerial only"), rule(condition=None)], [ulv, rule()])
+    assert s["conditions"] == 1.0
 
 
 def test_score_empty():

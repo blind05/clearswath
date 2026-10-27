@@ -14,13 +14,17 @@
   ],
   "also_valid_note": "Real label rules that don't matter for the South Dakota demo. Extracting them is not an error (precision), and missing them is not a miss (recall).",
   "also_valid": [
-    {"kind": "buffer", "target": "water", "applies_to": "all", "value": 25, "unit": "ft", "page": 14,
+    {"kind": "buffer", "target": "water", "applies_to": "all", "value": 25, "unit": "ft", "page": 14, "conditional": true,
      "quote": "In the state of New York, a 25 ft vegetated, non-cropped buffer strip untraversed by drainage tiles must be maintained between a treated field and a coastal salt marsh or stream that drains into a coastal salt marsh, for both aerial or ground application."},
-    {"kind": "buffer", "target": "water", "applies_to": "all", "value": 10, "unit": "ft", "page": 13,
+    {"kind": "buffer", "target": "water", "applies_to": "all", "value": 10, "unit": "ft", "page": 13, "conditional": true,
      "quote": "For Western irrigated agriculture, a maintained vegetative filter strip of at least 10 feet wide is required."},
     {"kind": "wind", "target": null, "applies_to": "ground", "value": 15, "unit": "mph", "page": 11,
      "quote": "Do not apply when wind speeds exceed 15 miles per hour at the application site."},
-    {"kind": "wind", "target": null, "applies_to": "all", "value": null, "unit": null, "page": 17,
+    {"kind": "buffer", "target": "water", "applies_to": "all", "value": 15, "unit": "ft", "page": 13, "conditional": true,
+     "quote": "The vegetative filter strip requirement may be reduced from 25 feet to 15 feet if at least one of the following applies:"},
+    {"kind": "wind", "target": null, "applies_to": "all", "value": null, "unit": null, "page": 6,
+     "quote": "Do not apply when weather conditions favor drift from treated areas."},
+    {"kind": "wind", "target": null, "applies_to": "all", "value": null, "unit": null, "page": 17, "conditional": true,
      "quote": "Do not apply when wind speed favors drift beyond the area intended for treatment or non-uniform distribution of treated water."}
   ],
   "rules": [
@@ -34,7 +38,7 @@
       "quote": "Do not apply within 150 feet of aquatic habitats (such as, but not limited to, lakes, reservoirs, rivers, streams, marshes, ponds, estuaries, and commercial fish ponds)."
     },
     {
-      "kind": "buffer", "target": "water", "applies_to": "aerial", "value": 450, "unit": "ft", "page": 14,
+      "kind": "buffer", "target": "water", "applies_to": "aerial", "value": 450, "unit": "ft", "page": 14, "conditional": true,
       "note": "ULV aerial only. The rule schema cannot say 'ULV only', so buffers.plan would apply it to every aerial run.",
       "quote": "Do not apply within 450 feet of aquatic habitats (such as, but not limited to, lakes, reservoirs, rivers, streams, marshes, ponds, estuaries, and commercial fish ponds)."
     },
