@@ -149,9 +149,9 @@ def test_record_from_text(client, fake_records):
 
 def test_record_from_audio(client, fake_records):
     run_id = post_plan(client).json()["run_id"]
-    r = client.post("/api/record", data={"run_id": run_id}, files={"audio": ("note.m4a", b"audio")})
+    r = client.post("/api/record", data={"run_id": run_id}, files={"audio": ("note.wav", b"audio")})
     assert r.status_code == 200 and fake_records["text"] == "heard text"
-    assert fake_records["audio"].name == "note.m4a"
+    assert fake_records["audio"].name == "note.wav"
 
 
 @pytest.mark.parametrize("data, files, code", [
@@ -203,3 +203,19 @@ def test_agent_endpoint_maps_errors(client, monkeypatch):
     monkeypatch.setattr(api.agent, "run", boom)
     r = post_agent(client)
     assert r.status_code == 502 and "NAIP" in r.json()["detail"]
+
+
+def test_record_bad_audio_is_explained(client, monkeypatch):
+    def bad(p):
+        raise llm.BadAudioError("Voice note must be mono 16-bit WAV at 16 or 24 kHz.")
+
+    monkeypatch.setattr(records, "transcribe", bad)
+    run_id = post_plan(client).json()["run_id"]
+    r = client.post("/api/record", data={"run_id": run_id}, files={"audio": ("note.wav", b"x")})
+    assert r.status_code == 422 and "16-bit WAV" in r.json()["detail"]
+
+
+def test_record_rejects_m4a(client):
+    run_id = post_plan(client).json()["run_id"]
+    r = client.post("/api/record", data={"run_id": run_id}, files={"audio": ("note.m4a", b"x")})
+    assert r.status_code == 422 and ".wav" in r.json()["detail"]

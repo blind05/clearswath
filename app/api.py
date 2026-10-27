@@ -18,7 +18,7 @@ ROOT = Path(__file__).resolve().parent.parent
 RUNS = ROOT / "data" / "runs"
 DEMO = ROOT / "data" / "demo"
 LABEL_SUFFIXES = {".pdf", ".png", ".jpg", ".jpeg", ".webp"}
-AUDIO_SUFFIXES = {".m4a", ".mp3", ".wav", ".webm", ".ogg"}
+AUDIO_SUFFIXES = {".wav"}  # Muse Voice Transcribe takes WAV only
 METHODS = {"drone", "aerial", "ground"}
 MONTH = re.compile(r"^\d{4}-(0[1-9]|1[0-2])$")
 RUN_ID = re.compile(r"^[0-9a-f]{32}$")
@@ -31,6 +31,8 @@ def _http_error(e: Exception) -> HTTPException:
     """Only messages we wrote reach the browser; anything else is logged and replaced."""
     if isinstance(e, (llm.MissingKeyError, imagery.NoImageryError)):
         return HTTPException(502, str(e))
+    if isinstance(e, llm.BadAudioError):
+        return HTTPException(422, str(e))
     log.exception("request failed", exc_info=e)
     if isinstance(e, ValueError):  # bad field or label file
         return HTTPException(422, "Could not read the field outline or label. Check the files and try again.")
@@ -111,7 +113,7 @@ def record(run_id: str = Form(...), audio: UploadFile | None = File(None), text:
         if not text.strip():
             raise HTTPException(422, "Send a voice note or type the notes")
         return records.fill_record(text, json.loads(job_path.read_text())).model_dump()
-    except RuntimeError as e:  # missing key or model failure
+    except (ValueError, RuntimeError) as e:  # bad audio, missing key or model failure
         raise _http_error(e) from e
 
 

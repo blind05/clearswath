@@ -1,7 +1,9 @@
 import json
+import wave
 from types import SimpleNamespace
 from unittest.mock import MagicMock
 
+import httpx
 import pytest
 
 from app import llm
@@ -116,3 +118,57 @@ def test_sam_raw_stream_failure_raises(fake, img):
     stream_events(fake, event("response.failed"))
     with pytest.raises(RuntimeError):
         llm.sam_raw(img, "pond")
+
+
+def wav(path, seconds=0.5, rate=16000, channels=1, width=2):
+    with wave.open(str(path), "wb") as w:
+        w.setnchannels(channels)
+        w.setsampwidth(width)
+        w.setframerate(rate)
+        w.writeframes(b"\0" * int(seconds * rate) * channels * width)
+    return path
+
+
+def test_transcribe(monkeypatch, tmp_path):
+    monkeypatch.setattr(llm, "LOG_PATH", tmp_path / "calls.jsonl")
+    monkeypatch.setattr(llm, "_api_key", lambda: "k")
+    seen = {}
+
+    def post(url, **kw):
+        seen.update(url=url, **kw)
+        return httpx.Response(200, json={"transcript": "twelve gallons", "turns": []},
+                              request=httpx.Request("POST", url))
+
+    monkeypatch.setattr(llm.httpx, "post", post)
+    assert llm.transcribe(wav(tmp_path / "a.wav"), purpose="t", keywords=["Intrepid"]) == "twelve gallons"
+    assert seen["url"] == "https://api.meta.ai/v1/asr/transcribe"
+    assert seen["headers"]["Authorization"] == "Bearer k"
+    request = json.loads(seen["files"]["request"][1])
+    assert request == {"mode": "ENDPOINTING", "model": llm.VOICE, "audioEncoding": "WAV", "keywords": ["Intrepid"]}
+    assert seen["files"]["audio"][2] == "audio/wav"
+    assert json.loads(llm.LOG_PATH.read_text())["model"] == llm.VOICE
+
+
+def test_transcribe_http_error(monkeypatch, tmp_path):
+    monkeypatch.setattr(llm, "_api_key", lambda: "k")
+    monkeypatch.setattr(llm.httpx, "post", lambda url, **kw: httpx.Response(
+        500, request=httpx.Request("POST", url)))
+    with pytest.raises(RuntimeError, match="Voice transcription failed"):
+        llm.transcribe(wav(tmp_path / "a.wav"))
+
+
+@pytest.mark.parametrize("kw", [{"channels": 2}, {"width": 1}, {"rate": 44100}, {"seconds": 601}])
+def test_check_wav_rejects(tmp_path, kw):
+    with pytest.raises(llm.BadAudioError):
+        llm.check_wav(wav(tmp_path / "a.wav", **kw))
+
+
+def test_check_wav_rejects_non_wav(tmp_path):
+    p = tmp_path / "a.wav"
+    p.write_bytes(b"not audio")
+    with pytest.raises(llm.BadAudioError, match="WAV"):
+        llm.check_wav(p)
+
+
+def test_check_wav_accepts_24k(tmp_path):
+    assert llm.check_wav(wav(tmp_path / "a.wav", rate=24000, seconds=2)) == 2

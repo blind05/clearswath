@@ -155,7 +155,7 @@ function render(r) {
     el("a", { class: "kml", href: `/api/kml/${r.run_id}`, download: "" }, "Download KML for sprayer"),
     el("h2", {}, "Record application"),
     el("form", { id: "record", class: "record" },
-      el("label", {}, "Voice note", el("input", { type: "file", name: "audio", accept: "audio/*" })),
+      el("label", {}, "Voice note (WAV)", el("input", { type: "file", name: "audio", accept: ".wav,audio/wav" })),
       el("label", {}, "or type notes", el("textarea", { name: "text", rows: "3",
         placeholder: "Sam Ortiz, cert IA-12345, 12 gallons on soybeans, wind 6 mph NW, 58 degrees" })),
       el("button", { type: "submit" }, "Fill record")),

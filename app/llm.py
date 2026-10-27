@@ -5,9 +5,11 @@ import json
 import mimetypes
 import os
 import time
+import wave
 from functools import cache
 from pathlib import Path
 
+import httpx
 from dotenv import load_dotenv
 from openai import OpenAI
 
@@ -25,14 +27,22 @@ class MissingKeyError(RuntimeError):
     """No MODEL_API_KEY; the message is safe to show users."""
 
 
-@cache
-def client() -> OpenAI:
+class BadAudioError(ValueError):
+    """Audio the transcriber won't take; the message is safe to show users."""
+
+
+def _api_key() -> str:
     load_dotenv(ROOT / ".env")
     key = os.getenv("MODEL_API_KEY")
     if not key:
         raise MissingKeyError("MODEL_API_KEY is not set. Copy .env.example to .env and add your key.")
+    return key
+
+
+@cache
+def client() -> OpenAI:
     # The SDK only reads OPENAI_API_KEY on its own, so pass the key explicitly.
-    return OpenAI(base_url=BASE_URL, api_key=key)
+    return OpenAI(base_url=BASE_URL, api_key=_api_key())
 
 
 def log_call(model: str, purpose: str, seconds: float, usage) -> None:
@@ -104,13 +114,42 @@ def _sam_stream(req: dict) -> tuple[str, object]:
     return deltas or parts, usage
 
 
-def transcribe(audio_path: str | Path, *, purpose: str = "") -> str:
+def check_wav(path: str | Path) -> float:
+    """Raises BadAudioError unless mono 16-bit PCM WAV at 16 or 24 kHz, <= 10 min, <= 32 MB. Returns seconds."""
+    path = Path(path)
+    if path.stat().st_size > 32 * 1024 * 1024:
+        raise BadAudioError("Voice note must be 32 MB or less.")
+    try:
+        with wave.open(str(path), "rb") as w:
+            channels, width, rate, frames = w.getnchannels(), w.getsampwidth(), w.getframerate(), w.getnframes()
+    except (wave.Error, EOFError) as e:
+        raise BadAudioError("Voice note must be a WAV file.") from e
+    if channels != 1 or width != 2 or rate not in (16000, 24000):
+        raise BadAudioError("Voice note must be mono 16-bit WAV at 16 or 24 kHz.")
+    if frames / rate > 600:
+        raise BadAudioError("Voice note must be 10 minutes or less.")
+    return frames / rate
+
+
+def transcribe(audio_path: str | Path, *, purpose: str = "", mode: str = "ENDPOINTING",
+               keywords: list[str] | None = None) -> str:
+    """Muse Voice Transcribe on a WAV file: multipart `request` JSON + `audio`; text is in `transcript`."""
+    check_wav(audio_path)
+    request = {"mode": mode, "model": VOICE, "audioEncoding": "WAV"}  # TODO(verify): modes besides ENDPOINTING
+    if keywords:
+        request["keywords"] = keywords
     start = time.perf_counter()
-    # TODO(verify): OpenAI-style transcription endpoint on api.meta.ai
-    with Path(audio_path).open("rb") as f:
-        resp = client().audio.transcriptions.create(model=VOICE, file=f)
-    log_call(VOICE, purpose, time.perf_counter() - start, getattr(resp, "usage", None))
-    return resp.text
+    try:
+        r = httpx.post(f"{BASE_URL}/asr/transcribe", timeout=120,
+                       headers={"Authorization": f"Bearer {_api_key()}"},
+                       files={"request": (None, json.dumps(request), "application/json"),
+                              "audio": (Path(audio_path).name, Path(audio_path).read_bytes(), "audio/wav")})
+        r.raise_for_status()
+        data = r.json()
+    except httpx.HTTPError as e:
+        raise RuntimeError(f"Voice transcription failed: {e}") from e
+    log_call(VOICE, purpose, time.perf_counter() - start, data.get("usage"))
+    return data["transcript"]
 
 
 def data_url(path: str | Path) -> str:
