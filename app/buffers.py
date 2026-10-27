@@ -37,8 +37,8 @@ def plan(field: Polygon, hazards: dict, rules: list[dict], restricted=(),
     zones, reasons = [], []
 
     def reaches(shapes) -> bool:
-        """A reason is only listed if its zone takes area out of this field."""
-        return any(field_m.intersection(s).area >= 1.0 for s in shapes)  # 1 m2
+        """A reason is only listed if its zone takes area out of this field (same threshold as the status)."""
+        return field_m.intersection(union_all(shapes)).area >= MIN_ACRES * SQM_PER_ACRE
 
     if prohibited:
         reasons.append({"source": "bulletin", "summary": "Bulletin prohibits this product here."})

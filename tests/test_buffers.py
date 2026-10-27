@@ -98,3 +98,9 @@ def test_far_restricted_area_is_not_a_reason():
     far = ll(box(X + 5000, Y, X + 5100, Y + 100))[0]
     out = plan(FIELD, {}, [], restricted=[far])
     assert out["status"] == "go" and out["reasons"] == []
+
+
+def test_a_sliver_below_min_acres_is_neither_excluded_nor_a_reason():
+    # the pond is 10 m east of the field and 100 m long; a 10.1 m buffer takes a ~10 m2 sliver (< 0.01 ac)
+    out = plan(FIELD, {"water": [POND]}, [rule(10.1, "m")])
+    assert out["status"] == "go" and out["excluded_acres"] == 0 and out["reasons"] == []
