@@ -33,7 +33,7 @@ can upload files and trigger paid Meta Model API / Baseten calls during judging 
 | M6 | Medium | Agent guardrails | `.claude/settings.json` (uncommitted) | `git diff .claude/settings.json` removes `"Bash(git rebase:*)"` and `"Bash(git commit --amend:*)"` from `deny`; AGENTS.md forbids both. | Restore the committed version (`git restore .claude/settings.json`) unless the change was deliberate. |
 | L1 | Low | Uploads | `app/api.py:82-86` | Uploads are saved before month/method are validated, so invalid requests still write files. | Validate form fields first. |
 | L2 | Low | Docs/licensing | `README.md` (0 lines) | No data attribution (USDA NAIP, USGS NHD + National Map imagery, EPA PPLS label, EPA BLT "informational"), no "built during the event" statement (a rule). | Write the README (planned for Tue Nov 3). |
-| L3 | Low | Privacy | `docs/PROJECT_CONTEXT.md:171`, `:54` | Public doc names Hunter's employer and family background. | Hunter's call; remove the employer name if it shouldn't be public. |
+| L3 | Low | Privacy | `docs/PROJECT_CONTEXT.md:171`, `:54` | Public doc named Hunter's employer and family background. | Employer name removed 2026-10-28; it stays in unpushed commits fe7a309 and 83f6d70 unless they are squashed before the push. |
 | L4 | Low | GitHub | repo settings | `gh api repos/blind05/clearswath` -> `dependabot: disabled`; `branches/main/protection` -> `Branch not protected` (404). Secret scanning and push protection: **enabled**. | Enable Dependabot alerts; protect `main` against force-push and deletion (see manual steps). |
 | L5 | Low | Agent guardrails | `.claude/settings.json` | `Read(./.env)` blocks the Read tool only, not shell reads like `cat .env`; `git commit --no-verify` is not denied (commits are on `ask`, so each needs approval). | Add `Bash(cat .env*)`, `Bash(git commit --no-verify:*)`, `Bash(git commit -n:*)` to `deny`. |
 | L6 | Low | Logging | `app/api.py:36` | `log.exception` logs full exception text; a Pydantic error on a record can include fragments of model output from a voice transcript. Server log only, never sent to the browser. | Accept, or log only the exception type for record errors. |
@@ -104,5 +104,5 @@ before saving; L2 README with attribution; L5 extra deny rules. M1 is mostly cov
    blocking force pushes and deletion. Keep secret scanning and push protection on.
 4. **`.claude/settings.json`**: decide whether the removed rebase/amend deny rules were intentional (M6).
 5. **Demo field**: confirm the field near 44.234 N, 96.92 W isn't family or a neighbour's land.
-6. **Employer mention** (L3): decide whether the employer name should stay in the public `PROJECT_CONTEXT.md`.
-7. **Eligibility**: the open question in PROJECT_CONTEXT section 9 still stands.
+6. **Employer mention** (L3): removed from the docs 2026-10-28; squash fe7a309 and 83f6d70 before pushing to keep it out of history.
+7. **Eligibility**: cleared with Cerebral Valley on 2026-10-28.

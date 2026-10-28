@@ -159,8 +159,7 @@ uncached). Report real numbers only.
 
 ## 9. Open risks
 
-- Eligibility: confirm the Official Rules' "government-affiliated individuals" exclusion doesn't
-  cover Hunter's job before investing heavily.
+- Eligibility: cleared with Cerebral Valley on 2026-10-28.
 - SAM may miss small creeks: the USGS fallback covers this.
 - BLT data is cached for one county.
 - Render's free tier (512 MB) may be too small: use the Starter plan for judging week or rely on the demo cache.
