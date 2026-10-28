@@ -3,7 +3,7 @@
 import json
 from pathlib import Path
 
-from shapely import union_all
+from shapely import coverage_union_all
 from shapely.geometry import mapping, shape
 
 from app import buffers, bulletins, cells, exports, geo, label_reader, segment
@@ -105,7 +105,7 @@ def save_run(result: dict, run_dir: Path) -> None:
     plan, label, centre, grid = result["plan"], result["label"], result["field"].centroid, result.get("cells")
     shapes, names = [plan["spray_zone"], plan["no_spray"]], ["Spray zone", "No spray"]
     if grid:
-        shapes.append(union_all([c["geometry"] for c in grid["cells"] if c["state"] == "spray"]))
+        shapes.append(_merge(grid, "spray"))
         names.append("Spot spray")
         Path(run_dir).mkdir(parents=True, exist_ok=True)
         exports.write_spot_tif(grid, Path(run_dir) / "spot.tif")
@@ -124,8 +124,12 @@ def _cell_layers(grid: dict | None) -> dict:
     """One merged shape per state: a field has ~10,000 cells per hectare, far too many to send one by one."""
     if grid is None:
         return {}
-    return {f"{state}_cells": _fc([union_all([c["geometry"] for c in grid["cells"] if c["state"] == state])])
-            for state in ("spray", "buffered")}
+    return {f"{state}_cells": _fc([_merge(grid, state)]) for state in ("spray", "buffered")}
+
+
+def _merge(grid: dict, state: str):
+    """All cells in one state as one shape. Cells never overlap, so a coverage union (fast) is exact."""
+    return coverage_union_all([c["geometry"] for c in grid["cells"] if c["state"] == state])
 
 
 def to_json(result: dict) -> dict:

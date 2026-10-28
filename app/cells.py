@@ -6,8 +6,10 @@ Pure geometry, never calls a model. Works in the field's UTM zone (metres), like
 import hashlib
 
 import geopandas as gpd
-from shapely import STRtree, union_all
-from shapely.geometry import Polygon, box
+import numpy as np
+import shapely
+from shapely import STRtree
+from shapely.geometry import Polygon
 from shapely.wkt import dumps as wkt
 
 SQM_PER_ACRE = 4046.8564224
@@ -20,7 +22,7 @@ def _utm(field: Polygon):
 
 
 def _to(shapes, src, dst) -> list:
-    return list(gpd.GeoSeries(list(shapes), crs=src).to_crs(dst)) if shapes else []
+    return list(gpd.GeoSeries(list(shapes), crs=src).to_crs(dst)) if len(shapes) else []
 
 
 def grid(field_m: Polygon, size_m: float) -> list[Polygon]:
@@ -28,17 +30,10 @@ def grid(field_m: Polygon, size_m: float) -> list[Polygon]:
     if size_m <= 0:
         raise ValueError("cell size must be positive")
     minx, miny, maxx, maxy = field_m.bounds
-    cells = []
-    y = miny
-    while y < maxy:
-        x = minx
-        while x < maxx:
-            cell = box(x, y, x + size_m, y + size_m).intersection(field_m)
-            if not cell.is_empty and cell.area >= MIN_CELL_M2:
-                cells.append(cell)
-            x += size_m
-        y += size_m
-    return cells
+    x, y = np.meshgrid(minx + size_m * np.arange(np.ceil((maxx - minx) / size_m)),
+                       miny + size_m * np.arange(np.ceil((maxy - miny) / size_m)))  # rows of y, x within a row
+    cells = shapely.intersection(shapely.box(x.ravel(), y.ravel(), x.ravel() + size_m, y.ravel() + size_m), field_m)
+    return list(cells[~shapely.is_empty(cells) & (shapely.area(cells) >= MIN_CELL_M2)])
 
 
 def classify(field: Polygon, weeds: list, no_spray, size_m: float, threshold: float = DEFAULT_THRESHOLD) -> dict:
@@ -49,25 +44,26 @@ def classify(field: Polygon, weeds: list, no_spray, size_m: float, threshold: fl
     """
     utm = _utm(field)
     field_m = _to([field], 4326, utm)[0]
-    weeds_m = union_all(_to(weeds, 4326, utm)) if weeds else Polygon()
     blocked = _to([no_spray], 4326, utm)[0] if no_spray is not None and not no_spray.is_empty else Polygon()
-    cells_m = grid(field_m, size_m)
-    tree = STRtree(cells_m)
+    cells_m = np.array(grid(field_m, size_m), dtype=object)
 
-    weedy = {int(i) for i in tree.query(weeds_m, predicate="intersects")} if not weeds_m.is_empty else set()
-    near_buffer = set()
+    # Weed area per cell, summed over the weed polygons each cell meets (vectorised: a drone map has ~10^4-10^5).
+    # ponytail: overlapping weed polygons are counted twice, which can only raise cover (more spraying, never
+    # less, and never inside a buffer); union them first if a source ever overlaps heavily.
+    parts = shapely.get_parts(np.array(_to(weeds, 4326, utm), dtype=object)) if weeds else np.array([], object)
+    weed_area = np.zeros(len(cells_m))
+    if len(parts):
+        ci, wi = STRtree(parts).query(cells_m, predicate="intersects")
+        np.add.at(weed_area, ci, shapely.area(shapely.intersection(cells_m[ci], parts[wi])))
+    cover = np.minimum(weed_area / shapely.area(cells_m), 1.0)
+    near_buffer = np.zeros(len(cells_m), bool)
     if not blocked.is_empty:
-        for i in tree.query(blocked, predicate="intersects"):
-            if cells_m[int(i)].intersection(blocked).area > 0:  # a shared edge is not a touch
-                near_buffer.add(int(i))
-    out = []
-    for i, cell in enumerate(cells_m):
-        cover = cell.intersection(weeds_m).area / cell.area if i in weedy else 0.0
-        state = "buffered" if i in near_buffer else ("spray" if cover >= threshold else "clean")
-        out.append({"cell": cell, "cover": cover, "state": state})
-    cells_wgs = _to([c["cell"] for c in out], utm, 4326)
-    for c, g in zip(out, cells_wgs, strict=True):
-        c["geometry"] = g
+        cand = STRtree(cells_m).query(blocked, predicate="intersects")
+        near_buffer[cand] = shapely.area(shapely.intersection(cells_m[cand], blocked)) > 0  # an edge is no touch
+    states = np.where(near_buffer, "buffered", np.where(cover >= threshold, "spray", "clean"))
+    cells_wgs = _to(cells_m, utm, 4326)
+    out = [{"cell": c, "cover": float(v), "state": str(st), "geometry": g}
+           for c, v, st, g in zip(cells_m, cover, states, cells_wgs, strict=True)]
     return {"utm": utm, "size_m": size_m, "threshold": threshold, "cells": out,
             "hash": input_hash(field, weeds, no_spray, size_m, threshold)}
 
