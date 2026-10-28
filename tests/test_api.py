@@ -709,3 +709,42 @@ def test_unreadable_image_is_refused(client, tmp_path):
     r = client.post("/api/label", files={"label": ("photo.jpg", b"\xff\xd8\xff" + b"garbage" * 10)})
     assert r.status_code == 415 and "couldn't be read" in r.json()["detail"]
     assert not list((tmp_path / "runs").rglob("label.*"))
+
+
+@pytest.fixture
+def weedy_demo(client, cached_demo, tmp_path, monkeypatch):
+    """The Montana-style demo: the cached field plus a weed map, on a coarse grid so the test stays fast."""
+    import shutil
+
+    monkeypatch.setattr(pipeline, "CELL_M", 50.0)
+    src, dst = tmp_path / "demo" / "cache" / "field", tmp_path / "demo" / "cache" / "mt"
+    shutil.copytree(src, dst)
+    d = json.loads((dst / "inputs.json").read_text())
+    d["hazards"]["weeds"] = [mapping(box(-92.9995, 42.0005, -92.9990, 42.0010))]  # SW corner, far from the pond
+    (dst / "inputs.json").write_text(json.dumps(d))
+    return client.get("/api/demo?field=mt").json()["run_id"]
+
+
+def test_spot_spray_exports(client, weedy_demo):
+    kml = client.get(f"/api/kml/{weedy_demo}").text
+    assert "Spot spray" in kml and "Spray zone" in kml
+    r = client.get(f"/api/export/{weedy_demo}/dji", params={"rate": 19})
+    assert r.status_code == 200 and r.headers["content-type"] == "application/zip"
+    import io
+    import zipfile
+
+    assert "DJI/Rx/prescription.tif" in zipfile.ZipFile(io.BytesIO(r.content)).namelist()
+    gj = client.get(f"/api/export/{weedy_demo}/geojson").json()
+    assert [f["properties"]["name"] for f in gj["features"]] == ["Spray zone", "No spray", "Spot spray"]
+
+
+@pytest.mark.parametrize("params, code", [({}, 422), ({"rate": 0}, 422), ({"rate": 5000}, 422)])
+def test_dji_export_needs_a_sane_rate(client, weedy_demo, params, code):
+    assert client.get(f"/api/export/{weedy_demo}/dji", params=params).status_code == code
+
+
+def test_no_weed_map_no_prescription(client, cached_demo):
+    run_id = client.get("/api/demo").json()["run_id"]
+    assert client.get(f"/api/export/{run_id}/dji", params={"rate": 19}).status_code == 409
+    assert client.get(f"/api/export/{run_id}/shp").status_code == 404
+    assert client.get("/api/export/not-a-run/geojson").status_code == 404

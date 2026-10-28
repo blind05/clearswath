@@ -45,6 +45,8 @@
   .meta { color: var(--muted); font-size: 13px; }
   .error { color: var(--nogo); font-weight: 600; }
   a.kml { display: block; text-align: center; margin-top: 12px; padding: 9px; border: 2px solid #12352a; border-radius: 6px; color: #12352a; font-weight: 700; text-decoration: none; }
+  a.kml[aria-disabled] { opacity: 0.45; cursor: not-allowed; }
+  .export label { display: block; margin-top: 12px; }
   label.check { display: flex; align-items: center; gap: 8px; font-weight: 500; }
   .agent { background: #eef4fb; border-left: 4px solid #1565c0; border-radius: 6px; padding: 8px 12px; margin-bottom: 12px; }
   .agent p { margin: 4px 0; white-space: pre-line; }
@@ -205,6 +207,11 @@ function render(r) {
     el("p", { class: "meta" }, r.bulletin.citation),
     el("p", { class: "meta" }, `Imagery ${r.imagery_date || "unknown"} · water from ${r.water_source} · ${r.method}, ${r.month}`),
     el("a", { class: "kml", href: `/api/kml/${r.run_id}`, download: "" }, "Download KML for sprayer"),
+    r.spot ? el("div", { class: "export" },
+      el("label", {}, "Spray rate per ha for the DJI prescription ",
+        el("input", { type: "number", id: "dji-rate", min: "0.1", max: "1000", step: "0.1", "data-run": r.run_id })),
+      el("a", { class: "kml", id: "dji-link", "aria-disabled": "true" }, "Download DJI Agras zip"),
+      el("a", { class: "kml", href: `/api/export/${r.run_id}/geojson`, download: "" }, "Download GeoJSON")) : null,
     el("p", { class: "meta notice" }, "Decision support only. You remain responsible for following the label and the official Bulletin."),
     el("h2", {}, "Record application"),
     el("form", { id: "record", class: "record" },
@@ -342,6 +349,19 @@ $("#demo").addEventListener("click", () => {
   demoField = "mt";
   rerun = demoRun;
   rerun("");
+});
+// The DJI link only works once a rate is typed: the prescription never guesses one.
+$("#result").addEventListener("input", (e) => {
+  if (e.target.id !== "dji-rate") return;
+  const link = $("#dji-link"), v = Number(e.target.value);
+  if (v > 0 && v <= 1000) {
+    link.href = `/api/export/${e.target.dataset.run}/dji?rate=${v}`;
+    link.setAttribute("download", "");
+    link.removeAttribute("aria-disabled");
+  } else {
+    link.removeAttribute("href");
+    link.setAttribute("aria-disabled", "true");
+  }
 });
 // Switch between the demo outlines, keeping the user's unticked rules (same label, same ids).
 $("#result").addEventListener("click", (e) => {

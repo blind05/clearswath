@@ -6,7 +6,7 @@ from pathlib import Path
 from shapely import union_all
 from shapely.geometry import mapping, shape
 
-from app import buffers, bulletins, cells, geo, label_reader, segment
+from app import buffers, bulletins, cells, exports, geo, label_reader, segment
 
 CELL_M = 1.0  # ponytail: one spot-spray cell size for every sprayer; make it a setting when sprayers differ
 SHAPES = ("water", "building", "habitat", "weeds")
@@ -101,10 +101,15 @@ def load_inputs(cache_dir: Path) -> tuple:
 
 
 def save_run(result: dict, run_dir: Path) -> None:
-    """Writes what /api/kml and /api/record read back: plan.geojson and job.json."""
-    plan, label, centre = result["plan"], result["label"], result["field"].centroid
-    geo.save_shapes([plan["spray_zone"], plan["no_spray"]], Path(run_dir) / "plan.geojson",
-                    [{"name": "Spray zone"}, {"name": "No spray"}])
+    """Writes what /api/kml, /api/export and /api/record read back: plan.geojson, spot.tif and job.json."""
+    plan, label, centre, grid = result["plan"], result["label"], result["field"].centroid, result.get("cells")
+    shapes, names = [plan["spray_zone"], plan["no_spray"]], ["Spray zone", "No spray"]
+    if grid:
+        shapes.append(union_all([c["geometry"] for c in grid["cells"] if c["state"] == "spray"]))
+        names.append("Spot spray")
+        Path(run_dir).mkdir(parents=True, exist_ok=True)
+        exports.write_spot_tif(grid, Path(run_dir) / "spot.tif")
+    geo.save_shapes(shapes, Path(run_dir) / "plan.geojson", [{"name": n} for n in names])
     treated = cells.summary(result["cells"])["treated_acres"] if result.get("cells") else plan["spray_acres"]
     job = {"product_name": label.product_name, "epa_reg_no": label.epa_reg_no, "area_treated_acres": treated, "location": f"{centre.y:.5f}, {centre.x:.5f}",
            "method": plan["method"]}

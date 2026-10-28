@@ -14,12 +14,13 @@ from datetime import date
 from pathlib import Path
 
 import simplekml
+from shapely import union_all
 from PIL import Image, ImageOps
 from fastapi import FastAPI, File, Form, HTTPException, Request, UploadFile
 from fastapi.responses import FileResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 
-from app import agent, geo, imagery, llm, label_reader, pipeline, records, segment
+from app import agent, exports, geo, imagery, llm, label_reader, pipeline, records, segment
 
 ROOT = Path(__file__).resolve().parent.parent
 RUNS = ROOT / "data" / "runs"
@@ -408,15 +409,39 @@ def kml(run_id: str):
     if not RUN_ID.match(run_id) or not path.exists():
         raise HTTPException(404, "No such run")
     doc = simplekml.Kml()
-    for name, shape in zip(("Spray zone", "No spray"), geo.load_shapes(path), strict=True):
+    colors = {"Spray zone": "7f00ff00", "No spray": "7f0000ff", "Spot spray": "cc0051e6"}  # aabbggrr
+    names = [f["properties"]["name"] for f in json.loads(path.read_text())["features"]]
+    for name, shape in zip(names, geo.load_shapes(path), strict=True):
         for poly in getattr(shape, "geoms", [shape]):
             if poly.is_empty:
                 continue
             p = doc.newpolygon(name=name, outerboundaryis=list(poly.exterior.coords),
                                innerboundaryis=[list(r.coords) for r in poly.interiors])
-            p.style.polystyle.color = "7f00ff00" if name == "Spray zone" else "7f0000ff"
+            p.style.polystyle.color = colors.get(name, "7f888888")
     return Response(doc.kml(), media_type="application/vnd.google-earth.kml+xml",
                     headers={"Content-Disposition": f'attachment; filename="clearswath-{run_id[:8]}.kml"'})
+
+
+@app.get("/api/export/{run_id}/{fmt}")
+def export(run_id: str, fmt: str, rate: float | None = None):
+    """Spot-spray exports. dji: boundary shapefile + prescription GeoTIFF (rate per ha in spray cells).
+    geojson: the plan's spray zone, no-spray area and spot-spray cells."""
+    run = RUNS / run_id
+    if not RUN_ID.match(run_id) or not (run / "plan.geojson").exists():
+        raise HTTPException(404, "No such run")
+    if fmt == "geojson":
+        return Response((run / "plan.geojson").read_text(), media_type="application/geo+json",
+                        headers={"Content-Disposition": f'attachment; filename="clearswath-{run_id[:8]}.geojson"'})
+    if fmt != "dji":
+        raise HTTPException(404, "Export formats: dji, geojson")
+    if not (run / "spot.tif").exists():
+        raise HTTPException(409, "This plan has no weed map, so there is no spot-spray prescription")
+    if rate is None or not 0 < rate <= 1000:
+        raise HTTPException(422, "Give the spray rate per hectare, between 0 and 1000")
+    field = geo.load_shapes(run / "plan.geojson")
+    zipped = exports.dji_zip(union_all(field[:2]), run / "spot.tif", rate)
+    return Response(zipped, media_type="application/zip",
+                    headers={"Content-Disposition": f'attachment; filename="clearswath-{run_id[:8]}-dji.zip"'})
 
 
 app.add_middleware(Guard)
