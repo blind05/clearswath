@@ -165,3 +165,17 @@ def test_agent_refuses_a_bad_field_before_any_tool(monkeypatch, tmp_path):
     monkeypatch.setattr(llm, "chat", lambda *a, **kw: pytest.fail("model called"))
     with pytest.raises(geo.FieldError):
         agent.run(p, "label.pdf", "2026-11")
+
+
+@pytest.mark.parametrize("text, kept", [
+    ('ADJUST: the label says "Do not apply within 100 feet of water."', True),
+    ('ADJUST: the label says "apply within 100 feet" so keep back.', True),  # an exact part of the quote
+    ('ADJUST: the label says "Never spray within 100 feet of a pond."', False),  # a paraphrase in quotes
+    ('ADJUST: keep "100 ft" back.', True),  # too short to be passed off as label text
+])
+def test_quoted_text_must_be_on_the_label(field_path, steps, monkeypatch, text, kept):
+    script(monkeypatch, reply(call("plan_spray")), reply(content=text))
+    out = agent.run(field_path, "label.pdf", "2026-11")
+    assert (out["answer"] == text) is kept
+    if not kept:
+        assert "not on the label" in out["trace"][-1]["note"]

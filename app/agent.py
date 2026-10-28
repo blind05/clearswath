@@ -16,6 +16,7 @@ STATUS_WORDS = re.compile(r"\b(NO-GO|GO|ADJUST)\b")
 # The plan checks some rules; it cannot make a job legal or safe, so the answer may never say so.
 CLAIM_WORDS = re.compile(r"\b(il)?legal(ly)?\b|\bcompli(ant|ance)\b|\bsafe(ly)?\b", re.I)
 LABELS = {"go": "GO", "adjust": "ADJUST", "no-go": "NO-GO"}
+QUOTED = re.compile(r'["\u201c]([^"\u201d]{12,})["\u201d]')  # quoted passages long enough to be label text
 
 # No arguments on purpose: the model chooses steps, never files, products or months.
 TOOLS = [{"type": "function", "function": {"name": name, "description": desc,
@@ -44,7 +45,8 @@ class _Job:
     def read_label(self):
         self.label = self.label or label_reader.read_label(self.label_path, self.provider)
         return {"product": self.label.product_name, "epa_reg_no": self.label.epa_reg_no,
-                "rules": [r.summary for r in self.label.rules], "unverified_rules": len(self.label.dropped)}
+                "rules": [{"summary": r.summary, "quote": r.quote, "page": r.page} for r in self.label.rules],
+                "unverified_rules": len(self.label.dropped)}
 
     def find_hazards(self):
         self.hazards = self.hazards or segment.find_hazards(self.field_path)
@@ -125,6 +127,13 @@ def run(field_path, label_path, month: str, method: str = "drone", excluded_rule
     claimed = set(STATUS_WORDS.findall(answer or ""))
     if answer and claimed - {LABELS[decision]}:
         trace.append({"note": f"agent answer said {sorted(claimed)}; replaced, the plan says {LABELS[decision]}"})
+        answer = None
+    # Quotation marks promise label text; every quoted passage must be inside a verified label quote.
+    quotes = [label_reader._norm(r.quote) for r in job.result["label"].rules]
+    if answer and (bad := [q for q in QUOTED.findall(answer)
+                           if not any(label_reader._norm(q).strip(" .,") in v for v in quotes)]):
+        trace.append({"note": f"agent quoted text that is not on the label ({bad[0][:60]!r}); replaced with the "
+                              "plan's own summary"})
         answer = None
     if answer and (words := sorted({m.group(0).lower() for m in CLAIM_WORDS.finditer(answer)})):
         trace.append({"note": f"agent answer said {words}; replaced with the plan's own summary"})
