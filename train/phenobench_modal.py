@@ -58,9 +58,11 @@ def fetch() -> dict:
 
 @app.function(image=gpu_image, gpu="L4", timeout=3 * 3600, volumes={"/data": volume}, memory=49152,
               secrets=[modal.Secret.from_name("huggingface")], retries=0)
-def evaluate(cells_px=(100, 250, 500), target=0.97, epochs=12, tune_n=100, sam3_n=100, seed=0) -> dict:
+def evaluate(cells_px=(100, 250, 500), target=0.97, cover=0.01, epochs=12, tune_n=100, local_n=50, sam3_n=100,
+             seed=0) -> dict:
     """Leave-one-date-out: for each flight date, train on the other two (minus tune_n to set the threshold) and
-    test on that whole date. Baselines on the same tiles: broadcast, spray everything green, zero-shot SAM 3."""
+    test on that date. Then again with local_n of the date's own tiles labelled: half join training, half set
+    the threshold. Both are scored on the same remaining tiles. Baselines: spray everything green, SAM 3."""
     import io
     import os
     import random
@@ -87,29 +89,39 @@ def evaluate(cells_px=(100, 250, 500), target=0.97, epochs=12, tune_n=100, sam3_
             tiles.append((row["date"], f, wh.patch_target(weed, f.shape[1:]).to("cuda"), weed, crop, green))
     dates = sorted({t[0] for t in tiles})
 
-    folds = []
-    for d in dates:
-        pool = [t for t in tiles if t[0] != d]
-        test = [t for t in tiles if t[0] == d]
-        random.Random(seed).shuffle(pool)
-        tune, fit = pool[:tune_n], pool[tune_n:]
+    def score(fit, tune, test):
         head = wh.train_head([(t[1], t[2]) for t in fit], seed, epochs)
         tune_pairs = [(wh.probability(head, t[1], t[3].shape), t[3]) for t in tune]
-        threshold = wh.pick_threshold(tune_pairs, target, min(cells_px))
+        threshold = wh.pick_threshold(tune_pairs, target, min(cells_px), cover)
         probs = [(wh.probability(head, t[1], t[3].shape), t[3]) for t in test]
         crop_px = sum(t[4].sum() for t in test)
         crop_hit = sum(((p >= threshold) & t[4]).sum() for (p, _), t in zip(probs, test))
         inter = sum(((p >= threshold) & w).sum() for p, w in probs)
         union = sum(((p >= threshold) | w).sum() for p, w in probs)
-        green = [(t[5].astype(np.float32), t[3]) for t in test]
-        folds.append({"test_date": d, "train_n": len(fit), "tune_n": len(tune), "test_n": len(test),
-                      "threshold": threshold, "tune": wh.coverage(tune_pairs, threshold, min(cells_px)),
-                      "head": {c: wh.coverage(probs, threshold, c) for c in cells_px},
-                      "head_crop_pixels_sprayed": float(crop_hit / max(crop_px, 1)),
-                      "head_weed_iou": float(inter / max(union, 1)),
-                      "green": {c: wh.coverage(green, 0.5, c) for c in cells_px}})
-        del head, probs, green
+        out = {"train_n": len(fit), "tune_n": len(tune), "threshold": threshold,
+               "tune": wh.coverage(tune_pairs, threshold, min(cells_px), cover),
+               "head": {c: wh.coverage(probs, threshold, c, cover) for c in cells_px},
+               "crop_pixels_sprayed": float(crop_hit / max(crop_px, 1)), "weed_iou": float(inter / max(union, 1))}
+        del head, probs
         torch.cuda.empty_cache()
+        return out
+
+    folds = []
+    for d in dates:
+        pool = [t for t in tiles if t[0] != d]
+        own = [t for t in tiles if t[0] == d]
+        random.Random(seed).shuffle(pool)
+        random.Random(seed).shuffle(own)
+        local, test = own[:local_n], own[local_n:]
+        fit = pool[tune_n:]
+        local_fit, local_tune = local[:local_n // 2], local[local_n // 2:]
+        repeat = max(1, len(fit) // (3 * max(len(local_fit), 1)))  # local tiles ~ a quarter of training steps
+        green = [(t[5].astype(np.float32), t[3]) for t in test]
+        folds.append({"test_date": d, "test_n": len(test),
+                      "other_dates": score(fit, pool[:tune_n], test),
+                      "with_local": score(fit + local_fit * repeat, local_tune, test),
+                      "green": {c: wh.coverage(green, 0.5, c, cover) for c in cells_px}})
+        del green
 
     sam = {}
     if sam3_n:
@@ -131,8 +143,8 @@ def evaluate(cells_px=(100, 250, 500), target=0.97, epochs=12, tune_n=100, sam3_
             for mk in res["masks"]:
                 m |= mk.cpu().numpy().astype(bool)
             sam_pairs.append((m.astype(np.float32), tiles[k][3]))
-        sam = {"n": len(sam_pairs), "prompt": "weed", **{str(c): wh.coverage(sam_pairs, 0.5, c) for c in cells_px}}
-    return {"dates": dates, "folds": folds, "sam3_zero_shot": sam, "cells_px": list(cells_px), "gsd_m": 0.001}
+        sam = {"n": len(sam_pairs), "prompt": "weed", **{str(c): wh.coverage(sam_pairs, 0.5, c, cover) for c in cells_px}}
+    return {"dates": dates, "folds": folds, "sam3_zero_shot": sam, "cells_px": list(cells_px), "cover": cover, "gsd_m": 0.001}
 
 
 if __name__ == "__main__":

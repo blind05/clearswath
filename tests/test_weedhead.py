@@ -28,6 +28,13 @@ def test_coverage_misses_below_threshold():
     assert wh.coverage([(p, w)], threshold=0.5, cell=50) == (0.0, 0.0)
 
 
+def test_cover_skips_sparse_cells_and_counts_partial_edges():
+    p, w = pair(np.s_[0:10, 0:10], np.s_[2:4, 2:4])  # 4 px = 0.16% of a 50 px cell
+    assert wh.coverage([(p, w)], threshold=0.5, cell=50, cover=0.01) == (0.0, 0.0)
+    p, w = pair(np.s_[96:100, 96:100], np.s_[96:100, 96:100])  # 16 px = 1% of the 40 x 40 edge cell
+    assert wh.coverage([(p, w)], threshold=0.5, cell=60, cover=0.01) == (1.0, pytest.approx(0.16))
+
+
 def test_pick_threshold_is_the_highest_that_reaches_the_target():
     p, w = pair(np.s_[0:10, 0:10], np.s_[0:10, 0:10], value=0.4)
     assert wh.pick_threshold([(p, w)], target=0.95, cell=10) == pytest.approx(0.4, abs=0.011)
