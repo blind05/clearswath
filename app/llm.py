@@ -49,6 +49,30 @@ class BadAudioError(ValueError):
     """Audio the transcriber won't take; the message is safe to show users."""
 
 
+class PhotoUnavailableError(RuntimeError):
+    """Live photo mode has no endpoint configured; the message is safe to show users."""
+
+
+PHOTO_MODEL = "dinov3-weed-head"  # DINOv3 + the trained head, served by serve/weeds_modal.py on Modal
+
+
+def weed_photo(path: str | Path, *, purpose: str = "photo") -> dict:
+    """One photo -> weed overlay (PNG, base64), share flagged and what the head was trained on."""
+    load_dotenv(ROOT / ".env")
+    url, key = os.getenv("PHOTO_URL"), os.getenv("PHOTO_KEY")
+    if not url or not key:
+        raise PhotoUnavailableError("Live photo mode isn't set up on this site yet. Try the demo.")
+    start = time.perf_counter()
+    resp = httpx.post(url, content=Path(path).read_bytes(), timeout=MODEL_TIMEOUT_S,
+                      headers={"X-Photo-Key": key, "Content-Type": "application/octet-stream"})
+    log_call(PHOTO_MODEL, purpose, time.perf_counter() - start, None)  # counted even if it fails: GPU time was used
+    resp.raise_for_status()
+    out = resp.json()
+    if not isinstance(out.get("overlay_png"), str):
+        raise ValueError("unexpected photo response")
+    return out
+
+
 def _api_key(var: str = "MODEL_API_KEY") -> str:
     load_dotenv(ROOT / ".env")
     key = os.getenv(var)

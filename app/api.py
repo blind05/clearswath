@@ -194,7 +194,7 @@ def paid_access(request: Request) -> None:
 
 def _http_error(e: Exception) -> HTTPException:
     """Only messages we wrote reach the browser; anything else is logged and replaced."""
-    if isinstance(e, (llm.MissingKeyError, imagery.NoImageryError)):
+    if isinstance(e, (llm.MissingKeyError, imagery.NoImageryError, llm.PhotoUnavailableError)):
         return HTTPException(502, str(e))
     if isinstance(e, (llm.BadAudioError, pipeline.NotConfirmableError, label_reader.LabelTooLongError,
                       geo.FieldError)):
@@ -458,6 +458,23 @@ def demo(request: Request, month: str | None = None, method: str = "drone", excl
     month = month or date.today().strftime("%Y-%m")
     out = _plan(uuid.uuid4().hex, path, labels[0], month, method, excluded_rules=excluded_rules)
     return out | {"demo": {"field": field, "cached": False, "month": month}}
+
+
+PHOTO_MAX = 15 * MB
+
+
+@app.post("/api/photo")  # gated by Guard: a GPU call on Modal
+def photo(photo: UploadFile = File(...)):
+    """Live photo mode: one photo looking down at a crop -> weed overlay from the DINOv3 head."""
+    suffix = Path(photo.filename or "").suffix.lower()
+    if suffix not in IMAGE_FORMATS:
+        raise HTTPException(422, f"Photo must be one of {sorted(IMAGE_FORMATS)}")
+    path = _save(photo, RUNS / uuid.uuid4().hex / f"photo{suffix}", PHOTO_MAX)  # upright, no EXIF, <= 3000 px
+    try:
+        out = llm.weed_photo(path)
+    except Exception as e:
+        raise _http_error(e) from e
+    return {k: out.get(k) for k in ("width", "height", "share_flagged", "overlay_png", "trained_on")}
 
 
 @app.get("/api/health")

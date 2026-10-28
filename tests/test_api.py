@@ -824,3 +824,50 @@ def test_bad_managed_land_or_wind_is_refused_before_any_run(client, data, detail
 def test_demo_refuses_a_bad_wind(client, cached_demo):
     assert client.get("/api/demo?wind_from=400").status_code == 422
     assert client.get("/api/demo?wind_from=90").status_code == 200
+
+
+def test_photo_mode_sends_a_clean_photo_and_returns_the_overlay(client, monkeypatch):
+    import io
+
+    from PIL import Image
+
+    sent = {}
+
+    def weed_photo(path):
+        sent["exif"] = Image.open(path).getexif()
+        return {"width": 40, "height": 30, "share_flagged": 0.1, "overlay_png": "iVBOR", "threshold": 0.4,
+                "trained_on": {"cofly": 180}}
+
+    monkeypatch.setattr(llm, "weed_photo", weed_photo)
+    buf = io.BytesIO()
+    exif = Image.Exif()
+    exif[0x8825] = {2: (44.0, 14.0, 0.0)}  # a GPS position the server must drop
+    Image.new("RGB", (40, 30), "green").save(buf, "JPEG", exif=exif)
+    r = client.post("/api/photo", files={"photo": ("field.jpg", buf.getvalue())})
+    assert r.status_code == 200 and r.json() == {"width": 40, "height": 30, "share_flagged": 0.1,
+                                                 "overlay_png": "iVBOR", "trained_on": {"cofly": 180}}
+    assert 0x8825 not in sent["exif"]
+
+
+@pytest.mark.parametrize("name, data, code", [("notes.pdf", b"%PDF", 422), ("fake.jpg", b"not a jpeg", 415)])
+def test_photo_mode_refuses_non_photos(client, monkeypatch, name, data, code):
+    monkeypatch.setattr(llm, "weed_photo", lambda p: pytest.fail("must not reach the GPU"))
+    assert client.post("/api/photo", files={"photo": (name, data)}).status_code == code
+
+
+def test_photo_mode_off_until_configured(client, monkeypatch):
+    import io
+
+    from PIL import Image
+
+    monkeypatch.delenv("PHOTO_URL", raising=False)
+    monkeypatch.setattr(llm, "load_dotenv", lambda *a, **kw: None)
+    buf = io.BytesIO()
+    Image.new("RGB", (8, 8)).save(buf, "PNG")
+    r = client.post("/api/photo", files={"photo": ("p.png", buf.getvalue())})
+    assert r.status_code == 502 and "isn't set up" in r.json()["detail"]
+
+
+def test_photo_mode_is_gated_like_live_runs(client, monkeypatch):
+    monkeypatch.setenv("ACCESS_CODE", "s3cret-code-for-tests")
+    assert client.post("/api/photo", files={"photo": ("p.png", b"x")}).status_code == 401

@@ -19,7 +19,7 @@ Don't change a contract unless the human asks.
 | `app/exports.py` | `spot_raster(grid)`, `write_spot_tif(grid, path)`, `dji_zip(field, spot_tif, rate)` | the cell grid; rate per ha | GeoTIFF on the cell grid (1 spray, 0 not, 255 outside); zip with `DJI/ShapeFile/boundary.*` and `DJI/Rx/prescription.tif` (layout TODO(verify) on a controller). No model calls |
 | `app/agent.py` | `run(field_path, label_path, month, method, excluded_rules=(), provider=None)` | same | `{run_id, answer, decision, trace, mode, result}`; `result` is what `pipeline.run` returns |
 | `app/records.py` | `transcribe(path)`, `fill_record(text, job)` | audio; transcript and job dict | text; `AppRecord` with `missing` list; drone/aerial jobs add `part137` (14 CFR 137.71 items, own `missing` list) |
-| `app/api.py` | `/api/demo`, `/api/demo/image/{name}`, `/api/label`, `/api/plan`, `/api/agent`, `/api/kml/{id}`, `/api/export/{id}/{dji,geojson}`, `/api/record` | form uploads | JSON for `web/index.html` |
+| `app/api.py` | `/api/demo`, `/api/demo/image/{name}`, `/api/label`, `/api/plan`, `/api/agent`, `/api/kml/{id}`, `/api/export/{id}/{dji,geojson}`, `/api/record`, `/api/photo` | form uploads | JSON for `web/index.html` |
 
 Drift rules (engine rule 2) buffer the treated area toward unmanaged land: everything outside the field that
 the user hasn't marked as managed (`hazards["managed"]`), in every direction, or downwind only when a wind
@@ -32,7 +32,7 @@ Every label rule is applied. Buffer rules with a `condition` (e.g. "ULV aerial o
 read from a photo, are listed in `confirm`; the user can untick them (`excluded_rules`, ids = indexes into
 `label.rules`). Unticking anything else is refused. A model's condition can only make the plan stricter.
 
-Paid endpoints (`/api/plan`, `/api/agent`, `/api/label`, `/api/record`) need the `X-Access-Code` header when
+Paid endpoints (`/api/plan`, `/api/agent`, `/api/label`, `/api/record`, `/api/photo`) need the `X-Access-Code` header when
 `ACCESS_CODE` is set (refused on Render without one), plus 3 live runs per IP per day (`RUNS_PER_IP_PER_DAY`),
 a daily run cap (`DAILY_RUN_CAP`) and an estimated spend budget of $5 a day (`DAILY_BUDGET_USD`; every model call
 is costed by `app/spend.py` from `llm.log_call`, prices `TODO(verify)`).
@@ -49,3 +49,8 @@ failed USGS water layer or a buffer rule whose quote couldn't be verified; nothi
 
 Every reason in `plan.reasons` has `source` (`label`, `bulletin`, `rule:water` or `data`); label
 reasons also carry `quote`, `page` and `distance_ft`.
+
+Live photo mode: `/api/photo` takes one JPEG, PNG or WebP (re-encoded upright, EXIF dropped, at most 3000 px) and
+`llm.weed_photo` posts it to the Modal endpoint in `serve/weeds_modal.py` (`PHOTO_URL`, with `PHOTO_KEY` sent as
+`X-Photo-Key`). The endpoint runs DINOv3 and the head from `train/deploy_head_modal.py` (CoFly-WeedDB + PhenoBench)
+and returns an RGBA overlay PNG, the share flagged and what the head was trained on. A scouting guide, not a spray map.

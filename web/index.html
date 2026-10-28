@@ -45,6 +45,10 @@
   .meta { color: var(--muted); font-size: 13px; }
   .error { color: var(--nogo); font-weight: 600; }
   a.kml { display: block; text-align: center; margin-top: 12px; padding: 9px; border: 2px solid #12352a; border-radius: 6px; color: #12352a; font-weight: 700; text-decoration: none; }
+  .photo { margin-top: 18px; border-top: 1px solid #ddd; padding-top: 8px; }
+  .shot { position: relative; margin: 8px 0; }
+  .shot img { display: block; width: 100%; }
+  .shot img + img { position: absolute; inset: 0; height: 100%; }
   a.kml[aria-disabled] { opacity: 0.45; cursor: not-allowed; }
   .export label { display: block; margin-top: 12px; }
   label.check { display: flex; align-items: center; gap: 8px; font-weight: 500; }
@@ -85,6 +89,13 @@
         <button type="submit">Plan spray</button>
         <button type="button" class="secondary" id="demo">Try demo</button>
       </div>
+    </form>
+    <form id="photo-form" class="photo">
+      <h2>Try it on your own photo</h2>
+      <p class="meta">A photo looking straight down at a crop from 1 to 3 m. The weed head was trained on cotton
+        and sugar beet, so other crops are a stretch; it marks in orange what it takes for weeds.</p>
+      <label>Photo (JPEG, PNG or WebP)<input type="file" name="photo" accept=".jpg,.jpeg,.png,.webp" required></label>
+      <button type="submit" class="secondary">Find weeds</button>
     </form>
     <p id="busy" class="meta" hidden>Reading label, finding hazards and checking bulletins&hellip;</p>
     <p id="error" class="error" role="alert"></p>
@@ -385,6 +396,33 @@ $("#demo").addEventListener("click", () => {
   demoField = "mt";
   rerun = demoRun;
   rerun("");
+});
+// Live photo mode: the photo with the weed head's overlay on top (a live GPU call: needs the access code).
+$("#photo-form").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const file = e.target.photo.files[0];
+  if (!file) return;
+  const body = new FormData();
+  body.append("photo", file);
+  $("#error").textContent = "";
+  $("#busy").hidden = false;
+  try {
+    const res = await liveFetch("/api/photo", { method: "POST", body });
+    const r = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(typeof r.detail === "string" ? r.detail : `Request failed (${res.status})`);
+    const out = $("#result");
+    out.hidden = false;
+    const trained = Object.entries(r.trained_on || {}).map(([k, n]) => `${k} (${n} images)`).join(" and ");
+    out.replaceChildren(el("h2", {}, "Your photo"),
+      el("div", { class: "shot" }, el("img", { src: URL.createObjectURL(file), alt: "Your photo" }),
+        el("img", { src: `data:image/png;base64,${r.overlay_png}`, alt: "Weeds the head found, in orange" })),
+      el("p", {}, `${(100 * r.share_flagged).toFixed(1)}% of the photo flagged as weeds.`),
+      el("p", { class: "meta" }, `DINOv3 features with a head trained on ${trained}. A guide for scouting, not a spray map.`));
+  } catch (err) {
+    $("#error").textContent = err.message;
+  } finally {
+    $("#busy").hidden = true;
+  }
 });
 // The DJI link only works once a rate is typed: the prescription never guesses one.
 $("#result").addEventListener("input", (e) => {

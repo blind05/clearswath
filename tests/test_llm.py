@@ -254,3 +254,24 @@ def test_fireworks_client(monkeypatch):
     assert c.api_key == "f" and str(c.base_url).startswith("https://api.fireworks.ai/inference/v1")
     assert c.timeout == llm.MODEL_TIMEOUT_S
     llm.client.cache_clear()
+
+
+def test_weed_photo_posts_the_bytes_with_the_key_and_costs_the_call(monkeypatch, tmp_path):
+    from app import spend
+
+    monkeypatch.setenv("PHOTO_URL", "https://example.modal.run/analyze")
+    monkeypatch.setenv("PHOTO_KEY", "k" * 32)
+    monkeypatch.setattr(llm, "LOG_PATH", tmp_path / "calls.jsonl")
+    seen = {}
+
+    def post(url, content, headers, timeout):
+        seen.update(url=url, content=content, headers=headers)
+        return SimpleNamespace(raise_for_status=lambda: None,
+                               json=lambda: {"overlay_png": "iVBOR", "share_flagged": 0.2})
+
+    monkeypatch.setattr(llm.httpx, "post", post)
+    photo = tmp_path / "p.jpg"
+    photo.write_bytes(b"\xff\xd8\xffdata")
+    assert llm.weed_photo(photo)["share_flagged"] == 0.2
+    assert seen["content"] == b"\xff\xd8\xffdata" and seen["headers"]["X-Photo-Key"] == "k" * 32
+    assert spend.today() == spend.CALL_PRICES["dinov3-weed-head"]

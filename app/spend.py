@@ -20,7 +20,8 @@ TOKEN_PRICES = {
     "meta-models/muse-spark-open-1026": (1.25, 4.25),
 }
 # USD per call where no token price is published. TODO(verify): no public price found; set high on purpose.
-CALL_PRICES = {"sam-3.1": 0.01, "muse-voice-transcribe-1.0": 0.02}
+CALL_PRICES = {"sam-3.1": 0.01, "muse-voice-transcribe-1.0": 0.02,
+               "dinov3-weed-head": 0.02}  # Modal GPU: a cold start is ~30 s of an L4 at ~$0.80/h
 UNKNOWN = (5.0, 15.0)  # an unlisted model is costed high, so the budget stops early rather than late
 NO_USAGE = 0.05  # USD for a token-priced call that reports no usage: never free, or the budget would leak
 _lock = threading.Lock()
