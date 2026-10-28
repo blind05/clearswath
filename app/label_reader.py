@@ -16,7 +16,7 @@ MAX_PAGES = 80  # real labels run 20-70 pages; more would be a very large paid p
 
 class LabelTooLongError(ValueError):
     """A PDF over MAX_PAGES; the message is safe to show users."""
-KINDS = ["buffer", "wind", "rain", "rate", "other"]
+KINDS = ["buffer", "wind", "rain", "rate", "runoff", "other"]
 TARGETS = ["water", "building", "habitat"]
 APPLIES_TO = ["all", "aerial", "ground"]
 # a label says "feet" or "ft"; store the short form buffers.plan expects
@@ -25,7 +25,7 @@ BUFFER_UNITS = {"ft": "ft", "feet": "ft", "foot": "ft", "m": "m", "meter": "m", 
 
 
 class LabelRule(BaseModel):
-    kind: Literal["buffer", "wind", "rain", "rate", "other"]
+    kind: Literal["buffer", "wind", "rain", "rate", "runoff", "other"]
     target: Literal["water", "building", "habitat"] | None
     applies_to: Literal["all", "aerial", "ground"]
     value: float | None

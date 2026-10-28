@@ -54,6 +54,13 @@ def test_keeps_verified_rules(monkeypatch, pdf):
     assert "=== Page 2 ===" in seen["text"]
 
 
+def test_runoff_rule_is_kept_only_with_a_real_quote(monkeypatch, pdf):
+    runoff = rule(kind="runoff", target=None, value=None, unit=None, quote="Read the label.", page=1)
+    fake_model(monkeypatch, [runoff, runoff | {"quote": "Achieve 3 runoff mitigation points."}])
+    out = label_reader.read_label(pdf)
+    assert [r.kind for r in out.rules] == ["runoff"] and out.dropped[0]["reason"] == "quote not found in label text"
+
+
 def test_drops_invented_quote(monkeypatch, pdf):
     fake_model(monkeypatch, [rule(quote="Do not apply within 5 feet of water.")])
     out = label_reader.read_label(pdf)

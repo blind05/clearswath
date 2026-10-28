@@ -203,7 +203,8 @@ function render(r) {
       "Ask the Muse Spark agent live (access code)") : null,
     el("h2", {}, "Why"),
     r.reasons.length ? r.reasons.map((x) => el("div", { class: `reason ${x.source}` },
-      el("div", { class: "tag" }, x.source === "label" ? `Label p.${x.page} · ${x.distance_ft} ft from ${x.target}` : x.source),
+      el("div", { class: "tag" }, x.source !== "label" ? x.source
+        : x.kind === "runoff" ? `Label p.${x.page} · runoff points` : `Label p.${x.page} · ${x.distance_ft} ft from ${x.target}`),
       el("div", {}, x.summary),
       x.quote ? el("blockquote", {}, `“${x.quote}”`) : null)) : el("p", { class: "meta" }, "No hazards or limitations affect this field."),
     el("h2", {}, "Product"),

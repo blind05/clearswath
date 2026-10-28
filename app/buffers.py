@@ -79,13 +79,20 @@ def plan(field: Polygon, hazards: dict, rules: list[dict], restricted=(),
         if reaches(restricted_m):
             reasons.append({"source": "bulletin", "summary": "Bulletin restricted area excluded."})
 
+    # Runoff mitigation points are worked out in EPA's PALM, not here (out of scope); a label that requires
+    # them can't be a clean GO, so it forces ADJUST. It never changes the map.
+    runoff = [r for r in rules if r.get("kind") == "runoff" and _applies(r, method)]
+    for r in runoff:
+        reasons.append({"source": "label", "kind": "runoff", "summary": "Runoff mitigation points required: "
+                        "complete them in EPA's PALM before spraying.", "quote": r["quote"], "page": r.get("page")})
+
     blocked = union_all(zones) if zones else Polygon()
     no_spray, spray = field_m.intersection(blocked), field_m.difference(blocked)
     spray_acres, excluded_acres = _acres(spray), _acres(no_spray)
 
     if prohibited or gaps or spray_acres < MIN_ACRES:
         status = "no-go"
-    elif excluded_acres >= MIN_ACRES:
+    elif excluded_acres >= MIN_ACRES or runoff:
         status = "adjust"
     else:
         status = "go"

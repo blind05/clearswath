@@ -32,7 +32,8 @@ Paid endpoints (`/api/plan`, `/api/agent`, `/api/label`, `/api/record`) need the
 (built by `scripts/build_demo.py`; `mt` by `scripts/build_demo_mt.py`) offline, recomputing the plan each time; without
 a cache it runs live (`mt` is cache only). `demo.overlay` is the demo's drone image and its lon/lat bounds, when it has one.
 
-`status` is `go` (nothing removed), `adjust` (some acres removed; the green zone is sprayable)
+`status` is `go` (nothing removed), `adjust` (some acres removed, the green zone is sprayable; or the label
+requires runoff mitigation points, which the user completes in EPA's PALM: a `runoff` rule never changes the map)
 or `no-go` (bulletin prohibits, no sprayable area, or `gaps`: data the plan needs is missing, such as a
 failed USGS water layer or a buffer rule whose quote couldn't be verified; nothing is sprayable then). It always comes from `buffers.plan`.
 

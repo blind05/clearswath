@@ -110,3 +110,24 @@ def test_any_gap_is_no_go_with_nothing_sprayable():
     out = plan(FIELD, {}, [], gaps=["USGS stream data was unavailable"])
     assert out["status"] == "no-go" and out["spray_acres"] == 0 and out["spray_zone"].is_empty
     assert out["reasons"] == [{"source": "data", "summary": "USGS stream data was unavailable"}]
+
+
+RUNOFF = {"kind": "runoff", "target": None, "applies_to": "all", "value": None, "unit": None,
+          "summary": "Runoff points", "quote": "Achieve at least 3 runoff mitigation points.", "page": 9}
+
+
+def test_runoff_points_force_adjust_without_touching_the_map():
+    clean = plan(FIELD, {}, [])
+    out = plan(FIELD, {}, [RUNOFF])
+    assert clean["status"] == "go" and out["status"] == "adjust"
+    assert out["spray_acres"] == clean["spray_acres"] and out["excluded_acres"] == 0
+    (r,) = out["reasons"]
+    assert r["kind"] == "runoff" and "PALM" in r["summary"] and r["quote"] == RUNOFF["quote"] and r["page"] == 9
+
+
+def test_runoff_points_never_soften_a_no_go():
+    assert plan(FIELD, {}, [RUNOFF], prohibited=True)["status"] == "no-go"
+
+
+def test_runoff_rule_for_ground_rigs_skips_a_drone_job():
+    assert plan(FIELD, {}, [RUNOFF | {"applies_to": "ground"}], method="drone")["status"] == "go"
