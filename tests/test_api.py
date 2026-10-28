@@ -1,3 +1,4 @@
+import gzip
 import json
 from collections import deque
 
@@ -719,9 +720,10 @@ def weedy_demo(client, cached_demo, tmp_path, monkeypatch):
     monkeypatch.setattr(pipeline, "CELL_M", 50.0)
     src, dst = tmp_path / "demo" / "cache" / "field", tmp_path / "demo" / "cache" / "mt"
     shutil.copytree(src, dst)
-    d = json.loads((dst / "inputs.json").read_text())
-    d["hazards"]["weeds"] = [mapping(box(-92.9995, 42.0005, -92.9990, 42.0010))]  # SW corner, far from the pond
-    (dst / "inputs.json").write_text(json.dumps(d))
+    field, _, hazards, bulletin, month = pipeline.load_inputs(dst)
+    raw = json.loads(gzip.decompress((dst / "inputs.json.gz").read_bytes()))["label_raw"]
+    hazards["weeds"] = [box(-92.9995, 42.0005, -92.9990, 42.0010)]  # SW corner, far from the pond
+    pipeline.save_inputs(dst, field, raw, hazards, bulletin, month)
     return client.get("/api/demo?field=mt").json()["run_id"]
 
 

@@ -1,5 +1,6 @@
 """Field + label + month -> spray plan. Wires the modules together; status always comes from buffers.plan."""
 
+import gzip
 import json
 from pathlib import Path
 
@@ -79,21 +80,28 @@ def spot_cells(field, plan: dict, weeds: list) -> dict:
     return cells.classify(field, weeds, blocked, CELL_M)
 
 
+def cache_file(cache_dir: Path) -> Path | None:
+    """The demo cache's inputs file: gzipped (save_inputs writes these) or plain JSON (older caches)."""
+    return next((p for p in (Path(cache_dir) / "inputs.json.gz", Path(cache_dir) / "inputs.json") if p.exists()), None)
+
+
 def save_inputs(cache_dir: Path, field, label_raw: dict, hazards: dict, bulletin: dict, month: str) -> None:
-    """Everything a plan needs except the user's choices, as JSON (the demo cache)."""
+    """Everything a plan needs except the user's choices, as gzipped JSON (the demo cache; a weed map is MBs)."""
     cache_dir = Path(cache_dir)
     cache_dir.mkdir(parents=True, exist_ok=True)
     shapes = SHAPES
-    (cache_dir / "inputs.json").write_text(json.dumps({
+    (cache_dir / "inputs.json").unlink(missing_ok=True)  # never two caches that could disagree
+    (cache_dir / "inputs.json.gz").write_bytes(gzip.compress(json.dumps({
         "month": month, "field": mapping(field), "label_raw": label_raw,
         "hazards": {k: ([mapping(s) for s in v] if k in shapes else v) for k, v in hazards.items()},
         "bulletin": bulletin | {"restricted": [mapping(s) for s in bulletin["restricted"]]},
-    }))
+    }).encode(), mtime=0))
 
 
 def load_inputs(cache_dir: Path) -> tuple:
     """(field, label, hazards, bulletin, month) from save_inputs. The label's quotes are re-verified."""
-    d = json.loads((Path(cache_dir) / "inputs.json").read_text())
+    path = cache_file(cache_dir)
+    d = json.loads(gzip.decompress(path.read_bytes()) if path.suffix == ".gz" else path.read_text())
     shapes = SHAPES
     hazards = {k: ([shape(g) for g in v] if k in shapes else v) for k, v in d["hazards"].items()}
     bulletin = d["bulletin"] | {"restricted": [shape(g) for g in d["bulletin"]["restricted"]]}

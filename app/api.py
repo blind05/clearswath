@@ -374,7 +374,7 @@ def demo(request: Request, month: str | None = None, method: str = "drone", excl
         raise HTTPException(422, f"field must be one of {sorted(k for k in DEMO_FIELDS if k)} or empty")
     name = DEMO_FIELDS[field]
     cache = DEMO / "cache" / name
-    if (cache / "inputs.json").exists():
+    if pipeline.cache_file(cache):
         if method not in METHODS:
             raise HTTPException(422, f"method must be one of {sorted(METHODS)}")
         excluded = _rule_ids(excluded_rules)
