@@ -1,7 +1,10 @@
 """Field + hazards + label rules -> spray zone and GO / ADJUST / NO-GO. Pure geometry, never calls a model."""
 
+import math
+
 import geopandas as gpd
 from shapely import union_all
+from shapely.affinity import translate
 from shapely.geometry import Polygon
 
 FT_TO_M = 0.3048
@@ -11,6 +14,7 @@ MIN_ACRES = 0.01  # below this an area counts as nothing
 # EPA treats drone application as aerial for label purposes.
 METHOD_ALIASES = {"drone": "aerial"}  # label_reader limits applies_to to all/aerial/ground
 HAZARD_KINDS = ("water", "building", "habitat")
+SLIVER_M = 0.5  # unmanaged land narrower than this between managed land and the field is ignored
 
 
 def _applies(rule: dict, method: str) -> bool:
@@ -24,12 +28,48 @@ def _acres(geom) -> float:
     return geom.area / SQM_PER_ACRE
 
 
+def drift_zone(field_m, managed_m: list, meters: float, wind_from_deg: float | None = None):
+    """The part of the field (metres) within `meters` of unmanaged land: everything outside the field that the user
+    hasn't marked as managed. Spraying there could drift onto it.
+
+    With wind_from_deg (compass degrees the wind blows from), drift only travels downwind: a treated point p
+    reaches unmanaged q when q = p + t * downwind for t in [0, meters], so unmanaged land is swept upwind by
+    `meters` instead of buffered all round.
+    """
+    outside = field_m.buffer(meters + 1).difference(field_m)  # nothing further out can be reached
+    unmanaged = outside.difference(union_all(managed_m)) if managed_m else outside
+    # ponytail: gaps under SLIVER_M between marked land and the field are drawing or reprojection noise, not land
+    # anything drifts onto; a real unmanaged strip that narrow (a ditch edge) is missed. Snap drawings if it matters.
+    unmanaged = unmanaged.buffer(-SLIVER_M / 2).buffer(SLIVER_M / 2)
+    if unmanaged.is_empty or meters <= 0:
+        return Polygon()
+    if wind_from_deg is None:
+        reach = unmanaged.buffer(meters)
+    else:
+        rad = math.radians(wind_from_deg)
+        reach = _sweep(unmanaged, meters * math.sin(rad), meters * math.cos(rad))
+    return field_m.intersection(reach)
+
+
+def _sweep(shape, dx: float, dy: float):
+    """shape swept along (dx, dy), exactly: the shape, its shifted copy and every edge's parallelogram."""
+    parts = [shape, translate(shape, dx, dy)]
+    for poly in getattr(shape, "geoms", [shape]):
+        for ring in [poly.exterior, *poly.interiors]:
+            c = list(ring.coords)
+            quads = (Polygon([a, b, (b[0] + dx, b[1] + dy), (a[0] + dx, a[1] + dy)]) for a, b in zip(c, c[1:]))
+            parts += [q for q in quads if q.area > 0]  # an edge parallel to the wind sweeps no area
+    return union_all(parts)
+
+
 def plan(field: Polygon, hazards: dict, rules: list[dict], restricted=(),
-         method: str = "drone", prohibited: bool = False, gaps=()) -> dict:
+         method: str = "drone", prohibited: bool = False, gaps=(), managed=(), wind_from_deg=None) -> dict:
     """restricted: bulletin shapes to exclude. prohibited: bulletin bans the product here.
 
     gaps: missing data the plan needs (e.g. USGS water unavailable). Any gap is NO-GO with nothing sprayable:
-    a zone that couldn't be checked is never handed to a sprayer."""
+    a zone that couldn't be checked is never handed to a sprayer.
+    managed: land next to the field the user marked as managed (roads, other fields, farmsteads); a drift rule
+    buffers the treated area toward everything else. wind_from_deg: if set, drift buffers run downwind only."""
     utm = gpd.GeoSeries([field], crs=4326).estimate_utm_crs()
 
     def to_utm(shapes):
@@ -64,6 +104,18 @@ def plan(field: Polygon, hazards: dict, rules: list[dict], restricted=(),
                         "distance_ft": round(meters / FT_TO_M, 1),
                         "summary": rule.get("summary", ""), "quote": rule["quote"],
                         "page": rule.get("page")})
+
+    managed_m = to_utm(managed)
+    for rule in rules:
+        if rule.get("kind") != "drift" or not _applies(rule, method):
+            continue
+        meters = rule["value"] * M_PER_UNIT[rule["unit"].lower()]
+        zone = drift_zone(field_m, managed_m, meters, wind_from_deg)
+        zones.append(zone)
+        if reaches([zone]):
+            reasons.append({"source": "label", "kind": "drift", "target": "unmanaged land",
+                            "distance_ft": round(meters / FT_TO_M, 1), "summary": rule.get("summary", ""),
+                            "quote": rule["quote"], "page": rule.get("page")})
 
     water_rule = any(r.get("kind") == "buffer" and r.get("target") == "water" and _applies(r, method) for r in rules)
     if hazards_m["water"] and not water_rule:

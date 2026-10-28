@@ -67,6 +67,12 @@ def test_drops_invented_quote(monkeypatch, pdf):
     assert out.rules == [] and out.dropped[0]["reason"] == "quote not found in label text"
 
 
+def test_drift_rule_needs_a_distance_but_no_target(monkeypatch, pdf):
+    fake_model(monkeypatch, [rule(kind="drift", target=None, unit="feet")])
+    (r,) = label_reader.read_label(pdf).rules
+    assert r.kind == "drift" and r.target is None and r.unit == "ft"
+
+
 def test_fixes_wrong_page(monkeypatch, pdf):
     fake_model(monkeypatch, [rule(page=1)])
     assert label_reader.read_label(pdf).rules[0].page == 2
@@ -77,6 +83,7 @@ def test_fixes_wrong_page(monkeypatch, pdf):
     ({"unit": "yards"}, "buffer without a distance in ft or m"),
     ({"value": None}, "buffer without a distance in ft or m"),
     ({"target": "river"}, "invalid fields: target"),
+    ({"kind": "drift", "target": None, "value": None}, "drift without a distance in ft or m"),
     ({"kind": "setback", "applies_to": "drones"}, "invalid fields: kind, applies_to"),
 ])
 def test_drops_unusable_rules(monkeypatch, pdf, bad, reason):

@@ -111,6 +111,26 @@ def test_unverified_buffer_rule_is_no_go(monkeypatch, field_path):
     assert result["warnings"] == ["1 label rule(s) could not be verified and were not applied. Check the label yourself."]
 
 
+def test_unverified_drift_rule_is_no_go(monkeypatch, field_path):
+    wire(monkeypatch, lbl=label(dropped=[{"kind": "drift", "reason": "quote not found in label text"}]))
+    assert pipeline.run(field_path, "label.pdf", "2026-11")["plan"]["status"] == "no-go"
+
+
+def test_conditional_drift_rule_can_be_unticked():
+    drift = RULE.model_copy(update={"kind": "drift", "target": None, "condition": "aerial in Iowa only"})
+    assert pipeline.confirmable(label(rules=[RULE, drift])) == [1]
+
+
+def test_managed_land_from_the_cache_reaches_the_drift_buffer():
+    drift = RULE.model_copy(update={"kind": "drift", "target": None})
+    hazards = {"water": [], "building": [], "habitat": []}
+    bare = pipeline.assemble(FIELD, label(rules=[drift]), hazards, bulletin(), "2026-11", "drone")
+    east, = ll(box(X + 400, Y - 50, X + 450, Y + 450))
+    marked = pipeline.assemble(FIELD, label(rules=[drift]), hazards | {"managed": [east]}, bulletin(), "2026-11", "drone")
+    wind = pipeline.assemble(FIELD, label(rules=[drift]), hazards, bulletin(), "2026-11", "drone", wind_from_deg=0)
+    assert bare["plan"]["spray_acres"] < marked["plan"]["spray_acres"] and bare["plan"]["spray_acres"] < wind["plan"]["spray_acres"]
+
+
 def test_unverified_non_buffer_rule_is_only_a_warning(monkeypatch, field_path):
     wire(monkeypatch, lbl=label(dropped=[{"kind": "wind", "reason": "quote not found in label text"}]))
     assert pipeline.run(field_path, "label.pdf", "2026-11")["plan"]["status"] == "adjust"

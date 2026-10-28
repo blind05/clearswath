@@ -16,7 +16,7 @@ MAX_PAGES = 80  # real labels run 20-70 pages; more would be a very large paid p
 
 class LabelTooLongError(ValueError):
     """A PDF over MAX_PAGES; the message is safe to show users."""
-KINDS = ["buffer", "wind", "rain", "rate", "runoff", "other"]
+KINDS = ["buffer", "drift", "wind", "rain", "rate", "runoff", "other"]
 TARGETS = ["water", "building", "habitat"]
 APPLIES_TO = ["all", "aerial", "ground"]
 # a label says "feet" or "ft"; store the short form buffers.plan expects
@@ -25,7 +25,7 @@ BUFFER_UNITS = {"ft": "ft", "feet": "ft", "foot": "ft", "m": "m", "meter": "m", 
 
 
 class LabelRule(BaseModel):
-    kind: Literal["buffer", "wind", "rain", "rate", "runoff", "other"]
+    kind: Literal["buffer", "drift", "wind", "rain", "rate", "runoff", "other"]
     target: Literal["water", "building", "habitat"] | None
     applies_to: Literal["all", "aerial", "ground"]
     value: float | None
@@ -102,12 +102,12 @@ def _check(rule: dict, pages: list[str]) -> str | None:
     if found is None:
         return "quote not found in label text"
     rule["page"] = found
-    if rule.get("kind") == "buffer":
-        if rule.get("target") is None:
+    if rule.get("kind") in ("buffer", "drift"):
+        if rule["kind"] == "buffer" and rule.get("target") is None:
             return "buffer without a target"
         unit = BUFFER_UNITS.get((rule.get("unit") or "").strip().lower())
         if rule.get("value") is None or unit is None:
-            return "buffer without a distance in ft or m"
+            return f"{rule['kind']} without a distance in ft or m"
         rule["unit"] = unit
     return None
 

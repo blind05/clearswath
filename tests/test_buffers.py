@@ -131,3 +131,78 @@ def test_runoff_points_never_soften_a_no_go():
 
 def test_runoff_rule_for_ground_rigs_skips_a_drone_job():
     assert plan(FIELD, {}, [RUNOFF | {"applies_to": "ground"}], method="drone")["status"] == "go"
+
+
+# Drift buffers (engine rule 2): from the treated area toward land the user hasn't marked as managed.
+import random  # noqa: E402
+
+from shapely import make_valid, union_all  # noqa: E402
+from shapely.geometry import Point, Polygon as Poly  # noqa: E402
+
+from app.buffers import drift_zone  # noqa: E402
+
+
+def drift(value=50, unit="ft", applies_to="all"):
+    return {"kind": "drift", "target": None, "applies_to": applies_to, "value": value, "unit": unit,
+            "summary": "Drift buffer", "quote": "Do not apply within 50 feet of non-target areas.", "page": 4}
+
+
+def test_drift_buffer_takes_a_rim_unless_the_land_beyond_is_managed():
+    d = 50 * 0.3048
+    out = plan(FIELD, {}, [drift()])
+    assert out["status"] == "adjust" and out["reasons"][0]["kind"] == "drift"
+    assert out["reasons"][0]["target"] == "unmanaged land" and out["reasons"][0]["distance_ft"] == 50
+    (spray,) = m(out["spray_zone"])
+    assert spray.area == pytest.approx((400 - 2 * d) ** 2, rel=1e-3)  # a d-wide rim on every side
+    # a road along the west side and a neighbour's field to the north are managed: no rim there
+    managed = ll(box(X - 30, Y - 30, X, Y + 430), box(X - 30, Y + 400, X + 430, Y + 430))
+    out = plan(FIELD, {}, [drift()], managed=managed)
+    (spray,) = m(out["spray_zone"])
+    assert spray.area == pytest.approx((400 - d) ** 2, rel=1e-3)  # rims only on the east and south
+
+
+def test_downwind_drift_only_buffers_the_downwind_edge():
+    d = 50 * 0.3048
+    out = plan(FIELD, {}, [drift()], wind_from_deg=270)  # wind from the west: drift heads east
+    (no_spray,) = m(out["no_spray"])
+    assert no_spray.area == pytest.approx(400 * d, rel=1e-3)
+    assert no_spray.intersection(box(X, Y, X + 400 - d - 0.1, Y + 400)).area < 0.01  # all of it the east strip
+
+
+def test_drift_rule_for_ground_rigs_skips_a_drone_job():
+    assert plan(FIELD, {}, [drift(applies_to="ground")], method="drone")["status"] == "go"
+
+
+def random_drift_case(rng):
+    pts = [(X + rng.uniform(0, 300), Y + rng.uniform(0, 300)) for _ in range(rng.randint(4, 9))]
+    field_m = Poly(pts).convex_hull
+    managed_m = [Point(X + rng.uniform(-50, 350), Y + rng.uniform(-50, 350)).buffer(rng.uniform(5, 80))
+                 for _ in range(rng.randint(0, 4))]
+    return field_m, managed_m, rng.uniform(3, 60), rng.choice([None, rng.uniform(0, 360)])
+
+
+@pytest.mark.parametrize("seed", range(30))
+def test_drift_properties_on_random_fields(seed):
+    rng = random.Random(seed)
+    field_m, managed_m, meters, wind = random_drift_case(rng)
+    rule = drift(meters, "m")
+    field, managed = ll(field_m)[0], ll(*managed_m) if managed_m else []
+    out = plan(field, {}, [rule], managed=managed, wind_from_deg=wind)
+    all_round = plan(field, {}, [rule], managed=managed)
+    (spray,) = m(out["spray_zone"])
+    (spray_all,) = m(all_round["spray_zone"])
+    unmanaged = field_m.buffer(meters + 1).difference(field_m)
+    if managed_m:
+        unmanaged = unmanaged.difference(union_all(m(*managed)))
+    unmanaged = unmanaged.buffer(-0.25).buffer(0.25)  # the engine ignores drawing slivers under 0.5 m
+    # 1. with buffers all round, no sprayable area is within the drift distance of unmanaged land (zero-area
+    #    slivers from the polygon difference don't count; arcs are drawn with 64 segments, ~0.1% short)
+    if not spray_all.is_empty and not unmanaged.is_empty:
+        assert make_valid(spray_all).intersection(unmanaged.buffer(meters * 0.998)).area < 0.01
+    # 2. downwind-only never removes more than all round
+    assert out["spray_acres"] >= all_round["spray_acres"] - 0.01
+    # 3. marking more land as managed never shrinks what can be sprayed
+    more = managed + ll(field_m.buffer(meters * 2).difference(field_m))
+    assert plan(field, {}, [rule], managed=more, wind_from_deg=wind)["spray_acres"] >= out["spray_acres"] - 0.01
+    # 4. the drift zone is always inside the field
+    assert drift_zone(field_m, managed_m, meters, wind).difference(field_m).area <= 1e-6

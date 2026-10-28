@@ -10,7 +10,7 @@ from shapely.geometry import mapping, shape
 from app import buffers, bulletins, cells, exports, geo, label_reader, segment
 
 CELL_M = 1.0  # ponytail: one spot-spray cell size for every sprayer; make it a setting when sprayers differ
-SHAPES = ("water", "building", "habitat", "weeds")
+SHAPES = ("water", "building", "habitat", "weeds", "managed")  # managed: land the user marked next to the field
 
 
 class NotConfirmableError(ValueError):
@@ -28,10 +28,12 @@ def run(field_path, label_path, month: str, method: str = "drone", excluded_rule
 def confirmable(label) -> list[int]:
     """Rule ids (indexes into label.rules) the user may untick: conditional buffers (the only conditional rules
     that change the map), or every rule read from a photo."""
-    return [i for i, r in enumerate(label.rules) if (r.condition and r.kind == "buffer") or label.source == "image"]
+    return [i for i, r in enumerate(label.rules)
+            if (r.condition and r.kind in ("buffer", "drift")) or label.source == "image"]
 
 
-def assemble(field, label, hazards: dict, bulletin: dict, month: str, method: str, excluded_rules=()) -> dict:
+def assemble(field, label, hazards: dict, bulletin: dict, month: str, method: str, excluded_rules=(),
+             wind_from_deg: float | None = None) -> dict:
     """Plan from already-gathered inputs, plus the warnings the applicator must see.
 
     Every rule is applied unless the user unticked it, and only rules needing confirmation can be
@@ -44,12 +46,12 @@ def assemble(field, label, hazards: dict, bulletin: dict, month: str, method: st
     rules = [r for i, r in enumerate(label.rules) if i not in excluded]
     # Data the plan can't do without. Each makes the plan NO-GO (fail closed) instead of a warning.
     gaps = list(hazards.get("water_warnings") or [])
-    dropped_buffers = [d for d in label.dropped if d.get("kind") == "buffer"]
+    dropped_buffers = [d for d in label.dropped if d.get("kind") in ("buffer", "drift")]
     if dropped_buffers:
         gaps.append(f"{len(dropped_buffers)} buffer rule(s) on the label could not be verified, so a required "
                     "setback may be missing. Check the label, or try again.")
-    plan = buffers.plan(field, hazards, [r.model_dump() for r in rules],
-                        bulletin["restricted"], method, bulletin["prohibited"], gaps)
+    plan = buffers.plan(field, hazards, [r.model_dump() for r in rules], bulletin["restricted"], method,
+                        bulletin["prohibited"], gaps, hazards.get("managed") or (), wind_from_deg)
 
     warnings = [f"You unticked: {label.rules[i].summary} (label p.{label.rules[i].page}"
                 + (f", only when {label.rules[i].condition}" if label.rules[i].condition else "") + ")."
