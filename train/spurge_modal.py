@@ -122,8 +122,9 @@ def map_block(backbone: str, view: str, window_m: float, rows_: list[int], cols:
               holdout: list[int], target_recall: float = 0.95, out_m: float = 0.1016) -> dict:
     """Spurge map over orthomosaic tiles (rows_ x cols), from a probe trained on every cluster not in holdout.
 
-    The holdout clusters' plots are the honest check of the map. Returns weed polygons (EPSG:32611), the
-    check, and a JPEG of the block. ponytail: each crop is mapped on its own, so windows near crop edges see
+    The holdout clusters' plots are the honest check of the map. Returns a spurge probability GeoTIFF
+    (EPSG:32611, 0-254, 255 = no image), what's needed to pick a catch rate later, the check at
+    target_recall, and a JPEG of the block. ponytail: each crop is mapped on its own, so windows near crop edges see
     less context than the training plots did; overlap crops if that shows up in the check.
     """
     import io
@@ -136,9 +137,7 @@ def map_block(backbone: str, view: str, window_m: float, rows_: list[int], cols:
     import torch.nn.functional as F
     from huggingface_hub import hf_hub_download
     from PIL import Image
-    from rasterio.features import shapes
     from rasterio.transform import from_origin
-    from shapely.geometry import mapping, shape
     from sklearn.linear_model import LogisticRegression
     from sklearn.model_selection import cross_val_predict
     from sklearn.pipeline import make_pipeline
@@ -176,7 +175,10 @@ def map_block(backbone: str, view: str, window_m: float, rows_: list[int], cols:
     bias = float(lr.intercept_[0])
 
     step = round(out_m / GSD)  # output pixel = step x step orthomosaic pixels
-    polys, flagged, total, thumbs = [], 0, 0, {}
+    flagged, total, thumbs = 0, 0, {}
+    side = 4096 // step // 2  # probability tiles are kept at 2 x out_m
+    probs = np.full((side * len(rows_), side * len(cols)), 255, np.uint8)  # 0-254 = probability, 255 = no image
+    origin = None
     for r in rows_:
         for c in cols:
             path = hf_hub_download("mpg-ranch/leafy_spurge", f"data/orthomosaic/orthomosaic_{r:02d}_{c:02d}.tif",
@@ -195,10 +197,12 @@ def map_block(backbone: str, view: str, window_m: float, rows_: list[int], cols:
                     p = F.interpolate(p, size=(crop // step, crop // step), mode="bilinear")[0, 0]
                     prob[y0 // step:(y0 + crop) // step, x0 // step:(x0 + crop) // step] = p.cpu().numpy()
             ok = valid[:prob.shape[0] * step:step, :prob.shape[1] * step:step]
-            weed = (prob >= threshold) & ok
-            flagged, total = flagged + int(weed.sum()), total + int(ok.sum())
-            tf = from_origin(left, top, step * GSD, step * GSD)
-            polys += [mapping(shape(g)) for g, v in shapes(weed.astype(np.uint8), mask=weed, transform=tf) if v]
+            origin = origin or (left, top)
+            half = prob.reshape(side, 2, side, 2).mean((1, 3))
+            half_ok = ok.reshape(side, 2, side, 2).all((1, 3))
+            probs[(r - rows_[0]) * side:(r - rows_[0] + 1) * side, (c - cols[0]) * side:(c - cols[0] + 1) * side] = \
+                np.where(half_ok, np.round(half * 254), 255).astype(np.uint8)
+            flagged, total = flagged + int(((prob >= threshold) & ok).sum()), total + int(ok.sum())
             thumbs[(r, c)] = Image.fromarray(rgb[::16, ::16])
     th = next(iter(thumbs.values())).size[0]
     mosaic = Image.new("RGB", (th * len(cols), th * len(rows_)))
@@ -206,12 +210,23 @@ def map_block(backbone: str, view: str, window_m: float, rows_: list[int], cols:
         mosaic.paste(im, ((c - cols[0]) * th, (r - rows_[0]) * th))
     buf = io.BytesIO()
     mosaic.save(buf, "JPEG", quality=82)
+    from rasterio.io import MemoryFile
+
+    with MemoryFile() as mem:
+        with mem.open(driver="GTiff", width=probs.shape[1], height=probs.shape[0], count=1, dtype="uint8",
+                      crs="EPSG:32611", transform=from_origin(*origin, 2 * step * GSD, 2 * step * GSD), nodata=255,
+                      compress="deflate") as dst:
+            dst.write(probs, 1)
+        prob_tif = mem.read()
     return {"backbone": backbone, "view": view, "window_m": window_m, "threshold": threshold,
             "holdout": holdout, "fit_n": int(fit.sum()), "holdout_n": int((~fit).sum()),
             "holdout_recall": float((p_hold[y_hold == 1] >= threshold).mean()),
             "holdout_absent_flagged": float((p_hold[y_hold == 0] >= threshold).mean()),
-            "share_flagged": flagged / max(total, 1), "crs": "EPSG:32611", "weeds": polys, "jpeg": buf.getvalue(),
-            "jpeg_m_per_px": 16 * GSD}
+            "share_flagged": flagged / max(total, 1), "crs": "EPSG:32611", "jpeg": buf.getvalue(),
+            "jpeg_m_per_px": 16 * GSD, "prob_tif": prob_tif,
+            # for choosing a catch rate later: thresholds from the training clusters, results on the held-out ones
+            "fit_present_probs": inner[y[fit] == 1].tolist(), "holdout_probs": p_hold.tolist(),
+            "holdout_y": y_hold.tolist()}
 
 
 def _group_folds(groups):
