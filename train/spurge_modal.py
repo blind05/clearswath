@@ -124,20 +124,14 @@ def map_block(backbone: str, view: str, window_m: float, rows_: list[int], cols:
 
     The holdout clusters' plots are the honest check of the map. Returns a spurge probability GeoTIFF
     (EPSG:32611, 0-254, 255 = no image), what's needed to pick a catch rate later, the check at
-    target_recall, and a JPEG of the block. ponytail: the whole block sits in memory (1.8 GB for 36 tiles); map
-    it in strips if blocks get much bigger.
+    target_recall, and a JPEG of the block.
     """
-    import io
     import os
 
     os.environ["HF_HOME"] = "/data"
     import numpy as np
-    import rasterio
     import torch
     import torch.nn.functional as F
-    from huggingface_hub import hf_hub_download
-    from PIL import Image
-    from rasterio.transform import from_origin
     from sklearn.linear_model import LogisticRegression
     from sklearn.model_selection import cross_val_predict
     from sklearn.pipeline import make_pipeline
@@ -175,6 +169,37 @@ def map_block(backbone: str, view: str, window_m: float, rows_: list[int], cols:
     bias = float(lr.intercept_[0])
 
     step = round(out_m / GSD)  # output pixel = step x step orthomosaic pixels
+
+    def score(win):
+        f = features(_upscale(win, up)).float()
+        pooled = F.avg_pool2d(f[None], n, stride=1, padding=n // 2, count_include_pad=False)[0]
+        return torch.einsum("chw,c->hw", (pooled - mean[:, None, None]) / scale[:, None, None], coef) + bias
+
+    prob, ok, origin, rgb = _scan_block(rows_, cols, crop, score, step)
+    flagged, total = int(((prob >= threshold) & ok).sum()), int(ok.sum())
+    return {"backbone": backbone, "view": view, "window_m": window_m, "threshold": threshold,
+            "holdout": holdout, "fit_n": int(fit.sum()), "holdout_n": int((~fit).sum()),
+            "holdout_recall": float((p_hold[y_hold == 1] >= threshold).mean()),
+            "holdout_absent_flagged": float((p_hold[y_hold == 0] >= threshold).mean()),
+            "share_flagged": flagged / max(total, 1), "crs": "EPSG:32611",
+            **_outputs(prob, ok, origin, rgb, step),
+            # for choosing a catch rate later: thresholds from the training clusters, results on the held-out ones
+            "fit_present_probs": inner[y[fit] == 1].tolist(), "holdout_probs": p_hold.tolist(),
+            "holdout_y": y_hold.tolist()}
+
+
+def _scan_block(rows_: list[int], cols: list[int], crop: int, score, step: int):
+    """Spurge probability over the stitched tiles, at step x step orthomosaic pixels, from score(window) -> logit map.
+
+    ponytail: the whole block sits in memory (1.8 GB for 36 tiles); map it in strips if blocks get much bigger.
+    Returns (probability, has-image mask, top-left corner in EPSG:32611, the stitched RGB).
+    """
+    import numpy as np
+    import rasterio
+    import torch
+    import torch.nn.functional as F
+    from huggingface_hub import hf_hub_download
+
     tile = 4096
     h, w = tile * len(rows_), tile * len(cols)
     rgb, valid, origin = np.zeros((h, w, 3), np.uint8), np.zeros((h, w), bool), None
@@ -184,7 +209,7 @@ def map_block(backbone: str, view: str, window_m: float, rows_: list[int], cols:
                                    repo_type="dataset", local_dir=ROOT)
             with rasterio.open(path) as src:
                 rgba, origin = src.read(), origin or (src.bounds.left, src.bounds.top)
-            oy, ox = (r - rows_[0]) * tile, (c - cols[0]) * tile  # not y/x: those hold the plots' labels/features
+            oy, ox = (r - rows_[0]) * tile, (c - cols[0]) * tile
             rgb[oy:oy + tile, ox:ox + tile] = rgba[:3].transpose(1, 2, 0)
             valid[oy:oy + tile, ox:ox + tile] = rgba[3] > 0
 
@@ -192,17 +217,15 @@ def map_block(backbone: str, view: str, window_m: float, rows_: list[int], cols:
     # less context and under-calls spurge, which left unsprayed stripes at every crop and tile seam.
     margin = crop // 8
     keep = crop - 2 * margin
-    logits, full = [], []  # raw probe scores per window, before the position correction
-    for y0 in range(-margin, h - margin, keep):
-        for x0 in range(-margin, w - margin, keep):
-            win = np.zeros((crop, crop, 3), np.uint8)
-            ys, xs, ye, xe = max(y0, 0), max(x0, 0), min(y0 + crop, h), min(x0 + crop, w)
-            win[ys - y0:ye - y0, xs - x0:xe - x0] = rgb[ys:ye, xs:xe]
-            f = features(_upscale(win, up)).float()
-            pooled = F.avg_pool2d(f[None], n, stride=1, padding=n // 2, count_include_pad=False)[0]
-            logit = torch.einsum("chw,c->hw", (pooled - mean[:, None, None]) / scale[:, None, None], coef) + bias
-            logits.append((y0, x0, logit.cpu()))
-            full.append(ye - ys == crop and xe - xs == crop and valid[ys:ye, xs:xe].all())
+    logits, full = [], []  # raw scores per window, before the position correction
+    with torch.no_grad():
+        for y0 in range(-margin, h - margin, keep):
+            for x0 in range(-margin, w - margin, keep):
+                win = np.zeros((crop, crop, 3), np.uint8)
+                ys, xs, ye, xe = max(y0, 0), max(x0, 0), min(y0 + crop, h), min(x0 + crop, w)
+                win[ys - y0:ye - y0, xs - x0:xe - x0] = rgb[ys:ye, xs:xe]
+                logits.append((y0, x0, score(win).float().cpu()))
+                full.append(ye - ys == crop and xe - xs == crop and valid[ys:ye, xs:xe].all())
     # The features carry their position in the window, and every training plot sat at the centre, so scores
     # drift with position (rows ramped ~30 -> 100 of 254 across each window). The ground is statistically the
     # same everywhere in the block, so the mean score at each position over the fully imaged windows, minus the
@@ -218,31 +241,31 @@ def map_block(backbone: str, view: str, window_m: float, rows_: list[int], cols:
         ky, kx = min(keep, h - cy), min(keep, w - cx)
         prob[cy // step:(cy + ky) // step, cx // step:(cx + kx) // step] = \
             p[margin // step:(margin + ky) // step, margin // step:(margin + kx) // step]
-    ok = valid[::step, ::step]
-    flagged, total = int(((prob >= threshold) & ok).sum()), int(ok.sum())
-    ph, pw = prob.shape[0] // 2, prob.shape[1] // 2  # probabilities are kept at 2 x out_m
+    return prob, valid[::step, ::step], origin, rgb
+
+
+def _outputs(prob, ok, origin, rgb, step: int) -> dict:
+    """The probability GeoTIFF (0-254, 255 = no image, at 2 x step pixels) and a JPEG of the block."""
+    import io
+
+    import numpy as np
+    from PIL import Image
+    from rasterio.io import MemoryFile
+    from rasterio.transform import from_origin
+
+    ph, pw = prob.shape[0] // 2, prob.shape[1] // 2
     half = prob[:ph * 2, :pw * 2].reshape(ph, 2, pw, 2).mean((1, 3))
     half_ok = ok[:ph * 2, :pw * 2].reshape(ph, 2, pw, 2).all((1, 3))
-    probs = np.where(half_ok, np.round(half * 254), 255).astype(np.uint8)  # 0-254 = probability, 255 = no image
+    probs = np.where(half_ok, np.round(half * 254), 255).astype(np.uint8)
     buf = io.BytesIO()
     Image.fromarray(rgb[::16, ::16]).save(buf, "JPEG", quality=82)
-    from rasterio.io import MemoryFile
-
     with MemoryFile() as mem:
         with mem.open(driver="GTiff", width=probs.shape[1], height=probs.shape[0], count=1, dtype="uint8",
                       crs="EPSG:32611", transform=from_origin(*origin, 2 * step * GSD, 2 * step * GSD), nodata=255,
                       compress="deflate") as dst:
             dst.write(probs, 1)
         prob_tif = mem.read()
-    return {"backbone": backbone, "view": view, "window_m": window_m, "threshold": threshold,
-            "holdout": holdout, "fit_n": int(fit.sum()), "holdout_n": int((~fit).sum()),
-            "holdout_recall": float((p_hold[y_hold == 1] >= threshold).mean()),
-            "holdout_absent_flagged": float((p_hold[y_hold == 0] >= threshold).mean()),
-            "share_flagged": flagged / max(total, 1), "crs": "EPSG:32611", "jpeg": buf.getvalue(),
-            "jpeg_m_per_px": 16 * GSD, "prob_tif": prob_tif,
-            # for choosing a catch rate later: thresholds from the training clusters, results on the held-out ones
-            "fit_present_probs": inner[y[fit] == 1].tolist(), "holdout_probs": p_hold.tolist(),
-            "holdout_y": y_hold.tolist()}
+    return {"jpeg": buf.getvalue(), "jpeg_m_per_px": 16 * GSD, "prob_tif": prob_tif}
 
 
 def _group_folds(groups):
