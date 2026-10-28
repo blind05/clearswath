@@ -1,7 +1,7 @@
-"""The only place that talks to Meta models: the Meta Model API, and Muse Spark Open on Baseten.
+"""The only place that talks to Meta models: the Meta Model API, and Muse Spark Open on Baseten or Fireworks.
 
-Both are OpenAI-compatible. Pick the Spark provider per call (provider="meta" | "baseten") or with
-LLM_PROVIDER in .env. SAM and voice are Meta Model API only.
+All are OpenAI-compatible. Pick the Spark provider per call (provider="meta" | "baseten" | "fireworks") or
+with LLM_PROVIDER in .env. SAM and voice are Meta Model API only.
 """
 
 import base64
@@ -22,12 +22,15 @@ SPARK = "muse-spark-1.3"
 SAM = "sam-3.1"
 VOICE = "muse-voice-transcribe-1.0"
 SPARK_OPEN = "meta-models/muse-spark-open-1026"
+SPARK_OPEN_FIREWORKS = "accounts/fireworks/models/muse-spark-open"
 
 # provider -> (base URL, key variable, Spark model, SDK retries; the SDK backs off on 429)
 PROVIDERS = {
     "meta": (BASE_URL, "MODEL_API_KEY", SPARK, 2),
     "baseten": ("https://inference.baseten.co/v1", "BASETEN_API_KEY", SPARK_OPEN, 5),  # ~60 requests/min
+    "fireworks": ("https://api.fireworks.ai/inference/v1", "FIREWORKS_API_KEY", SPARK_OPEN_FIREWORKS, 3),
 }
+NO_STRUCTURED_OUTPUT = {"baseten"}  # chat_json forces one tool call there instead of response_format
 
 MODEL_TIMEOUT_S = 120
 
@@ -106,8 +109,8 @@ def chat_json(messages: list[dict], schema: dict, name: str, *,
         raise ValueError("chat_json schema must have an object root")
     which = resolve_provider(provider)
     model = model or PROVIDERS[which][2]
-    if which == "baseten":
-        # No structured outputs on Baseten: force one tool call whose parameters are the schema.
+    if which in NO_STRUCTURED_OUTPUT:
+        # No structured outputs here: force one tool call whose parameters are the schema.
         tool = {"type": "function", "function": {"name": name, "description": "Return the result.",
                                                  "parameters": schema}}
         resp = _complete(purpose, which, model=model, messages=messages, tools=[tool],

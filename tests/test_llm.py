@@ -235,3 +235,22 @@ def test_model_clients_have_a_timeout(monkeypatch):
     for name in ("meta", "baseten"):
         assert llm.client(name).timeout == llm.MODEL_TIMEOUT_S == 120
     llm.client.cache_clear()
+
+
+def test_fireworks_uses_real_structured_output(fake):
+    fake.chat.completions.create.return_value = reply('{"a": 1}')
+    schema = {"type": "object", "properties": {"a": {"type": "integer"}}}
+    assert llm.chat_json([], schema, "x", provider="fireworks") == {"a": 1}
+    kw = fake.chat.completions.create.call_args.kwargs
+    assert fake.names == ["fireworks"] and kw["model"] == llm.SPARK_OPEN_FIREWORKS
+    assert kw["response_format"]["type"] == "json_schema" and "tools" not in kw
+
+
+def test_fireworks_client(monkeypatch):
+    llm.client.cache_clear()
+    monkeypatch.setattr(llm, "load_dotenv", lambda *a: None)
+    monkeypatch.setenv("FIREWORKS_API_KEY", "f")
+    c = llm.client("fireworks")
+    assert c.api_key == "f" and str(c.base_url).startswith("https://api.fireworks.ai/inference/v1")
+    assert c.timeout == llm.MODEL_TIMEOUT_S
+    llm.client.cache_clear()

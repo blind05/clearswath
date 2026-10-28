@@ -19,7 +19,7 @@ from app import llm  # noqa: E402
 
 results = {}
 ap = argparse.ArgumentParser()
-ap.add_argument("--provider", choices=["meta", "baseten"], default="meta")
+ap.add_argument("--provider", choices=["meta", "baseten", "fireworks"], default="meta")
 PROVIDER = ap.parse_args().provider
 
 

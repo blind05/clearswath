@@ -98,7 +98,7 @@ if __name__ == "__main__":
     import argparse
 
     ap = argparse.ArgumentParser()
-    ap.add_argument("--provider", choices=["meta", "baseten"])
+    ap.add_argument("--provider", choices=["meta", "baseten", "fireworks"])
     ap.add_argument("keys", nargs="*")
     args = ap.parse_args()
     main(args.keys, args.provider)
