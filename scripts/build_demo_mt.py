@@ -126,7 +126,7 @@ def main(backbone: str, view: str, window: float, provider: str, catch: float, r
             "are not sprayed. Scout them before the job."] if missing > 0.005 else []
     hazards = {"water": water, "building": [], "habitat": [], "water_source": "usgs", "water_warnings": [],
                "imagery_date": "2023-06-12", "imagery_warnings": gaps, "weeds": weeds,
-               "weed_source": f"{name} probe set to catch {catch:.0%} of spurge plots: on held-out plots it found "
+               "weed_source": f"{name} model set to catch {catch:.0%} of spurge plots: on held-out plots it found "
                               f"{check['holdout_recall']:.0%} and also flagged {check['holdout_absent_flagged']:.0%} "
                               "of clean ones"}
     bulletin = bulletins.check_bulletin(field_path, MONTH, "62719-6")

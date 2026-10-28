@@ -1,6 +1,6 @@
 {
  "drone|": {
-  "answer": "Decision is ADJUST. The field is 24.07 acres and 23.59 acres can be sprayed, with 0.48 acres excluded because no label water buffer applies and water itself is excluded. EPA Bulletins Live! Two for June 2026 shows no PULA for this product here.\n\nFor spot spraying, the weed map would spray 19.07 acres and leave 4.43 acres clean, with 0.57 acres buffered at 1m cells. The weed map is a dinov2-base probe set to catch 90% of spurge plots: on held-out plots it found 87% and also flagged 41% of clean ones, with 35092 patches detected.\n\nWarning: Drone imagery is missing for 1% of the block, so spurge there is unmapped and those cells are not sprayed. Scout them before the job. Label note: \"Applications should not occur during a temperature inversion because drift potential is high.\"",
+  "answer": "Decision is ADJUST.\n\nFor broadcast, you can spray 23.59 acres of the 24.07-acre field. 0.48 acres are excluded where water is present, because the label says \"Do not apply directly to water, to areas where surface water is present or to intertidal areas below the mean high water mark.\" - water itself is excluded and no additional label water buffer applies. No buildings or habitat buffers were found and no EPA Bulletin limits apply for this product here in June 2026.\n\nFor spot spraying, the weed map would spray 9.73 acres and leave 13.77 acres clean, with 0.57 buffered acres in 1.0 m cells. The weed map is from dinov2-base (2 blocks fine-tuned) model set to catch 85% of spurge plots: on held-out plots it found 90% and also flagged 10% of clean ones, so it will miss some spurge and flag some clean ground.\n\nWarning: Drone imagery is missing for 1% of the block, so spurge there is unmapped and those cells are not sprayed. Scout them before the job.",
   "decision": "adjust",
   "trace": [
    {
@@ -10,74 +10,109 @@
      "epa_reg_no": "62719-6",
      "rules": [
       {
-       "summary": "Do not exceed 2 quarts per acre per year on rights-of-way and other non-crop areas.",
+       "summary": "Do not apply directly to water or intertidal areas.",
+       "quote": "Do not apply directly to water, to areas where surface water is present or to intertidal areas below the mean high water mark.",
+       "page": 3
+      },
+      {
+       "summary": "Do not make application when conditions favor off-site movement.",
+       "quote": "Do not make application when circumstances favor movement from treatment site.",
+       "page": 3
+      },
+      {
+       "summary": "Prohibits chemigation through any irrigation system.",
+       "quote": "Chemigation: Do not apply this product through any type of irrigation system.",
+       "page": 11
+      },
+      {
+       "summary": "Non-cropland rights-of-way total use must not exceed 1 lb a.i. per acre per year.",
        "quote": "Total use of Tordon 22K, including retreatments or spot treatments, must not exceed 1.0 lb a.i. picloram (2 quarts) per acre per annual growing season on rights-of-way and other non-crop areas.",
        "page": 11
       },
       {
-       "summary": "On forest sites do not exceed 2 quarts per acre within any 2-year period.",
+       "summary": "Forest sites limited to 1 lb a.i. per acre per 2-year period.",
        "quote": "On forest sites, no more than 1.0 lb a.i. picloram (2 quarts) per acre may be applied within a period of 2 annual growing seasons.",
        "page": 11
       },
       {
-       "summary": "For noxious or invasive weeds on rangeland do not exceed 2 quarts per acre per year as broadcast treatment.",
+       "summary": "Rangeland noxious weed broadcast limit is 1 lb a.i. per acre per year.",
        "quote": "For control of noxious or invasive weeds as defined by federal, state, or local authorities, do not apply more than 1.0 lb active ingredient (2 quarts of Tordon 22K) per acre per annual growing season as a broadcast treatment.",
        "page": 11
       },
       {
-       "summary": "For other broadleaf weeds and woody plants on rangeland do not exceed 1 quart per acre per year.",
+       "summary": "Other broadleaf and woody plant broadcast limit is 0.5 lb a.i. per acre per year.",
        "quote": "For control of other broadleaf weeds and woody plants, do not apply more than 0.5 lb active ingredient (1 quart of Tordon 22K) per acre per annual growing season.",
        "page": 11
       },
       {
-       "summary": "On fallow cropland do not exceed 1 pint per acre per year as broadcast treatment.",
+       "summary": "Fallow cropland broadcast limit is 0.25 lb a.i. per acre per year.",
        "quote": "Do not apply more than 0.25 lb a.i. picloram (1 pint) per acre as a broadcast treatment per annual growing season.",
        "page": 11
       },
       {
-       "summary": "On CRP land do not broadcast more than 1 quart per acre per year.",
+       "summary": "CRP broadcast limit is 0.5 lb a.i. per acre per year with spot limit of 1 lb a.i.",
        "quote": "Do not broadcast apply more than 0.5 lb active ingredient (1 quart) per acre of Tordon 22K per annual growing season or apply more than 1.0 lb active ingredient (2 quarts) per acre per annual growing season as a spot application.",
        "page": 11
       },
       {
-       "summary": "On spring-seeded wheat, barley and oats do not exceed 1.5 fluid ounces per acre per growing season.",
+       "summary": "Do not apply to areas that may be rotated to broadleaf crops.",
+       "quote": "Do not apply to areas that may be rotated to any broadleaf crop.",
+       "page": 11
+      },
+      {
+       "summary": "Do not apply to snow or frozen ground.",
+       "quote": "Do not apply to snow or frozen ground.",
+       "page": 12
+      },
+      {
+       "summary": "Do not use a mist blower for application.",
+       "quote": "Do not apply this product through a mist blower.",
+       "page": 12
+      },
+      {
+       "summary": "Do not contaminate irrigation water or allow drift/runoff onto ditch banks.",
+       "quote": "Do not contaminate water intended for irrigation or domestic purposes. To avoid injury to crops or other desirable plants, do not treat or allow spray drift or run-off to fall onto banks or bottoms of irrigation ditches, either dry or containing water, or other channels that carry water that may be used for irrigation or domestic purposes.",
+       "page": 12
+      },
+      {
+       "summary": "Spring-seeded wheat, barley and oats limited to 1.5 fl oz per acre per season.",
        "quote": "Do not apply more than 1-1/2 fluid ounces of Tordon 22K per acre during the small grain growing season.",
        "page": 12
       },
       {
-       "summary": "Do not apply through any irrigation system (no chemigation).",
-       "quote": "Do not apply this product through any type of irrigation system.",
-       "page": 11
-      },
-      {
-       "summary": "Avoid application when wind is below 2 mph due to inversion potential.",
-       "quote": "Application should be avoided below 2 mph due to variable wind direction and high inversion potential.",
-       "page": 14
-      },
-      {
-       "summary": "Drift potential is lowest when wind is 2 to 10 mph.",
-       "quote": "Drift potential is lowest between wind speeds of 2-10 mph.",
-       "page": 14
-      },
-      {
-       "summary": "Do not apply aerially more than 10 feet above the tallest plants unless required for safety.",
-       "quote": "Applications should not be made at a height greater than 10 feet above the top of the largest plants unless a greater height is required for aircraft safety.",
-       "page": 13
-      },
-      {
-       "summary": "Aerial boom outer nozzles must not exceed 3/4 wingspan or 90% rotor width.",
+       "summary": "Aerial boom nozzles must not exceed 3/4 wingspan or 90% rotor width.",
        "quote": "The distance of the outer most operating nozzles on the boom must not exceed 3/4 the length of the wingspan or 90% of rotor width.",
        "page": 13
       },
       {
-       "summary": "Aerial nozzles must point backward and never more than 45 degrees downward.",
+       "summary": "Aerial nozzles must point backward and not more than 45 degrees down.",
        "quote": "Nozzles must always point backward parallel with the air stream and never be pointed downwards more than 45 degrees.",
        "page": 13
+      },
+      {
+       "summary": "Do not apply higher than 10 feet above tallest plants unless safety requires it.",
+       "quote": "Applications should not be made at a height greater than 10 feet above the top of the largest plants unless a greater height is required for aircraft safety.",
+       "page": 13
+      },
+      {
+       "summary": "Avoid application when wind is below 2 mph due to inversion risk.",
+       "quote": "Application should be avoided below 2 mph due to variable wind direction and high inversion potential.",
+       "page": 14
+      },
+      {
+       "summary": "Lowest drift potential is between 2-10 mph winds.",
+       "quote": "Drift potential is lowest between wind speeds of 2-10 mph.",
+       "page": 14
       },
       {
        "summary": "Do not apply during a temperature inversion.",
        "quote": "Applications should not occur during a temperature inversion because drift potential is high.",
        "page": 14
+      },
+      {
+       "summary": "Fallow cropland broadcast annual limit is 1 pint per acre.",
+       "quote": "Do not apply more than 1 pint per acre as a broadcast treatment per annual growing season.",
+       "page": 24
       }
      ],
      "unverified_rules": 0
@@ -92,8 +127,8 @@
      "habitat": 0,
      "imagery_date": "2023-06-12",
      "water_source": "usgs",
-     "weed_patches": 35092,
-     "weed_source": "dinov2-base probe set to catch 90% of spurge plots: on held-out plots it found 87% and also flagged 41% of clean ones"
+     "weed_patches": 21408,
+     "weed_source": "dinov2-base (2 blocks fine-tuned) model set to catch 85% of spurge plots: on held-out plots it found 90% and also flagged 10% of clean ones"
     },
     "seconds": 0.0
    },
@@ -125,13 +160,13 @@
       "Drone imagery is missing for 1% of the block, so spurge there is unmapped and those cells are not sprayed. Scout them before the job."
      ],
      "spot_spray": {
-      "treated_acres": 19.07,
-      "clean_acres": 4.43,
+      "treated_acres": 9.73,
+      "clean_acres": 13.77,
       "buffered_acres": 0.57,
       "cell_size_m": 1.0
      }
     },
-    "seconds": 6.28
+    "seconds": 3.8
    }
   ],
   "model": "accounts/fireworks/models/muse-spark-open",

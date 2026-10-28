@@ -83,7 +83,7 @@ def test_demo_record_uses_the_plan(client, monkeypatch):
 
 
 def test_montana_spot_spray_story(client):
-    """Montana rangeland, Tordon 22K, leafy spurge mapped by the DINOv2 probe at a 90% catch rate."""
+    """Montana rangeland, Tordon 22K, leafy spurge mapped by the fine-tuned DINOv2 model at an 85% catch rate."""
     import io
     import zipfile
 
@@ -93,12 +93,12 @@ def test_montana_spot_spray_story(client):
     mt = demo(client, field="mt")
     assert mt["status"] == "adjust" and mt["label"]["epa_reg_no"] == "62719-6"
     assert mt["demo"]["overlay"]["url"] == "/api/demo/image/mt"
-    # the water itself is excluded (no label setback); the weed map sprays about 4 in 5 acres
+    # the water itself is excluded (no label setback); the weed map sprays 4 acres in 10
     assert mt["acres"]["spray_acres"] == pytest.approx(23.59, abs=0.05)
     assert mt["spot"]["field_acres"] == pytest.approx(24.07, abs=0.05)
-    assert mt["spot"]["treated_acres"] == pytest.approx(19.07, abs=0.05)
+    assert mt["spot"]["treated_acres"] == pytest.approx(9.73, abs=0.05)
     assert mt["spot"]["buffered_acres"] == pytest.approx(0.57, abs=0.05)
-    assert "catch 90%" in mt["weed_source"] and "87%" in mt["weed_source"] and "41%" in mt["weed_source"]
+    assert "catch 85%" in mt["weed_source"] and "found 90%" in mt["weed_source"] and "10% of clean" in mt["weed_source"]
     assert any(w.startswith("Drone imagery is missing") for w in mt["warnings"])
     assert mt["layers"]["spray_cells"]["features"] and mt["layers"]["buffered_cells"]["features"]
 
