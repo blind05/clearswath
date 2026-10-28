@@ -3,6 +3,8 @@
 uv run --with pyarrow python evals/sam_weed_test.py --backend exg            # free baseline, no model
 uv run --with pyarrow --with modal python evals/sam_weed_test.py --backend modal   # open SAM 3 on Modal
 uv run --with pyarrow python evals/sam_weed_test.py --backend meta           # hosted SAM 3.1 (Meta credits)
+uv run --with pyarrow python evals/sam_weed_test.py --backend subtract       # green minus SAM 3.1's crop rows
+uv run --with pyarrow --with modal python evals/sam_weed_test.py --backend dinov3   # trained head on Meta DINOv3
 
 A grid cell is sprayed when the predicted mask covers at least --cover of it. The spec's gate: PASS when a prompt
 hits >= 95% of weed pixels while spraying <= 50% of the image at the finest cell size; BORDERLINE when that only
@@ -64,6 +66,28 @@ def excess_green(image: np.ndarray, threshold: float = 0.1) -> np.ndarray:
     total = rgb.sum(axis=2) + 1e-6
     r, g, b = (rgb[..., i] / total for i in range(3))
     return (2 * g - r - b) > threshold
+
+
+def dilate(mask: np.ndarray, px: int) -> np.ndarray:
+    """Grows a mask by px pixels (8-neighbour), one shift-and-or step at a time."""
+    out = mask.copy()
+    for _ in range(px):
+        g = out.copy()
+        g[1:] |= out[:-1]
+        g[:-1] |= out[1:]
+        g[:, 1:] |= out[:, :-1]
+        g[:, :-1] |= out[:, 1:]
+        g[1:, 1:] |= out[:-1, :-1]
+        g[:-1, :-1] |= out[1:, 1:]
+        g[1:, :-1] |= out[:-1, 1:]
+        g[:-1, 1:] |= out[1:, :-1]
+        out = g
+    return out
+
+
+def subtract_crop(image: np.ndarray, crop: np.ndarray, dilate_px: int) -> np.ndarray:
+    """Weeds = green pixels that aren't crop. The crop mask is widened by dilate_px so leaf edges aren't weeds."""
+    return excess_green(image) & ~dilate(crop, dilate_px)
 
 
 def mask_from_sam_text(text: str, width: int, height: int, min_score: float = 0.0) -> np.ndarray:
@@ -161,7 +185,12 @@ def overlay(png: bytes, truth: np.ndarray, pred: np.ndarray, path: Path) -> None
 
 def main() -> None:
     ap = argparse.ArgumentParser()
-    ap.add_argument("--backend", choices=["exg", "modal", "meta"], default="exg")
+    ap.add_argument("--backend", choices=["exg", "modal", "meta", "subtract", "dinov3"], default="exg")
+    ap.add_argument("--crop-prompts", nargs="+", default=["crop row", "plant"],
+                    help="subtract: SAM 3.1 prompts whose union is the crop")
+    ap.add_argument("--dilate", type=int, default=12, help="subtract: px the crop mask is widened")
+    ap.add_argument("--target-coverage", type=float, default=0.97,
+                    help="dinov3: weed-hit target on the tuning images (margin over the 95%% gate)")
     ap.add_argument("--n", type=int, default=20)
     ap.add_argument("--seed", type=int, default=7)
     ap.add_argument("--prompts", nargs="+", default=["weed", "plant", "green plant"])
@@ -171,7 +200,32 @@ def main() -> None:
     prompts = ["(excess green)"] if args.backend == "exg" else args.prompts
 
     items = load_cofly(args.n, args.seed)
-    preds = predict(args.backend, items, prompts)
+    if args.backend == "subtract":
+        crop = predict("meta", items, args.crop_prompts)  # cached hosted SAM 3.1 answers
+        label = f"green minus SAM({' + '.join(args.crop_prompts)}), dilate {args.dilate}"
+        prompts = [label]
+        preds = {}
+        for idx, png, _ in items:
+            crop_mask = np.logical_or.reduce([crop[(idx, p)] for p in args.crop_prompts])
+            preds[(idx, label)] = subtract_crop(np.asarray(Image.open(io.BytesIO(png))), crop_mask, args.dilate)
+    elif args.backend == "dinov3":
+        sys.path.insert(0, str(ROOT / "train"))
+        import weed_head_modal
+
+        report = weed_head_modal.run([idx for idx, _, _ in items], args.target_coverage)  # trains on the rest
+        label = f"DINOv3 head (tuned to {args.target_coverage:.0%}, threshold {report['threshold']:.2f})"
+        prompts = [label]
+        preds = {}
+        for idx, png, _ in items:
+            bits, h, w = report["preds"][idx]
+            preds[(idx, label)] = np.unpackbits(np.frombuffer(bits, np.uint8))[: h * w].reshape(h, w).astype(bool)
+        model_dir = ROOT / "data" / "cache" / "models"
+        model_dir.mkdir(parents=True, exist_ok=True)
+        (model_dir / "weed_head_dinov3.pt").write_bytes(report["head"])
+        print(f"trained on {report['train_n']}, tuned on {report['val_n']} (val: {report['val_coverage']:.1%} weed hit, "
+              f"{report['val_sprayed']:.1%} sprayed), tested on {report['test_n']} unseen images")
+    else:
+        preds = predict(args.backend, items, prompts)
     lines = [f"# Gate 3: SAM weed test ({args.backend}, CoFly-WeedDB, {args.n} images, seed {args.seed})", "",
              f"Cell sprayed when predicted cover >= {args.cover:.0%}. PASS: >= {PASS_COVERAGE:.0%} of weed hit while "
              f"spraying <= {MAX_TREATED:.0%}, at the finest cell.", "",

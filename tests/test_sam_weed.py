@@ -62,3 +62,20 @@ def test_mask_from_sam_text_pastes_at_the_box():
     text = "<0f>0<|box;x1=10;y1=20;x2=14;y2=24;w=64;h=64|><|mask;x=0;y=0;data=5,5,!!!!!(QO(0lu8?|>\n"
     m = ev.mask_from_sam_text(text, 64, 64)
     assert m.sum() == 10 and m[20:25, 10:15].sum() == 10  # all 10 mask pixels inside the box
+
+
+def test_subtract_crop_keeps_green_outside_the_widened_crop():
+    img = np.zeros((10, 30, 3), dtype=np.uint8)
+    img[:, :] = (140, 110, 80)  # soil
+    img[:, 0:10] = (40, 160, 40)  # crop row
+    img[4:6, 20:22] = (40, 160, 40)  # a weed between rows
+    crop = np.zeros((10, 30), dtype=bool)
+    crop[:, 0:9] = True  # SAM's row, slightly short of the leaf edge
+    weeds = ev.subtract_crop(img, crop, dilate_px=2)
+    assert weeds[4:6, 20:22].all() and not weeds[:, 0:10].any() and weeds.sum() == 4
+
+
+def test_dilate_grows_by_whole_pixels():
+    m = np.zeros((7, 7), dtype=bool)
+    m[3, 3] = True
+    assert ev.dilate(m, 1).sum() == 9 and ev.dilate(m, 2).sum() == 25 and ev.dilate(m, 0).sum() == 1
