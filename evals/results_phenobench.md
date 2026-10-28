@@ -32,3 +32,22 @@ SAM 3 does much better here than on CoFly (0% there), but it misses a quarter of
 
 Caveats: three dates from one field and one season. A tile is only about 1 m across, so a 0.5 m cell covers
 about a quarter of a tile, and the coarser columns are close to spraying whole tiles.
+
+## Rerun: 1% cover rule, plus 50 labelled tiles from the test date
+
+Same split, scored like the CoFly gate: a cell is sprayed when >= 1% of its pixels are predicted weed (edge cells
+partial). For each date, 50 of its own tiles are held back: 25 join training (repeated to about a quarter of the
+steps) and 25 set the threshold. Both heads are scored on the same remaining tiles (962, 516 and 551).
+
+| test date | trained on other dates: 0.1 m hit / sprayed | + 50 local tiles: 0.1 m | crop sprayed (local) | spray all green, 0.1 m |
+|---|---|---|---|---|
+| 05-15 (seedlings) | 60.0% / 2.9% FAIL | **97.9% / 18.2% PASS** | 9.4% | 82.7% / 18.5% |
+| 05-26 | 96.6% / 20.9% PASS | **97.7% / 18.9% PASS** | 4.5% | 92.0% / 36.6% |
+| 06-05 | 98.1% / 35.4% PASS | **95.5% / 15.1% PASS** | 1.1% | 98.4% / 59.3% |
+
+With local tiles, 0.25 m: 97.3/45.3, 96.3/43.0, 94.8/32.6. 0.5 m: 96.1/65.3, 93.9/63.5, 92.4/50.7. Under the 1%
+rule a coarser cell needs more predicted pixels, so hit falls as cells grow.
+SAM 3 zero-shot "weed" (100 random tiles): 73.1% / 21.9% at 0.1 m, FAIL.
+
+Labelling 50 tiles (about 50 m² at 1 mm/px) from the field being sprayed turns the seedling date from a fail into a
+pass. The 25 threshold tiles are few, so expect the hit rate to move a few points from field to field.
