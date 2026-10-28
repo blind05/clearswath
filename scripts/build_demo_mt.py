@@ -56,17 +56,17 @@ def overlay() -> None:
     (OUT / "block_bounds.json").write_text(json.dumps({"crs": "EPSG:4326", "bounds": bounds, "credit": CREDIT}))
 
 
-def weeds_at(catch: float) -> tuple[list, dict]:
+def weeds_at(catch: float, d: Path = OUT) -> tuple[list, dict]:
     """Spurge polygons (lon/lat) at the threshold that catches `catch` of the training clusters' spurge plots,
     and how that threshold does on the held-out plots and the block."""
     import numpy as np
     import rasterio
     from rasterio.features import shapes
 
-    m = json.loads((OUT / "weed_map.json").read_text())
+    m = json.loads((d / "weed_map.json").read_text())
     t = float(np.quantile(m["fit_present_probs"], 1 - catch))
     hp, hy = np.array(m["holdout_probs"]), np.array(m["holdout_y"])
-    with rasterio.open(OUT / "prob.tif") as src:
+    with rasterio.open(d / "prob.tif") as src:
         p, tf = src.read(1), src.transform
     ok = p != 255
     weed = ok & (p >= round(t * 254))
@@ -81,7 +81,8 @@ def weeds_at(catch: float) -> tuple[list, dict]:
         "holdout_absent_flagged": float((hp[hy == 0] >= t).mean()), "block_flagged": float(weed.sum() / ok.sum())}
 
 
-def main(backbone: str, view: str, window: float, provider: str, catch: float, reuse_map: bool = False) -> None:
+def main(backbone: str, view: str, window: float, provider: str, catch: float, reuse_map: bool = False,
+         finetune: bool = False) -> None:
     OUT.mkdir(parents=True, exist_ok=True)
     utm = block_utm()
     field = gpd.GeoSeries([utm], crs=32611).to_crs(4326).iloc[0]
@@ -89,10 +90,15 @@ def main(backbone: str, view: str, window: float, provider: str, catch: float, r
     field_path.write_text(json.dumps(mapping(field)))
 
     if not reuse_map:  # the map is saved before anything else can fail: it is the 25-minute GPU step
-        import spurge_modal
+        if finetune:
+            import spurge_finetune_modal
 
-        m = spurge_modal.run_map(backbone=backbone, view=view, window_m=window, rows_=ROWS, cols=COLS,
-                                 holdout=HOLDOUT)
+            m = spurge_finetune_modal.run_map(rows_=ROWS, cols=COLS, holdout=HOLDOUT)
+        else:
+            import spurge_modal
+
+            m = spurge_modal.run_map(backbone=backbone, view=view, window_m=window, rows_=ROWS, cols=COLS,
+                                     holdout=HOLDOUT)
         (OUT / "block.jpg").write_bytes(m["jpeg"])
         (OUT / "prob.tif").write_bytes(m["prob_tif"])
         (OUT / "weed_map.json").write_text(json.dumps({k: v for k, v in m.items() if k not in ("jpeg", "prob_tif")}))
@@ -138,6 +144,7 @@ if __name__ == "__main__":
     ap = argparse.ArgumentParser()
     ap.add_argument("--overlay-only", action="store_true", help="redo block.webp from block.jpg")
     ap.add_argument("--reuse-map", action="store_true", help="use the saved prob.tif and weed_map.json; skip the GPU step")
+    ap.add_argument("--finetune", action="store_true", help="map with the fine-tuned DINOv2-B (train/spurge_finetune_modal.py)")
     ap.add_argument("--backbone")
     ap.add_argument("--view", choices=["full", "zoom"])
     ap.add_argument("--window", type=float)
@@ -148,6 +155,8 @@ if __name__ == "__main__":
         overlay()
     elif a.reuse_map:
         main(None, None, None, a.provider, a.catch, reuse_map=True)
+    elif a.finetune:
+        main(None, None, None, a.provider, a.catch, finetune=True)
     elif not (a.backbone and a.view and a.window):
         ap.error("--backbone, --view and --window are required")
     else:
