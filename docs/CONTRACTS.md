@@ -23,7 +23,9 @@ Don't change a contract unless the human asks.
 
 Drift rules (engine rule 2) buffer the treated area toward unmanaged land: everything outside the field that
 the user hasn't marked as managed (`hazards["managed"]`), in every direction, or downwind only when a wind
-direction is given. Unmanaged gaps under 0.5 m are ignored as drawing noise. A drift or buffer rule whose quote
+direction is given (`wind_from`, compass degrees, on `/api/plan`, `/api/agent` and `/api/demo`; managed land as
+a GeoJSON `managed` form field, checked by `geo.load_managed`: polygons within ~2 km of the field, at most 50).
+Unmanaged gaps under 0.5 m are ignored as drawing noise. A drift or buffer rule whose quote
 fails the check is a `gap` (NO-GO).
 
 Every label rule is applied. Buffer rules with a `condition` (e.g. "ULV aerial only"), and every rule

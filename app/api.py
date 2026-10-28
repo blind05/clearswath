@@ -278,18 +278,38 @@ def _rule_ids(text: str) -> list[int]:
         raise HTTPException(422, "excluded_rules must be comma-separated rule ids, e.g. 1,3") from e
 
 
+MANAGED_MAX = 512 * 1024  # managed-land GeoJSON, sent as a form field
+
+
+def _wind(text: str) -> float | None:
+    """'' -> None (drift buffers all round); else compass degrees the wind blows from."""
+    if not text.strip():
+        return None
+    try:
+        deg = float(text)
+    except ValueError:
+        deg = -1
+    if not 0 <= deg < 360:
+        raise HTTPException(422, "wind_from must be compass degrees from 0 to 359, or empty")
+    return deg
+
+
 def _plan(run_id: str, field_path: Path, label_path: Path, month: str, method: str,
-          use_agent: bool = False, excluded_rules: str = "") -> dict:
+          use_agent: bool = False, excluded_rules: str = "", managed: str = "", wind_from: str = "") -> dict:
     excluded = _rule_ids(excluded_rules)
     if not MONTH.match(month):
         raise HTTPException(422, "month must look like 2026-11")
     if method not in METHODS:
         raise HTTPException(422, f"method must be one of {sorted(METHODS)}")
+    if len(managed) > MANAGED_MAX:
+        raise HTTPException(413, "The managed land is too large; simplify the shapes.")
+    wind = _wind(wind_from)
     try:
+        land = geo.load_managed(managed, geo.load_field(field_path)) if managed.strip() else []  # before any paid call
         if use_agent:  # the agent saves its own run under its own run_id
-            out = agent.run(field_path, label_path, month, method, excluded)
+            out = agent.run(field_path, label_path, month, method, excluded, managed=land, wind_from_deg=wind)
             return {**pipeline.to_json(out.pop("result")), **out}
-        result = pipeline.run(field_path, label_path, month, method, excluded)
+        result = pipeline.run(field_path, label_path, month, method, excluded, land, wind)
     except Exception as e:  # any failure: bad input, no imagery, missing key, model or data service down
         raise _http_error(e) from e
     pipeline.save_run(result, RUNS / run_id)
@@ -297,26 +317,29 @@ def _plan(run_id: str, field_path: Path, label_path: Path, month: str, method: s
 
 
 def _upload_and_plan(field: UploadFile, label: UploadFile, month: str, method: str, use_agent: bool,
-                     excluded_rules: str) -> dict:
+                     excluded_rules: str, managed: str = "", wind_from: str = "") -> dict:
     run_id = uuid.uuid4().hex
     run = RUNS / run_id
     suffix = _label_suffix(label)
     field_path = _save(field, run / "field.geojson", FIELD_MAX)
     label_path = _save(label, run / f"label{suffix}", LABEL_MAX)
-    return _plan(run_id, field_path, label_path, month, method, use_agent, excluded_rules)
+    return _plan(run_id, field_path, label_path, month, method, use_agent, excluded_rules, managed, wind_from)
 
 
 @app.post("/api/plan")  # gated by Guard
 def plan(field: UploadFile = File(...), label: UploadFile = File(...),
-         month: str = Form(...), method: str = Form("drone"), excluded_rules: str = Form("")):
-    return _upload_and_plan(field, label, month, method, False, excluded_rules)
+         month: str = Form(...), method: str = Form("drone"), excluded_rules: str = Form(""),
+         managed: str = Form(""), wind_from: str = Form("")):
+    """managed: GeoJSON of land next to the field marked as managed (drift buffers skip it); wind_from: degrees."""
+    return _upload_and_plan(field, label, month, method, False, excluded_rules, managed, wind_from)
 
 
 @app.post("/api/agent")  # gated by Guard
 def ask_agent(field: UploadFile = File(...), label: UploadFile = File(...),
-              month: str = Form(...), method: str = Form("drone"), excluded_rules: str = Form("")):
+              month: str = Form(...), method: str = Form("drone"), excluded_rules: str = Form(""),
+              managed: str = Form(""), wind_from: str = Form("")):
     """Same as /api/plan, plus the agent's answer, trace and mode. The decision still comes from buffers.plan."""
-    return _upload_and_plan(field, label, month, method, True, excluded_rules)
+    return _upload_and_plan(field, label, month, method, True, excluded_rules, managed, wind_from)
 
 
 @app.post("/api/label")  # gated by Guard
@@ -401,7 +424,7 @@ def demo_agent(field: str = Form(""), method: str = Form("drone"), excluded_rule
 
 @app.get("/api/demo")
 def demo(request: Request, month: str | None = None, method: str = "drone", excluded_rules: str = "",
-         field: str = "", agent_answer: bool = False):
+         field: str = "", agent_answer: bool = False, wind_from: str = ""):
     """The demo field. From data/demo/cache when present (offline, instant; the plan is still recomputed),
     else live. field=corrected is the outline pulled back from the creek."""
     if field not in DEMO_FIELDS:
@@ -411,10 +434,10 @@ def demo(request: Request, month: str | None = None, method: str = "drone", excl
     if pipeline.cache_file(cache):
         if method not in METHODS:
             raise HTTPException(422, f"method must be one of {sorted(METHODS)}")
-        excluded = _rule_ids(excluded_rules)
+        excluded, wind = _rule_ids(excluded_rules), _wind(wind_from)
         try:
             shape_, label, hazards, bulletin, cached_month = pipeline.load_inputs(cache)
-            result = pipeline.assemble(shape_, label, hazards, bulletin, cached_month, method, excluded)
+            result = pipeline.assemble(shape_, label, hazards, bulletin, cached_month, method, excluded, wind)
         except Exception as e:
             raise _http_error(e) from e
         run_id = uuid.uuid4().hex

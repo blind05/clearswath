@@ -59,6 +59,35 @@ def check_field(field: Polygon) -> None:
         raise FieldError(f"The field is {acres:,.0f} acres; the limit is {MAX_FIELD_ACRES:,.0f}. Split it up.")
 
 
+MAX_MANAGED = 50  # shapes of managed land per job
+NEAR_DEG = 0.02  # managed land must lie within ~2 km of the field
+
+
+def load_managed(text: str, field: Polygon) -> list[Polygon]:
+    """Land next to the field the user marked as managed (GeoJSON text), checked like the field. Empty -> []."""
+    if not text.strip():
+        return []
+    try:
+        geoms = [shape(g) for g in _geometries(json.loads(text))]
+    except (ValueError, KeyError, TypeError, AttributeError) as e:
+        raise FieldError("The managed land isn't valid GeoJSON.") from e
+    if not all(isinstance(g, (Polygon, MultiPolygon)) for g in geoms):
+        raise FieldError("Managed land must be drawn as polygons.")
+    polys = [p for g in geoms for p in getattr(g, "geoms", [g])]
+    if len(polys) > MAX_MANAGED:
+        raise FieldError(f"Mark at most {MAX_MANAGED} areas of managed land.")
+    points = sum(len(p.exterior.coords) + sum(len(r.coords) for r in p.interiors) for p in polys)
+    if points > MAX_VERTICES:
+        raise FieldError(f"The managed land has {points:,} points; the limit is {MAX_VERTICES:,}.")
+    near = field.buffer(NEAR_DEG)
+    for p in polys:
+        if p.is_empty or not p.is_valid:
+            raise FieldError("A managed-land shape isn't a valid polygon. Redraw it.")
+        if not near.contains(p.envelope):
+            raise FieldError("Managed land must be next to the field.")
+    return polys
+
+
 def to_feature_collection(shapes, props: list[dict] | None = None) -> dict:
     props = props or [{} for _ in shapes]
     return {"type": "FeatureCollection",

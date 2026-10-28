@@ -28,8 +28,9 @@ def client(tmp_path, monkeypatch):
     monkeypatch.setattr(api, "DEMO", tmp_path / "demo")
     seen = {}
 
-    def run(field_path, label_path, month, method, excluded_rules=()):
-        seen.update(field=field_path, label=label_path, month=month, method=method, excluded=excluded_rules)
+    def run(field_path, label_path, month, method, excluded_rules=(), managed=(), wind_from_deg=None):
+        seen.update(field=field_path, label=label_path, month=month, method=method, excluded=excluded_rules,
+                    managed=managed, wind=wind_from_deg)
         return result(method=method)
 
     monkeypatch.setattr(pipeline, "run", run)
@@ -178,8 +179,8 @@ def post_agent(client, **form):
 def fake_agent(monkeypatch):
     seen = {}
 
-    def run(field_path, label_path, month, method, excluded_rules=()):
-        seen.update(method=method, label=label_path, excluded=excluded_rules)
+    def run(field_path, label_path, month, method, excluded_rules=(), managed=(), wind_from_deg=None):
+        seen.update(method=method, label=label_path, excluded=excluded_rules, managed=managed, wind=wind_from_deg)
         return {"run_id": "a" * 32, "answer": "ADJUST: stay back from the pond.", "decision": "adjust",
                 "trace": [{"tool": "plan_spray", "result": {"decision": "ADJUST"}, "seconds": 0.1}],
                 "mode": "agent", "result": result()}
@@ -201,7 +202,7 @@ def test_agent_endpoint_validates(client, fake_agent):
 
 
 def test_agent_endpoint_maps_errors(client, monkeypatch):
-    def boom(*a):
+    def boom(*a, **kw):
         raise imagery.NoImageryError("No NAIP imagery")
 
     monkeypatch.setattr(api.agent, "run", boom)
@@ -796,3 +797,30 @@ def test_spend_budget_stops_live_runs(client, monkeypatch):
 def test_three_live_runs_per_address_per_day_by_default(client, monkeypatch):
     monkeypatch.delenv("RUNS_PER_IP_PER_DAY")
     assert [post_plan(client).status_code for _ in range(4)] == [200, 200, 200, 429]
+
+
+def test_managed_land_and_wind_reach_the_plan(client):
+    near = mapping(box(-92.99, 42.0, -92.985, 42.01))  # a strip along FIELD's east edge
+    files = {"field": ("f.geojson", json.dumps(mapping(FIELD))), "label": ("label.pdf", b"%PDF")}
+    r = client.post("/api/plan", files=files, data={"month": "2026-11", "managed": json.dumps(near), "wind_from": "270"})
+    assert r.status_code == 200 and client.seen["wind"] == 270.0
+    (land,) = client.seen["managed"]
+    assert land.equals(box(-92.99, 42.0, -92.985, 42.01))
+
+
+@pytest.mark.parametrize("data, detail", [
+    ({"wind_from": "400"}, "wind_from"),
+    ({"wind_from": "north"}, "wind_from"),
+    ({"managed": "not json"}, "isn't valid GeoJSON"),
+    ({"managed": json.dumps({"type": "Point", "coordinates": [-92.99, 42.0]})}, "polygons"),
+    ({"managed": json.dumps(mapping(box(-80.0, 40.0, -79.9, 40.1)))}, "next to the field"),
+])
+def test_bad_managed_land_or_wind_is_refused_before_any_run(client, data, detail):
+    files = {"field": ("f.geojson", json.dumps(mapping(FIELD))), "label": ("label.pdf", b"%PDF")}
+    r = client.post("/api/plan", files=files, data={"month": "2026-11"} | data)
+    assert r.status_code == 422 and detail in r.json()["detail"] and client.seen == {}
+
+
+def test_demo_refuses_a_bad_wind(client, cached_demo):
+    assert client.get("/api/demo?wind_from=400").status_code == 422
+    assert client.get("/api/demo?wind_from=90").status_code == 200

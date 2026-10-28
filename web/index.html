@@ -76,6 +76,10 @@
         <label>Month<input type="month" name="month" required></label>
         <label>Method<select name="method"><option value="drone">Drone</option><option value="ground">Ground</option></select></label>
       </div>
+      <label class="check"><input type="checkbox" id="mark-managed"> Draw managed land next to the field (roads, other
+        fields, farmsteads): label drift buffers skip it</label>
+      <p class="meta" id="managed-note" hidden></p>
+      <label>Wind from (for drift buffers)<select name="wind_from"><option value="">Not set: buffer every direction</option><option value="0">North</option><option value="45">Northeast</option><option value="90">East</option><option value="135">Southeast</option><option value="180">South</option><option value="225">Southwest</option><option value="270">West</option><option value="315">Northwest</option></select></label>
       <label class="check"><input type="checkbox" name="agent"> Ask the Muse Spark agent to explain</label>
       <div class="row">
         <button type="submit">Plan spray</button>
@@ -111,7 +115,21 @@ map.addControl(new L.Control.Draw({
           polyline: false, circle: false, marker: false, circlemarker: false },
   edit: { featureGroup: drawn },
 }));
+// Land next to the field the user marks as managed; everything else counts as unmanaged for drift buffers.
+const managed = new L.FeatureGroup().addTo(map);
+function managedNote() {
+  const n = managed.getLayers().length, note = $("#managed-note");
+  note.hidden = !n;
+  note.replaceChildren(`${n} area${n === 1 ? "" : "s"} of managed land marked \u00b7 `,
+    Object.assign(el("a", { href: "#" }, "clear"), { onclick: (ev) => { ev.preventDefault(); managed.clearLayers(); managedNote(); } }));
+}
 map.on(L.Draw.Event.CREATED, (e) => {
+  if ($("#mark-managed").checked) {
+    e.layer.setStyle?.({ color: "#9e9e9e", dashArray: "4", fillOpacity: 0.25 });
+    managed.addLayer(e.layer);
+    managedNote();
+    return;
+  }
   drawn.clearLayers();
   drawn.addLayer(e.layer);
   $("#drawn-note").textContent = "Field drawn on the map (it replaces any uploaded file). Draw again to change it.";
@@ -341,6 +359,7 @@ form.addEventListener("submit", (e) => {
     const body = new FormData(form);
     body.set("field", field);
     body.delete("agent");
+    if (managed.getLayers().length) body.set("managed", JSON.stringify(managed.toGeoJSON()));
     body.append("excluded_rules", excluded);
     return call(url, { method: "POST", body });
   };
@@ -348,7 +367,7 @@ form.addEventListener("submit", (e) => {
 });
 let demoField = "mt";
 function demoRun(excluded) {
-  const q = `month=${form.month.value}&method=${form.method.value}&field=${demoField}`;
+  const q = `month=${form.month.value}&method=${form.method.value}&field=${demoField}&wind_from=${form.wind_from.value}`;
   lastExcluded = excluded;
   return call(`/api/demo?${q}&excluded_rules=${excluded}${form.agent.checked ? "&agent_answer=1" : ""}`);
 }

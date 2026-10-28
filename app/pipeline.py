@@ -17,12 +17,14 @@ class NotConfirmableError(ValueError):
     """An excluded rule id the user may not untick; the message is safe to show users."""
 
 
-def run(field_path, label_path, month: str, method: str = "drone", excluded_rules=()) -> dict:
+def run(field_path, label_path, month: str, method: str = "drone", excluded_rules=(), managed=(),
+        wind_from_deg: float | None = None) -> dict:
+    """managed: land next to the field the user marked as managed (drift buffers skip it)."""
     field = geo.load_field(field_path)  # validated first: a bad field must not cost a paid label read
     label = label_reader.read_label(label_path)
-    hazards = segment.find_hazards(field_path)
+    hazards = segment.find_hazards(field_path) | {"managed": list(managed)}
     bulletin = bulletins.check_bulletin(field_path, month, label.epa_reg_no)
-    return assemble(field, label, hazards, bulletin, month, method, excluded_rules)
+    return assemble(field, label, hazards, bulletin, month, method, excluded_rules, wind_from_deg)
 
 
 def confirmable(label) -> list[int]:

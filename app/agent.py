@@ -36,9 +36,10 @@ class _ModelError(Exception):
 class _Job:
     """The run's state; each tool fills one part, and plan_spray fills in anything still missing."""
 
-    def __init__(self, field_path, label_path, month, method, excluded_rules=(), provider=None, inputs=None):
+    def __init__(self, field_path, label_path, month, method, excluded_rules=(), provider=None, inputs=None,
+                 managed=(), wind_from_deg=None):
         self.field_path, self.label_path, self.month, self.method = field_path, label_path, month, method
-        self.provider = provider
+        self.provider, self.managed, self.wind_from_deg = provider, list(managed), wind_from_deg
         self.excluded_rules = excluded_rules  # set by the user, never by the model
         self.field = self.label = self.hazards = self.bulletin = self.result = None
         if inputs:  # already gathered (the demo cache): the tools return these, nothing else is fetched
@@ -68,8 +69,9 @@ class _Job:
         self.find_hazards()
         self.check_bulletin()  # reads the label too
         field = self.field if self.field is not None else geo.load_field(self.field_path)
-        self.result = self.result or pipeline.assemble(field, self.label, self.hazards, self.bulletin, self.month,
-                                                       self.method, self.excluded_rules)
+        hazards = self.hazards | ({"managed": self.managed} if self.managed else {})
+        self.result = self.result or pipeline.assemble(field, self.label, hazards, self.bulletin, self.month,
+                                                       self.method, self.excluded_rules, self.wind_from_deg)
         plan = self.result["plan"]
         out = {"decision": LABELS[plan["status"]], "field_acres": plan["field_acres"],
                "spray_acres": plan["spray_acres"], "excluded_acres": plan["excluded_acres"],
@@ -116,7 +118,7 @@ def _agent_loop(job: _Job, trace: list) -> str | None:
 
 
 def run(field_path, label_path, month: str, method: str = "drone", excluded_rules=(), provider=None,
-        inputs=None) -> dict:
+        inputs=None, managed=(), wind_from_deg=None) -> dict:
     """result is the full pipeline result (as pipeline.run returns), for pipeline.to_json.
 
     inputs: (field, label, hazards, bulletin) already gathered, as for the demo; then only the model call is live.
@@ -124,7 +126,8 @@ def run(field_path, label_path, month: str, method: str = "drone", excluded_rule
     if inputs is None:
         geo.load_field(field_path)  # validated before any tool can spend on it
     run_id = uuid.uuid4().hex
-    job, trace, mode = _Job(field_path, label_path, month, method, excluded_rules, provider, inputs), [], "agent"
+    job = _Job(field_path, label_path, month, method, excluded_rules, provider, inputs, managed, wind_from_deg)
+    trace, mode = [], "agent"
     try:
         answer = _agent_loop(job, trace)
     except _ModelError as e:
