@@ -124,8 +124,8 @@ def map_block(backbone: str, view: str, window_m: float, rows_: list[int], cols:
 
     The holdout clusters' plots are the honest check of the map. Returns a spurge probability GeoTIFF
     (EPSG:32611, 0-254, 255 = no image), what's needed to pick a catch rate later, the check at
-    target_recall, and a JPEG of the block. ponytail: each crop is mapped on its own, so windows near crop edges see
-    less context than the training plots did; overlap crops if that shows up in the check.
+    target_recall, and a JPEG of the block. ponytail: the whole block sits in memory (1.8 GB for 36 tiles); map
+    it in strips if blocks get much bigger.
     """
     import io
     import os
@@ -175,41 +175,46 @@ def map_block(backbone: str, view: str, window_m: float, rows_: list[int], cols:
     bias = float(lr.intercept_[0])
 
     step = round(out_m / GSD)  # output pixel = step x step orthomosaic pixels
-    flagged, total, thumbs = 0, 0, {}
-    side = 4096 // step // 2  # probability tiles are kept at 2 x out_m
-    probs = np.full((side * len(rows_), side * len(cols)), 255, np.uint8)  # 0-254 = probability, 255 = no image
-    origin = None
+    tile = 4096
+    h, w = tile * len(rows_), tile * len(cols)
+    rgb, valid, origin = np.zeros((h, w, 3), np.uint8), np.zeros((h, w), bool), None
     for r in rows_:
         for c in cols:
             path = hf_hub_download("mpg-ranch/leafy_spurge", f"data/orthomosaic/orthomosaic_{r:02d}_{c:02d}.tif",
                                    repo_type="dataset", local_dir=ROOT)
             with rasterio.open(path) as src:
-                rgba, left, top = src.read(), src.bounds.left, src.bounds.top
-            rgb, valid = np.ascontiguousarray(rgba[:3].transpose(1, 2, 0)), rgba[3] > 0
-            h, w = valid.shape
-            prob = np.zeros((h // step, w // step), np.float32)
-            for y0 in range(0, h - crop + 1, crop):
-                for x0 in range(0, w - crop + 1, crop):
-                    f = features(_upscale(rgb[y0:y0 + crop, x0:x0 + crop], up)).float()
-                    pooled = F.avg_pool2d(f[None], n, stride=1, padding=n // 2, count_include_pad=False)[0]
-                    logit = torch.einsum("chw,c->hw", (pooled - mean[:, None, None]) / scale[:, None, None], coef)
-                    p = torch.sigmoid(logit + bias)[None, None]
-                    p = F.interpolate(p, size=(crop // step, crop // step), mode="bilinear")[0, 0]
-                    prob[y0 // step:(y0 + crop) // step, x0 // step:(x0 + crop) // step] = p.cpu().numpy()
-            ok = valid[:prob.shape[0] * step:step, :prob.shape[1] * step:step]
-            origin = origin or (left, top)
-            half = prob.reshape(side, 2, side, 2).mean((1, 3))
-            half_ok = ok.reshape(side, 2, side, 2).all((1, 3))
-            probs[(r - rows_[0]) * side:(r - rows_[0] + 1) * side, (c - cols[0]) * side:(c - cols[0] + 1) * side] = \
-                np.where(half_ok, np.round(half * 254), 255).astype(np.uint8)
-            flagged, total = flagged + int(((prob >= threshold) & ok).sum()), total + int(ok.sum())
-            thumbs[(r, c)] = Image.fromarray(rgb[::16, ::16])
-    th = next(iter(thumbs.values())).size[0]
-    mosaic = Image.new("RGB", (th * len(cols), th * len(rows_)))
-    for (r, c), im in thumbs.items():
-        mosaic.paste(im, ((c - cols[0]) * th, (r - rows_[0]) * th))
+                rgba, origin = src.read(), origin or (src.bounds.left, src.bounds.top)
+            oy, ox = (r - rows_[0]) * tile, (c - cols[0]) * tile  # not y/x: those hold the plots' labels/features
+            rgb[oy:oy + tile, ox:ox + tile] = rgba[:3].transpose(1, 2, 0)
+            valid[oy:oy + tile, ox:ox + tile] = rgba[3] > 0
+
+    # Overlapping crops over the whole block, each keeping only its centre: near a crop's edge the model sees
+    # less context and under-calls spurge, which left unsprayed stripes at every crop and tile seam.
+    margin = crop // 8
+    keep = crop - 2 * margin
+    prob = np.zeros((h // step, w // step), np.float32)
+    for y0 in range(-margin, h - margin, keep):
+        for x0 in range(-margin, w - margin, keep):
+            win = np.zeros((crop, crop, 3), np.uint8)
+            ys, xs, ye, xe = max(y0, 0), max(x0, 0), min(y0 + crop, h), min(x0 + crop, w)
+            win[ys - y0:ye - y0, xs - x0:xe - x0] = rgb[ys:ye, xs:xe]
+            f = features(_upscale(win, up)).float()
+            pooled = F.avg_pool2d(f[None], n, stride=1, padding=n // 2, count_include_pad=False)[0]
+            logit = torch.einsum("chw,c->hw", (pooled - mean[:, None, None]) / scale[:, None, None], coef)
+            p = torch.sigmoid(logit + bias)[None, None]
+            p = F.interpolate(p, size=(crop // step, crop // step), mode="bilinear")[0, 0].cpu().numpy()
+            cy, cx = y0 + margin, x0 + margin
+            ky, kx = min(keep, h - cy), min(keep, w - cx)
+            prob[cy // step:(cy + ky) // step, cx // step:(cx + kx) // step] = \
+                p[margin // step:(margin + ky) // step, margin // step:(margin + kx) // step]
+    ok = valid[::step, ::step]
+    flagged, total = int(((prob >= threshold) & ok).sum()), int(ok.sum())
+    ph, pw = prob.shape[0] // 2, prob.shape[1] // 2  # probabilities are kept at 2 x out_m
+    half = prob[:ph * 2, :pw * 2].reshape(ph, 2, pw, 2).mean((1, 3))
+    half_ok = ok[:ph * 2, :pw * 2].reshape(ph, 2, pw, 2).all((1, 3))
+    probs = np.where(half_ok, np.round(half * 254), 255).astype(np.uint8)  # 0-254 = probability, 255 = no image
     buf = io.BytesIO()
-    mosaic.save(buf, "JPEG", quality=82)
+    Image.fromarray(rgb[::16, ::16]).save(buf, "JPEG", quality=82)
     from rasterio.io import MemoryFile
 
     with MemoryFile() as mem:
