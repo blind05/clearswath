@@ -16,7 +16,7 @@ from pathlib import Path
 import simplekml
 from PIL import Image, ImageOps
 from fastapi import FastAPI, File, Form, HTTPException, Request, UploadFile
-from fastapi.responses import JSONResponse, Response
+from fastapi.responses import FileResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 
 from app import agent, geo, imagery, llm, label_reader, pipeline, records, segment
@@ -345,7 +345,23 @@ def record(run_id: str = Form(...), audio: UploadFile | None = File(None), text:
         raise _http_error(e) from e
 
 
-DEMO_FIELDS = {"": "field", "corrected": "field_corrected"}
+DEMO_FIELDS = {"": "field", "corrected": "field_corrected", "mt": "mt"}  # mt: Montana rangeland, cache only
+
+
+def _overlay(name: str) -> dict | None:
+    """The demo's drone image for the map, when the demo has one (data/demo/<name>/block.webp)."""
+    bounds = DEMO / name / "block_bounds.json"
+    if not (DEMO / name / "block.webp").exists() or not bounds.exists():
+        return None
+    return {"url": f"/api/demo/image/{name}", "bounds": json.loads(bounds.read_text())["bounds"]}
+
+
+@app.get("/api/demo/image/{name}")
+def demo_image(name: str):
+    path = DEMO / name / "block.webp"
+    if name not in DEMO_FIELDS.values() or not path.exists():
+        raise HTTPException(404, "No image for this demo")
+    return FileResponse(path, media_type="image/webp")
 
 
 @app.get("/api/demo")
@@ -369,7 +385,7 @@ def demo(request: Request, month: str | None = None, method: str = "drone", excl
         run_id = uuid.uuid4().hex
         pipeline.save_run(result, RUNS / run_id)
         return {"run_id": run_id, **pipeline.to_json(result),
-                "demo": {"field": field, "cached": True, "month": cached_month}}
+                "demo": {"field": field, "cached": True, "month": cached_month, "overlay": _overlay(name)}}
     labels = [p for p in DEMO.glob("label.*") if p.suffix.lower() in LABEL_SUFFIXES]
     path = DEMO / f"{name}.geojson"
     if not path.exists() or not labels:

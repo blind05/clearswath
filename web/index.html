@@ -144,9 +144,15 @@ function el(tag, attrs = {}, ...kids) {
   return e;
 }
 
-function drawMap(layers) {
+function drawMap(layers, image) {
   overlays.forEach((l) => { map.removeLayer(l); control.removeLayer(l); });
   overlays = [];
+  if (image) {  // the demo's own drone imagery, under the plan layers
+    const [w, s, e, n] = image.bounds;
+    const img = L.imageOverlay(image.url, [[s, w], [n, e]]).addTo(map);
+    control.addOverlay(img, "Drone imagery");
+    overlays.push(img);
+  }
   for (const [key, [name, style]] of Object.entries(STYLES)) {
     const data = layers[key];
     if (!data || (data.features && !data.features.length)) continue;
@@ -162,8 +168,10 @@ function render(r) {
   const status = { go: "GO", adjust: "ADJUST", "no-go": "NO-GO" }[r.status];
   const acres = r.acres;
   out.replaceChildren(...[
-    r.demo ? el("p", { class: "meta" }, `Demo field${r.demo.cached ? ` (saved run, bulletin for ${r.demo.month})` : ""} \u00b7 `,
-      el("a", { href: "#", id: "demo-switch" }, r.demo.field ? "Show the field drawn up to the creek" : "Show the corrected field")) : null,
+    r.demo ? el("p", { class: "meta" }, `${r.demo.field === "mt" ? "Demo: Montana rangeland, leafy spurge" : "Demo field"}`
+      + `${r.demo.cached ? ` (saved run, bulletin for ${r.demo.month})` : ""} \u00b7 `,
+      el("a", { href: "#", id: "demo-switch" }, r.demo.field === "mt" ? "Show the South Dakota cropland demo"
+        : r.demo.field ? "Show the field drawn up to the creek" : "Show the corrected field")) : null,
     el("div", { id: "status", class: r.status }, status),
     el("div", { class: "acres" },
       el("div", {}, el("b", {}, acres.field_acres.toFixed(1)), el("small", {}, "field ac")),
@@ -208,7 +216,7 @@ function render(r) {
   ].flat().filter(Boolean));
   $("#record").addEventListener("submit", (e) => recordApplication(e, r.run_id));
   out.hidden = false;
-  drawMap(r.layers);
+  drawMap(r.layers, r.demo?.overlay);
 }
 
 // Live runs spend model credits, so the server may ask for an access code (401). It's asked once and kept
@@ -325,13 +333,13 @@ form.addEventListener("submit", (e) => {
   };
   rerun("");
 });
-let demoField = "";
+let demoField = "mt";
 function demoRun(excluded) {
   const q = `month=${form.month.value}&method=${form.method.value}&field=${demoField}`;
   return call(`/api/demo?${q}&excluded_rules=${excluded}`);
 }
 $("#demo").addEventListener("click", () => {
-  demoField = "";
+  demoField = "mt";
   rerun = demoRun;
   rerun("");
 });
@@ -339,9 +347,10 @@ $("#demo").addEventListener("click", () => {
 $("#result").addEventListener("click", (e) => {
   if (e.target.id !== "demo-switch") return;
   e.preventDefault();
-  demoField = demoField ? "" : "corrected";
+  const fromMontana = demoField === "mt";  // a different label, so its unticked rule ids don't carry over
+  demoField = demoField === "" ? "corrected" : "";  // Montana -> South Dakota; SD outlines toggle
   const off = [...document.querySelectorAll("[data-rule]")].filter((b) => !b.checked).map((b) => b.dataset.rule);
-  rerun(off.join(","));
+  rerun(fromMontana ? "" : off.join(","));
 });
 </script>
 </body>

@@ -36,7 +36,7 @@ def ulv_id(body) -> str:
 def test_demo_story(client):
     # 1. drone, field drawn up to the creek, every rule applied: the ULV 450 ft buffer is in force
     first = demo(client)
-    assert first["demo"] == {"field": "", "cached": True, "month": "2026-11"}
+    assert first["demo"] == {"field": "", "cached": True, "month": "2026-11", "overlay": None}
     assert first["label"]["epa_reg_no"] == "100-1295" and first["status"] == "adjust"
     assert 450 in [r["distance_ft"] for r in first["reasons"]]
 
