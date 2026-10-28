@@ -13,6 +13,8 @@ log = logging.getLogger(__name__)
 RUNS = Path(__file__).resolve().parent.parent / "data" / "runs"
 MAX_STEPS = 8
 STATUS_WORDS = re.compile(r"\b(NO-GO|GO|ADJUST)\b")
+# The plan checks some rules; it cannot make a job legal or safe, so the answer may never say so.
+CLAIM_WORDS = re.compile(r"\b(il)?legal(ly)?\b|\bcompli(ant|ance)\b|\bsafe(ly)?\b", re.I)
 LABELS = {"go": "GO", "adjust": "ADJUST", "no-go": "NO-GO"}
 
 # No arguments on purpose: the model chooses steps, never files, products or months.
@@ -22,7 +24,7 @@ TOOLS = [{"type": "function", "function": {"name": name, "description": desc,
              ("read_label", "Read the pesticide label and return its verified rules."),
              ("find_hazards", "Find water, buildings and habitat near the field."),
              ("check_bulletin", "Check EPA Bulletins Live! Two for this product, field and month."),
-             ("plan_spray", "Compute the legal spray zone and the GO / ADJUST / NO-GO decision."),
+             ("plan_spray", "Compute the spray zone and the GO / ADJUST / NO-GO decision."),
          ]]
 
 
@@ -70,7 +72,8 @@ class _Job:
 def _template(result: dict) -> str:
     """Answer written without a model, from the plan alone."""
     plan = result["plan"]
-    lines = [f"{LABELS[plan['status']]}: {plan['spray_acres']} of {plan['field_acres']} acres can be sprayed."]
+    head = f"{LABELS[plan['status']]}: " + ("No conflicts in checked rules. " if plan["status"] == "go" else "")
+    lines = [f"{head}{plan['spray_acres']} of {plan['field_acres']} acres can be sprayed."]
     lines += [f"- {r.get('summary', '')}" + (f' (label p.{r["page"]}: "{r["quote"]}")' if r.get("quote") else "")
               for r in plan["reasons"]]
     lines += [f"Warning: {w}" for w in result["warnings"]]
@@ -122,6 +125,9 @@ def run(field_path, label_path, month: str, method: str = "drone", excluded_rule
     claimed = set(STATUS_WORDS.findall(answer or ""))
     if answer and claimed - {LABELS[decision]}:
         trace.append({"note": f"agent answer said {sorted(claimed)}; replaced, the plan says {LABELS[decision]}"})
+        answer = None
+    if answer and (words := sorted({m.group(0).lower() for m in CLAIM_WORDS.finditer(answer)})):
+        trace.append({"note": f"agent answer said {words}; replaced with the plan's own summary"})
         answer = None
     pipeline.save_run(job.result, RUNS / run_id)
     return {"run_id": run_id, "answer": answer or _template(job.result), "decision": decision,

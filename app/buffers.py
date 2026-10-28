@@ -1,4 +1,4 @@
-"""Field + hazards + label rules -> legal spray zone. Pure geometry, never calls a model."""
+"""Field + hazards + label rules -> spray zone and GO / ADJUST / NO-GO. Pure geometry, never calls a model."""
 
 import geopandas as gpd
 from shapely import union_all

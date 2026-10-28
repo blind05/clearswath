@@ -86,6 +86,20 @@ def test_contradicting_answer_is_replaced(field_path, steps, monkeypatch):
     assert "replaced" in out["trace"][-1]["note"]
 
 
+@pytest.mark.parametrize("text", ["ADJUST: the green zone is legal to spray.", "ADJUST: safe to spray 30 acres.",
+                                  "ADJUST: this plan is fully compliant."])
+def test_answer_claiming_legal_or_safe_is_replaced(field_path, steps, monkeypatch, text):
+    script(monkeypatch, reply(call("plan_spray")), reply(content=text))
+    out = agent.run(field_path, "label.pdf", "2026-11")
+    assert out["answer"].startswith("ADJUST:") and out["answer"] != text
+    assert "replaced with the plan's own summary" in out["trace"][-1]["note"]
+
+
+def test_go_summary_says_no_conflicts_in_checked_rules():
+    plan = {"status": "go", "spray_acres": 31.2, "field_acres": 31.2, "reasons": []}
+    assert agent._template({"plan": plan, "warnings": []}).startswith("GO: No conflicts in checked rules. 31.2 of")
+
+
 def test_model_failure_falls_back(field_path, steps, monkeypatch, caplog):
     def boom(*a, **kw):
         raise RuntimeError("upstream said: secret-ish details")
