@@ -116,7 +116,7 @@ def _upscale(img, up: int):
     return F.interpolate(t, scale_factor=up, mode="bicubic").clamp(0, 255)[0].permute(1, 2, 0).byte().numpy()
 
 
-@app.function(image=image, gpu="L4", timeout=3 * 3600, volumes={"/data": volume}, memory=32768,
+@app.function(image=image, gpu=["L4", "A10G", "T4"], timeout=3 * 3600, volumes={"/data": volume}, memory=32768,
               secrets=[modal.Secret.from_name("huggingface")], retries=0)
 def map_block(backbone: str, view: str, window_m: float, rows_: list[int], cols: list[int],
               holdout: list[int], target_recall: float = 0.95, out_m: float = 0.1016) -> dict:
@@ -253,8 +253,22 @@ def _group_folds(groups):
 
 
 def run_map(**kw) -> dict:
-    with app.run():
-        return map_block.remote(**kw)
+    """Detached, polled in short waits: the local connection to Modal drops every few minutes on long calls, and
+    an attached run is cancelled when it does."""
+    import time
+
+    with app.run(detach=True):
+        call = map_block.spawn(**kw)
+        print(f"map_block call {call.object_id}; fetch with modal.FunctionCall.from_id(...).get()", flush=True)
+        for _ in range(240):  # up to ~4 h of retries
+            try:
+                return call.get(timeout=60)
+            except TimeoutError:
+                continue
+            except (modal.exception.ConnectionError, OSError) as e:  # a dropped link, not a failed job
+                print(f"connection dropped ({type(e).__name__}); retrying", flush=True)
+                time.sleep(10)
+        raise TimeoutError(f"map_block call {call.object_id} did not finish")
 
 
 if __name__ == "__main__":
