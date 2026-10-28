@@ -5,6 +5,7 @@ An estimate, not a bill: it errs high, and a restart on a host without a persist
 """
 
 import json
+import logging
 import threading
 from datetime import datetime, timezone
 from pathlib import Path
@@ -21,7 +22,9 @@ TOKEN_PRICES = {
 # USD per call where no token price is published. TODO(verify): no public price found; set high on purpose.
 CALL_PRICES = {"sam-3.1": 0.01, "muse-voice-transcribe-1.0": 0.02}
 UNKNOWN = (5.0, 15.0)  # an unlisted model is costed high, so the budget stops early rather than late
+NO_USAGE = 0.05  # USD for a token-priced call that reports no usage: never free, or the budget would leak
 _lock = threading.Lock()
+log = logging.getLogger(__name__)
 
 
 def _today() -> str:
@@ -35,6 +38,9 @@ def cost(model: str, usage) -> float:
     usage = usage.model_dump() if hasattr(usage, "model_dump") else (usage or {})
     tokens_in = usage.get("prompt_tokens") or usage.get("input_tokens") or 0
     tokens_out = usage.get("completion_tokens") or usage.get("output_tokens") or 0
+    if not (tokens_in or tokens_out):
+        log.warning("no token usage reported for %s; charging %.2f USD", model, NO_USAGE)
+        return NO_USAGE
     price_in, price_out = TOKEN_PRICES.get(model, UNKNOWN)
     return (tokens_in * price_in + tokens_out * price_out) / 1e6
 

@@ -15,7 +15,8 @@ def test_token_cost_from_chat_and_responses_usage():
 def test_flat_and_unknown_models_cost_high():
     assert spend.cost("sam-3.1", None) == spend.CALL_PRICES["sam-3.1"]
     assert spend.cost("some-new-model", {"prompt_tokens": 1_000_000}) == spend.UNKNOWN[0]
-    assert spend.cost("muse-spark-1.3", None) == 0  # no usage reported: nothing to count
+    assert spend.cost("muse-spark-1.3", None) == spend.NO_USAGE  # no usage reported: never free
+    assert spend.cost("muse-spark-1.3", {"prompt_tokens": 0, "completion_tokens": 0}) == spend.NO_USAGE
 
 
 def test_record_adds_up_today_and_forgets_yesterday(monkeypatch):
