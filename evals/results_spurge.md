@@ -47,3 +47,17 @@ The best probe (DINOv2-B, 0.4 m) matches the paper's 0.85 but does not beat it. 
 own 0.4 m beats every wider context, and the whole 13 m image is near chance. At 95% recall about two-thirds
 of the absent plots are also flagged. The plots were sampled around spurge, so the share of a whole field that
 would be sprayed has to be measured on a map, not read off this table.
+
+## Fine-tuning DINOv2-B (2026-10-28)
+
+`uv run --with modal python train/spurge_finetune_modal.py`: the last 2 of 12 blocks and a linear head on the
+plot's centre 2 x 2 patch tokens (0.36 m), trained on the centre 448 px (5.7 m) of each plot for 8 epochs with flips
+and quarter turns (AdamW, 2e-5 for the blocks, 1e-3 for the head). Same tests as above.
+
+| model | official test acc | official test AUC | LOCO acc | LOCO AUC |
+|---|---|---|---|---|
+| frozen DINOv2-B probe, 0.4 m (best above) | 85.0% | n/a | 79.2% | 0.88 |
+| **DINOv2-B, last 2 blocks fine-tuned** | 83.0% | **0.971** | **86.7%** | **0.946** |
+
+LOCO AUC by held-out cluster: 0.86, 0.91, 0.95, 0.96, 1.00, 0.95, 0.94, 0.98, 0.97. Accuracy is at a 0.5 cutoff; the
+map picks its own cutoff for a catch rate, so the ranking (AUC) is what decides how much clean ground it sprays.
