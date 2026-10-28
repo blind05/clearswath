@@ -192,7 +192,7 @@ def map_block(backbone: str, view: str, window_m: float, rows_: list[int], cols:
     # less context and under-calls spurge, which left unsprayed stripes at every crop and tile seam.
     margin = crop // 8
     keep = crop - 2 * margin
-    prob = np.zeros((h // step, w // step), np.float32)
+    logits, full = [], []  # raw probe scores per window, before the position correction
     for y0 in range(-margin, h - margin, keep):
         for x0 in range(-margin, w - margin, keep):
             win = np.zeros((crop, crop, 3), np.uint8)
@@ -200,13 +200,24 @@ def map_block(backbone: str, view: str, window_m: float, rows_: list[int], cols:
             win[ys - y0:ye - y0, xs - x0:xe - x0] = rgb[ys:ye, xs:xe]
             f = features(_upscale(win, up)).float()
             pooled = F.avg_pool2d(f[None], n, stride=1, padding=n // 2, count_include_pad=False)[0]
-            logit = torch.einsum("chw,c->hw", (pooled - mean[:, None, None]) / scale[:, None, None], coef)
-            p = torch.sigmoid(logit + bias)[None, None]
-            p = F.interpolate(p, size=(crop // step, crop // step), mode="bilinear")[0, 0].cpu().numpy()
-            cy, cx = y0 + margin, x0 + margin
-            ky, kx = min(keep, h - cy), min(keep, w - cx)
-            prob[cy // step:(cy + ky) // step, cx // step:(cx + kx) // step] = \
-                p[margin // step:(margin + ky) // step, margin // step:(margin + kx) // step]
+            logit = torch.einsum("chw,c->hw", (pooled - mean[:, None, None]) / scale[:, None, None], coef) + bias
+            logits.append((y0, x0, logit.cpu()))
+            full.append(ye - ys == crop and xe - xs == crop and valid[ys:ye, xs:xe].all())
+    # The features carry their position in the window, and every training plot sat at the centre, so scores
+    # drift with position (rows ramped ~30 -> 100 of 254 across each window). The ground is statistically the
+    # same everywhere in the block, so the mean score at each position over the fully imaged windows, minus the
+    # mean at the centre, is that drift; subtract it.
+    avg = torch.stack([lg for (_, _, lg), ok in zip(logits, full, strict=True) if ok]).mean(0)
+    c = avg.shape[0] // 2
+    drift = avg - avg[c - 1:c + 2, c - 1:c + 2].mean()
+    prob = np.zeros((h // step, w // step), np.float32)
+    for y0, x0, lg in logits:
+        p = torch.sigmoid(lg - drift)[None, None]
+        p = F.interpolate(p, size=(crop // step, crop // step), mode="bilinear")[0, 0].numpy()
+        cy, cx = y0 + margin, x0 + margin
+        ky, kx = min(keep, h - cy), min(keep, w - cx)
+        prob[cy // step:(cy + ky) // step, cx // step:(cx + kx) // step] = \
+            p[margin // step:(margin + ky) // step, margin // step:(margin + kx) // step]
     ok = valid[::step, ::step]
     flagged, total = int(((prob >= threshold) & ok).sum()), int(ok.sum())
     ph, pw = prob.shape[0] // 2, prob.shape[1] // 2  # probabilities are kept at 2 x out_m
