@@ -80,3 +80,32 @@ def test_demo_record_uses_the_plan(client, monkeypatch):
     assert p137["material"] == "Warrior II with Zeon Technology (EPA Reg. No. 100-1295)"
     assert p137["quantity"] == "12 gal" and p137["service_date"] == "2026-11-02"
     assert "pilot_certificate_number" in p137["missing"]
+
+
+def test_montana_spot_spray_story(client):
+    """Montana rangeland, Tordon 22K, leafy spurge mapped by the DINOv2 probe at a 90% catch rate."""
+    import io
+    import zipfile
+
+    import numpy as np
+    import rasterio
+
+    mt = demo(client, field="mt")
+    assert mt["status"] == "adjust" and mt["label"]["epa_reg_no"] == "62719-6"
+    assert mt["demo"]["overlay"]["url"] == "/api/demo/image/mt"
+    # the water itself is excluded (no label setback); the weed map sprays about 4 in 5 acres
+    assert mt["acres"]["spray_acres"] == pytest.approx(23.59, abs=0.05)
+    assert mt["spot"]["field_acres"] == pytest.approx(24.07, abs=0.05)
+    assert mt["spot"]["treated_acres"] == pytest.approx(19.07, abs=0.05)
+    assert mt["spot"]["buffered_acres"] == pytest.approx(0.57, abs=0.05)
+    assert "catch 90%" in mt["weed_source"] and "87%" in mt["weed_source"] and "41%" in mt["weed_source"]
+    assert any(w.startswith("Drone imagery is missing") for w in mt["warnings"])
+    assert mt["layers"]["spray_cells"]["features"] and mt["layers"]["buffered_cells"]["features"]
+
+    rx = client.get(f"/api/export/{mt['run_id']}/dji", params={"rate": 19})
+    assert rx.status_code == 200
+    with zipfile.ZipFile(io.BytesIO(rx.content)) as z:
+        with rasterio.open(io.BytesIO(z.read("DJI/Rx/prescription.tif"))) as src:
+            cells = src.read(1)
+    assert np.isclose(cells, 19).sum() * 1.0 / 4046.86 == pytest.approx(mt["spot"]["treated_acres"], abs=0.1)
+    assert "Spot spray" in client.get(f"/api/kml/{mt['run_id']}").text

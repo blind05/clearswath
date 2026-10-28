@@ -1,0 +1,44 @@
+[
+ {
+  "catch_target": 0.95,
+  "threshold": 0.03091268120333554,
+  "holdout_recall": 0.9512195121951219,
+  "holdout_absent_flagged": 0.7448979591836735,
+  "block_flagged": 0.7289175048440399
+ },
+ {
+  "catch_target": 0.9,
+  "threshold": 0.19457505792379373,
+  "holdout_recall": 0.8731707317073171,
+  "holdout_absent_flagged": 0.413265306122449,
+  "block_flagged": 0.3596072173196484
+ },
+ {
+  "catch_target": 0.85,
+  "threshold": 0.3066536143422128,
+  "holdout_recall": 0.8097560975609757,
+  "holdout_absent_flagged": 0.32653061224489793,
+  "block_flagged": 0.25569549448610346
+ },
+ {
+  "catch_target": 0.8,
+  "threshold": 0.455603414773941,
+  "holdout_recall": 0.7609756097560976,
+  "holdout_absent_flagged": 0.23979591836734693,
+  "block_flagged": 0.16830490297358092
+ },
+ {
+  "catch_target": 0.7,
+  "threshold": 0.6698276579380036,
+  "holdout_recall": 0.6878048780487804,
+  "holdout_absent_flagged": 0.16326530612244897,
+  "block_flagged": 0.08700426755204238
+ },
+ {
+  "catch_target": 0.6,
+  "threshold": 0.8638625860214233,
+  "holdout_recall": 0.6146341463414634,
+  "holdout_absent_flagged": 0.07653061224489796,
+  "block_flagged": 0.03550625570705851
+ }
+]

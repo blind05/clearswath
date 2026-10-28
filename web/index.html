@@ -130,7 +130,7 @@ let overlays = [];
 const STYLES = {
   spray_zone: ["Spray zone", { color: "#1a7f37", fillOpacity: 0.35, weight: 1 }],
   no_spray: ["No spray", { color: "#c62828", fillOpacity: 0.4, weight: 1 }],
-  spray_cells: ["Spot spray (weeds)", { color: "#e65100", fillOpacity: 0.6, weight: 0 }],
+  spray_cells: ["Spot spray (weeds)", { color: "#e65100", fillOpacity: 0.4, weight: 0 }],
   buffered_cells: ["Weeds held back by a buffer", { color: "#6d4c41", fillOpacity: 0.6, weight: 0 }],
   restricted: ["Bulletin area", { color: "#6a1b9a", fillOpacity: 0.25, dashArray: "4" }],
   water: ["Water", { color: "#29b6f6", fillOpacity: 0.5, weight: 2 }],
@@ -151,7 +151,7 @@ function drawMap(layers, image) {
   overlays = [];
   if (image) {  // the demo's own drone imagery, under the plan layers
     const [w, s, e, n] = image.bounds;
-    const img = L.imageOverlay(image.url, [[s, w], [n, e]]).addTo(map);
+    const img = L.imageOverlay(image.url, [[s, w], [n, e]], { attribution: image.credit || "" }).addTo(map);
     control.addOverlay(img, "Drone imagery");
     overlays.push(img);
   }

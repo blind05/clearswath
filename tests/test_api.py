@@ -326,7 +326,8 @@ def test_demo_with_drone_image(client, cached_demo, tmp_path):
     (mt / "block_bounds.json").write_text(json.dumps({"crs": "EPSG:4326", "bounds": [-114.04, 46.70, -114.03, 46.71]}))
     shutil.copytree(tmp_path / "demo" / "cache" / "field", tmp_path / "demo" / "cache" / "mt")
     body = client.get("/api/demo?field=mt").json()
-    assert body["demo"]["overlay"] == {"url": "/api/demo/image/mt", "bounds": [-114.04, 46.70, -114.03, 46.71]}
+    assert body["demo"]["overlay"] == {"url": "/api/demo/image/mt", "bounds": [-114.04, 46.70, -114.03, 46.71],
+                                       "credit": None}
     r = client.get(body["demo"]["overlay"]["url"])
     assert r.status_code == 200 and r.headers["content-type"] == "image/webp"
     assert client.get("/api/demo/image/field").status_code == 404  # that demo has no image

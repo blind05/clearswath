@@ -354,7 +354,8 @@ def _overlay(name: str) -> dict | None:
     bounds = DEMO / name / "block_bounds.json"
     if not (DEMO / name / "block.webp").exists() or not bounds.exists():
         return None
-    return {"url": f"/api/demo/image/{name}", "bounds": json.loads(bounds.read_text())["bounds"]}
+    meta = json.loads(bounds.read_text())
+    return {"url": f"/api/demo/image/{name}", "bounds": meta["bounds"], "credit": meta.get("credit")}
 
 
 @app.get("/api/demo/image/{name}")
