@@ -196,3 +196,48 @@ def test_bad_field_is_refused_before_any_paid_call(monkeypatch, tmp_path):
     monkeypatch.setattr(label_reader, "read_label", lambda *a, **kw: pytest.fail("paid label read"))
     with pytest.raises(geo.FieldError):
         pipeline.run(p, "label.pdf", "2026-11")
+
+
+# Spot spraying: weeds near the pond fall in its 100 ft (30.5 m) buffer; weeds out west are sprayable.
+WEED_FAR, WEED_NEAR = ll(box(X + 20, Y + 20, X + 30, Y + 30), box(X + 390, Y + 190, X + 400, Y + 200))
+
+
+def spot(monkeypatch, blt=None, **hz):
+    monkeypatch.setattr(pipeline, "CELL_M", 20.0)  # 400 cells over the 400 m test field, not 160,000
+    hazards = {"water": [POND], "building": [], "habitat": [], "imagery_date": "2023-07-09",
+               "water_source": "usgs", "weeds": [WEED_FAR, WEED_NEAR], "weed_source": "test"} | hz
+    return pipeline.assemble(FIELD, label(), hazards, blt or bulletin(), "2026-11", "drone")
+
+
+def test_weeds_are_sprayed_only_outside_buffers(monkeypatch, tmp_path):
+    result = spot(monkeypatch)
+    states = {c["state"] for c in result["cells"]["cells"] if c["cover"] >= 0.01}  # the two cells holding weeds
+    assert result["plan"]["status"] == "adjust" and states == {"spray", "buffered"}
+    s = pipeline.cells.summary(result["cells"])
+    assert s["treated_acres"] == pytest.approx(20 * 20 / 4046.86, abs=0.01)  # the far weed's cell only
+    pipeline.save_run(result, tmp_path)
+    assert json.loads((tmp_path / "job.json").read_text())["area_treated_acres"] == s["treated_acres"]
+    out = pipeline.to_json(result)
+    json.dumps(out)
+    assert out["spot"]["treated_acres"] == s["treated_acres"] and out["weed_source"] == "test"
+    assert len(out["layers"]["spray_cells"]["features"]) == 1 and len(out["layers"]["buffered_cells"]["features"]) == 1
+
+
+def test_no_go_plan_sprays_no_cells(monkeypatch):
+    result = spot(monkeypatch, water_warnings=["USGS water layer unavailable"])
+    assert result["plan"]["status"] == "no-go"
+    assert not [c for c in result["cells"]["cells"] if c["state"] == "spray"]
+
+
+def test_no_weed_map_means_no_grid(monkeypatch, field_path):
+    wire(monkeypatch)
+    result = pipeline.run(field_path, "label.pdf", "2026-11")
+    assert result["cells"] is None and "spray_cells" not in pipeline.to_json(result)["layers"]
+
+
+def test_weeds_survive_the_demo_cache(monkeypatch, tmp_path):
+    monkeypatch.setattr(pipeline, "CELL_M", 20.0)
+    hazards = {"water": [POND], "building": [], "habitat": [], "weeds": [WEED_FAR], "weed_source": "test"}
+    pipeline.save_inputs(tmp_path / "c", FIELD, raw_label(), hazards, bulletin(), "2026-11")
+    _, _, hz, _, _ = pipeline.load_inputs(tmp_path / "c")
+    assert hz["weeds"][0].equals_exact(WEED_FAR, 1e-9) and hz["weed_source"] == "test"
