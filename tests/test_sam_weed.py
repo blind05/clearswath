@@ -79,3 +79,8 @@ def test_dilate_grows_by_whole_pixels():
     m = np.zeros((7, 7), dtype=bool)
     m[3, 3] = True
     assert ev.dilate(m, 1).sum() == 9 and ev.dilate(m, 2).sum() == 25 and ev.dilate(m, 0).sum() == 1
+
+
+def test_cofly_ground_resolution_is_about_6_mm():
+    assert ev.COFLY_GSD_M == pytest.approx(0.00613, abs=0.0001)
+    assert round(0.25 / ev.COFLY_GSD_M) == 41 and round(0.5 / ev.COFLY_GSD_M) == 82

@@ -22,8 +22,9 @@ PATCH, VAL_N, SEED = 16, 21, 0
 
 @app.function(image=image, gpu="L4", timeout=3600, volumes={"/root/.cache/huggingface": volume},
               secrets=[modal.Secret.from_name("huggingface")], retries=0)
-def train_and_predict(test_ids: list[int], target_coverage: float = 0.95, epochs: int = 60) -> dict:
-    """Trains on every CoFly image not in test_ids; returns packed weed masks for test_ids plus a report."""
+def train_folds(test_folds: list[list[int]], target_coverage: float = 0.95, epochs: int = 60) -> dict:
+    """For each fold: train on every CoFly image not in that fold, tune on VAL_N of them, predict the fold.
+    DINOv3 features are computed once. Returns packed weed masks for every test id plus per-fold reports."""
     import os
     import random
 
@@ -61,9 +62,6 @@ def train_and_predict(test_ids: list[int], target_coverage: float = 0.95, epochs
         return out.reshape(h // PATCH, w // PATCH, -1).permute(2, 0, 1).half()  # C, H/16, W/16
 
     ids = list(range(table.num_rows))
-    pool = [i for i in ids if i not in set(test_ids)]
-    random.Random(SEED).shuffle(pool)
-    val_ids, train_ids = pool[:VAL_N], pool[VAL_N:]
     cache = {}
     for i in ids:
         img, mask = load(i)
@@ -71,29 +69,6 @@ def train_and_predict(test_ids: list[int], target_coverage: float = 0.95, epochs
         gh, gw = f.shape[1:]
         target = torch.from_numpy(mask[:gh * PATCH, :gw * PATCH]).float().reshape(gh, PATCH, gw, PATCH).mean((1, 3))
         cache[i] = (f, target.to("cuda"), mask)
-
-    head = nn.Sequential(nn.Conv2d(cache[0][0].shape[0], 128, 3, padding=1), nn.GELU(),
-                         nn.Conv2d(128, 64, 3, padding=1), nn.GELU(), nn.Conv2d(64, 1, 1)).to("cuda")
-    weed_share = float(torch.stack([cache[i][1].mean() for i in train_ids]).mean())
-    pos_weight = torch.tensor((1 - weed_share) / max(weed_share, 1e-3), device="cuda")  # favour weed recall
-    opt = torch.optim.AdamW(head.parameters(), lr=2e-3, weight_decay=1e-2)
-    for epoch in range(epochs):
-        random.Random(epoch).shuffle(train_ids)
-        for i in train_ids:
-            f, target, _ = cache[i]
-            flip = epoch % 2 == 1  # horizontal flip of the feature map and target as cheap augmentation
-            x, y = (f.flip(-1), target.flip(-1)) if flip else (f, target)
-            logits = head(x.float()[None])[0, 0]
-            loss = F.binary_cross_entropy_with_logits(logits, (y > 0.25).float(), pos_weight=pos_weight)
-            opt.zero_grad()
-            loss.backward()
-            opt.step()
-
-    @torch.no_grad()
-    def prob(i):
-        f, _, mask = cache[i]
-        p = torch.sigmoid(head(f.float()[None]))
-        return F.interpolate(p, size=mask.shape, mode="bilinear", align_corners=False)[0, 0].cpu().numpy(), mask
 
     def coverage_at(threshold, pairs, cell=32):
         hit = weed = sprayed = total = 0
@@ -109,23 +84,55 @@ def train_and_predict(test_ids: list[int], target_coverage: float = 0.95, epochs
             sprayed, total = sprayed + spray.sum(), total + h * w
         return hit / max(weed, 1), sprayed / total
 
-    val = [prob(i) for i in val_ids]
-    threshold = 0.5
-    for t in np.linspace(0.95, 0.02, 94):  # the highest threshold that still reaches the coverage target
-        if coverage_at(t, val)[0] >= target_coverage:
-            threshold = float(t)
-            break
-    val_cov, val_sprayed = coverage_at(threshold, val)
-    preds = {}
-    for i in test_ids:
-        p, _ = prob(i)
-        preds[i] = (np.packbits(p >= threshold).tobytes(), p.shape[0], p.shape[1])
+    preds, reports, heads = {}, [], []
+    for fold, test_ids in enumerate(test_folds):
+        pool = [i for i in ids if i not in set(test_ids)]
+        random.Random(SEED + fold).shuffle(pool)
+        val_ids, train_ids = pool[:VAL_N], pool[VAL_N:]
+        torch.manual_seed(SEED + fold)
+        head = nn.Sequential(nn.Conv2d(cache[0][0].shape[0], 128, 3, padding=1), nn.GELU(),
+                             nn.Conv2d(128, 64, 3, padding=1), nn.GELU(), nn.Conv2d(64, 1, 1)).to("cuda")
+        weed_share = float(torch.stack([cache[i][1].mean() for i in train_ids]).mean())
+        pos_weight = torch.tensor((1 - weed_share) / max(weed_share, 1e-3), device="cuda")  # favour weed recall
+        opt = torch.optim.AdamW(head.parameters(), lr=2e-3, weight_decay=1e-2)
+        for epoch in range(epochs):
+            random.Random(epoch).shuffle(train_ids)
+            for i in train_ids:
+                f, target, _ = cache[i]
+                flip = epoch % 2 == 1  # horizontal flip of the feature map and target as cheap augmentation
+                x, y = (f.flip(-1), target.flip(-1)) if flip else (f, target)
+                logits = head(x.float()[None])[0, 0]
+                loss = F.binary_cross_entropy_with_logits(logits, (y > 0.25).float(), pos_weight=pos_weight)
+                opt.zero_grad()
+                loss.backward()
+                opt.step()
+
+        @torch.no_grad()
+        def prob(i, head=head):
+            f, _, mask = cache[i]
+            p = torch.sigmoid(head(f.float()[None]))
+            return F.interpolate(p, size=mask.shape, mode="bilinear", align_corners=False)[0, 0].cpu().numpy(), mask
+
+        val = [prob(i) for i in val_ids]
+        threshold = 0.02
+        for t in np.linspace(0.95, 0.02, 94):  # the highest threshold that still reaches the coverage target
+            if coverage_at(t, val)[0] >= target_coverage:
+                threshold = float(t)
+                break
+        val_cov, val_sprayed = coverage_at(threshold, val)
+        for i in test_ids:
+            p, _ = prob(i)
+            preds[i] = (np.packbits(p >= threshold).tobytes(), p.shape[0], p.shape[1])
+        reports.append({"fold": fold, "threshold": threshold, "val_coverage": float(val_cov),
+                        "val_sprayed": float(val_sprayed), "train_n": len(train_ids), "val_n": len(val_ids),
+                        "test_n": len(test_ids)})
+        heads.append(head)
+
     buf = io.BytesIO()
-    torch.save(head.state_dict(), buf)
-    return {"preds": preds, "threshold": threshold, "val_coverage": float(val_cov), "val_sprayed": float(val_sprayed),
-            "train_n": len(train_ids), "val_n": len(val_ids), "test_n": len(test_ids), "head": buf.getvalue()}
+    torch.save(heads[0].state_dict(), buf)  # the first fold's head, for the app
+    return {"preds": preds, "folds": reports, "head": buf.getvalue()}
 
 
-def run(test_ids: list[int], target_coverage: float = 0.95) -> dict:
+def run(test_folds: list[list[int]], target_coverage: float = 0.95) -> dict:
     with app.run():
-        return train_and_predict.remote(test_ids, target_coverage)
+        return train_folds.remote(test_folds, target_coverage)

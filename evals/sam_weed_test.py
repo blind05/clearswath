@@ -29,6 +29,9 @@ CACHE = ROOT / "data" / "cache" / "sam_eval"
 OVERLAYS = ROOT / "evals" / "overlays" / "sam_weed"
 RESULTS = ROOT / "evals" / "results_sam_weed.md"
 PASS_COVERAGE, MAX_TREATED = 0.95, 0.50
+# CoFly: DJI Phantom 4 Pro at 5 m, 84 deg FOV (taken as diagonal), 1280x720 frames -> 2*5*tan(42)/1469 px.
+# The paper states no GSD; this is derived. TODO(verify) if a stated value turns up.
+COFLY_GSD_M = 2 * 5 * 0.900404 / (1280 ** 2 + 720 ** 2) ** 0.5  # ~0.0061 m per pixel
 
 
 # ---- scoring (pure, tested) ----
@@ -195,9 +198,15 @@ def main() -> None:
     ap.add_argument("--seed", type=int, default=7)
     ap.add_argument("--prompts", nargs="+", default=["weed", "plant", "green plant"])
     ap.add_argument("--cell", nargs="+", type=int, default=[32, 96])
+    ap.add_argument("--cell-m", nargs="+", type=float, help="cell sizes in metres (ground sprayers: 0.25 0.5); "
+                    "converted with CoFly's ground resolution and used instead of --cell")
+    ap.add_argument("--folds", type=int, default=0, help="dinov3: k-fold cross-validation over --n images")
     ap.add_argument("--cover", type=float, default=0.01, help="share of a cell that triggers spraying")
     args = ap.parse_args()
     prompts = ["(excess green)"] if args.backend == "exg" else args.prompts
+    if args.cell_m:
+        args.cell = [max(1, round(m / COFLY_GSD_M)) for m in args.cell_m]
+    names = {c: (f"{m:g} m" if args.cell_m else f"{c} px") for c, m in zip(args.cell, args.cell_m or args.cell)}
 
     items = load_cofly(args.n, args.seed)
     if args.backend == "subtract":
@@ -212,8 +221,11 @@ def main() -> None:
         sys.path.insert(0, str(ROOT / "train"))
         import weed_head_modal
 
-        report = weed_head_modal.run([idx for idx, _, _ in items], args.target_coverage)  # trains on the rest
-        label = f"DINOv3 head (tuned to {args.target_coverage:.0%}, threshold {report['threshold']:.2f})"
+        ids = [idx for idx, _, _ in items]
+        k = args.folds or 1
+        folds = [ids[f::k] for f in range(k)] if args.folds else [ids]  # each image is in exactly one test fold
+        report = weed_head_modal.run(folds, args.target_coverage)  # every fold trains on everything else
+        label = f"DINOv3 head (tuned to {args.target_coverage:.0%}" + (f", {k}-fold" if args.folds else "") + ")"
         prompts = [label]
         preds = {}
         for idx, png, _ in items:
@@ -222,14 +234,15 @@ def main() -> None:
         model_dir = ROOT / "data" / "cache" / "models"
         model_dir.mkdir(parents=True, exist_ok=True)
         (model_dir / "weed_head_dinov3.pt").write_bytes(report["head"])
-        print(f"trained on {report['train_n']}, tuned on {report['val_n']} (val: {report['val_coverage']:.1%} weed hit, "
-              f"{report['val_sprayed']:.1%} sprayed), tested on {report['test_n']} unseen images")
+        for r in report["folds"]:
+            print(f"fold {r['fold']}: trained on {r['train_n']}, tuned on {r['val_n']} (threshold {r['threshold']:.2f}, "
+                  f"val {r['val_coverage']:.1%} hit / {r['val_sprayed']:.1%} sprayed), tested on {r['test_n']} unseen")
     else:
         preds = predict(args.backend, items, prompts)
     lines = [f"# Gate 3: SAM weed test ({args.backend}, CoFly-WeedDB, {args.n} images, seed {args.seed})", "",
              f"Cell sprayed when predicted cover >= {args.cover:.0%}. PASS: >= {PASS_COVERAGE:.0%} of weed hit while "
              f"spraying <= {MAX_TREATED:.0%}, at the finest cell.", "",
-             "| prompt | mean IoU | " + " | ".join(f"{c} px: weed hit / sprayed" for c in args.cell) + " | verdict |",
+             "| prompt | mean IoU | " + " | ".join(f"{names[c]}: weed hit / sprayed" for c in args.cell) + " | verdict |",
              "|---|---|" + "---|" * len(args.cell) + "---|"]
     for prompt in prompts:
         ious, sums = [], {c: [0, 0, 0, 0] for c in args.cell}
