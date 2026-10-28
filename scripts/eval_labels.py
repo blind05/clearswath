@@ -14,7 +14,9 @@ sys.path.insert(0, str(ROOT))
 UNITS = {"ft": ("ft", 1.0), "feet": ("ft", 1.0), "foot": ("ft", 1.0), "m": ("ft", 1 / 0.3048),
          "meters": ("ft", 1 / 0.3048), "mph": ("mph", 1.0), "miles per hour": ("mph", 1.0),
          "qt": ("qt", 1.0), "quart": ("qt", 1.0), "quarts": ("qt", 1.0), "pt": ("qt", 0.5), "pint": ("qt", 0.5),
-         "pints": ("qt", 0.5), "fl oz": ("qt", 1 / 32), "fluid ounces": ("qt", 1 / 32), "fluid ounce": ("qt", 1 / 32)}
+         "pints": ("qt", 0.5), "fl oz": ("qt", 1 / 32), "fluid ounces": ("qt", 1 / 32), "fluid ounce": ("qt", 1 / 32),
+         **{u: ("lb a.i.", 1.0) for u in ("lb a.i.", "lb ai", "lbs a.i.", "lb active ingredient", "lbs active ingredient",
+                                          "pound active ingredient", "pounds active ingredient")}}
 
 
 def _base(rule: dict) -> tuple:
@@ -28,8 +30,13 @@ def _base(rule: dict) -> tuple:
 def matches(pred: dict, key: dict, strict: bool = False) -> bool:
     """Same kind and target; same value within 1% after unit conversion (or, with no value, same page).
 
-    applies_to must be equal; unless strict, 'all' on either side also matches.
+    applies_to must be equal; unless strict, 'all' on either side also matches. A key may list same_as: the same
+    limit in units that don't convert (2 quarts of product = 1.0 lb active ingredient, at this product's strength).
     """
+    return any(_matches(pred, key | alt, strict) for alt in [{}, *key.get("same_as", [])])
+
+
+def _matches(pred: dict, key: dict, strict: bool) -> bool:
     if pred.get("kind") != key["kind"] or pred.get("target") != key.get("target"):
         return False
     same = pred.get("applies_to") == key["applies_to"]
