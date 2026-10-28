@@ -7,6 +7,9 @@ For every rule return:
   the treated area and sensitive or non-target areas, such as the endangered-species drift buffers on newer
   labels), `wind`, `rain`, `rate`, `runoff` (the label requires
   runoff mitigation points, e.g. from EPA's mitigation menu or PALM, before application), or `other`.
+  `buffer` and `drift` are only for a stated distance on the ground between the spray and something else. A rule
+  with no such distance is `other`: "do not apply directly to water", boom width, nozzle direction, droplet size,
+  or the release height above the crop (a height is not a buffer).
 - target: for buffers, what the setback is from: `water` (lakes, ponds, streams, wetlands, aquatic areas), `building` (homes, occupied structures), or `habitat` (sensitive or endangered species areas). Otherwise null.
 - applies_to: `aerial` if the rule is for aerial application, `ground` if for ground application, `all` if it does not say.
 - value and unit: the number and unit as written (`ft` or `m` for buffers; e.g. `mph` for wind). Null if there is no number.
