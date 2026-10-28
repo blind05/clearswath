@@ -40,15 +40,21 @@ def patch_target(mask: np.ndarray, grid: tuple[int, int]):
     return torch.from_numpy(mask[:gh * PATCH, :gw * PATCH]).float().reshape(gh, PATCH, gw, PATCH).mean((1, 3))
 
 
+def make_head(in_channels: int):
+    """The small conv head on the patch features: one weed logit per patch."""
+    import torch.nn as nn
+
+    return nn.Sequential(nn.Conv2d(in_channels, 128, 3, padding=1), nn.GELU(),
+                         nn.Conv2d(128, 64, 3, padding=1), nn.GELU(), nn.Conv2d(64, 1, 1))
+
+
 def train_head(samples: list, seed: int, epochs: int):
     """samples: (features, patch target) pairs on the GPU. Weed recall is favoured via pos_weight."""
     import torch
-    import torch.nn as nn
     import torch.nn.functional as F
 
     torch.manual_seed(seed)
-    head = nn.Sequential(nn.Conv2d(samples[0][0].shape[0], 128, 3, padding=1), nn.GELU(),
-                         nn.Conv2d(128, 64, 3, padding=1), nn.GELU(), nn.Conv2d(64, 1, 1)).to("cuda")
+    head = make_head(samples[0][0].shape[0]).to("cuda")
     weed_share = float(torch.stack([t.mean() for _, t in samples]).mean())
     pos_weight = torch.tensor((1 - weed_share) / max(weed_share, 1e-3), device="cuda")
     opt = torch.optim.AdamW(head.parameters(), lr=2e-3, weight_decay=1e-2)
