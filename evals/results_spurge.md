@@ -61,3 +61,18 @@ and quarter turns (AdamW, 2e-5 for the blocks, 1e-3 for the head). Same tests as
 
 LOCO AUC by held-out cluster: 0.86, 0.91, 0.95, 0.96, 1.00, 0.95, 0.94, 0.98, 0.97. Accuracy is at a 0.5 cutoff; the
 map picks its own cutoff for a catch rate, so the ranking (AUC) is what decides how much clean ground it sprays.
+
+## The Montana map with the fine-tuned model (2026-10-28)
+
+`train/spurge_finetune_modal.py` `map_block`: trained on the 5 clusters outside the demo block; catch-rate thresholds
+from leave-one-cluster-out predictions within them; checked on the 4 clusters inside the block. Same block, same
+1 m cells and >= 1% cover rule as the probe map.
+
+| catch target | probe: held-out found / clean flagged / block sprayed | fine-tuned: found / clean flagged / block sprayed |
+|---|---|---|
+| 95% | 95.1% / 74.5% / 95% | 98.0% / 64.8% / 97% |
+| 90% | 87.3% / 41.3% / 79% | 93.7% / 20.9% / 68% |
+| **85% (the demo)** | 81.0% / 32.7% / 68% | **89.8% / 9.7% / 40%** |
+| 80% | 76.1% / 24.0% / 54% | 85.9% / 8.2% / 27% |
+| 70% | 68.8% / 16.3% / 35% | 78.5% / 5.1% / 14% |
+| 60% | 61.5% / 7.7% / 17% | 72.7% / 3.1% / 7% |

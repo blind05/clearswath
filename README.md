@@ -21,7 +21,7 @@ Press **Try demo**. The demo runs offline from saved inputs, so it is free and i
 
 - **Montana rangeland, leafy spurge.** A 24-acre block of a real drone orthomosaic (MPG Ranch, 1.27 cm per
   pixel), sprayed with Tordon 22K. A stream crosses the block. Result: **Adjust**; 23.6 of 24.1 acres may be sprayed,
-  and the weed map sprays 19.1 of them. Tick "Ask the Muse Spark agent" to see the saved answer from Muse Spark
+  and the weed map sprays 9.7 of them. Tick "Ask the Muse Spark agent" to see the saved answer from Muse Spark
   Open, with each tool it called.
 - **South Dakota cropland**, linked from the Montana result. A field drawn up to a creek, sprayed with Warrior II.
   The 150 ft aerial buffer takes a strip along the creek (Adjust), and the corrected outline is clear (No conflicts in
@@ -63,7 +63,7 @@ that is not on the label, the answer is replaced with the plan's own summary.
 | Muse Spark Open | Fireworks, Baseten | The same jobs on open weights | Same checks; the label eval compares providers |
 | SAM 3.1 | Meta Model API, and open weights on Modal | Hazards in aerial imagery; zero-shot weed baseline | Merged with mapped water; scored against weed ground truth |
 | DINOv3 ViT-S/16 | Open weights, Modal GPU | Features for the crop-vs-weed head (CoFly, PhenoBench) | Cross-validated against pixel masks |
-| DINOv2 ViT-B/14 | Open weights, Modal GPU | Features for the leafy spurge probe and the Montana map | Scored on survey plots it never trained on |
+| DINOv2 ViT-B/14 | Open weights, fine-tuned on Modal | The leafy spurge model behind the Montana map | Scored on survey plots it never trained on |
 | Muse Voice Transcribe 1.0 | Meta Model API | Turns a spoken job note into the record | Plan values always beat what the model heard; gaps listed |
 
 ## Weed results
@@ -78,11 +78,15 @@ All numbers are on images the model never trained on. "Hit" is the share of weed
 | PhenoBench (sugar beet, 3 flight dates) | DINOv3 head + 50 labelled tiles from the date sprayed | **95.5 to 97.9% / 15 to 18%** at 0.1 m |
 | | Spray everything green | 83 to 98% / 19 to 59% |
 | | SAM 3 open weights, "weed" (zero-shot) | 73% / 22% |
-| Leafy spurge (Montana, 900 survey plots) | DINOv2 probe | 85% accuracy on the official test plots, matching the dataset paper |
+| Leafy spurge (Montana, 900 survey plots, 9 spatial clusters) | DINOv2-B, last 2 blocks fine-tuned | AUC 0.95 on clusters it never saw (frozen features: 0.88) |
 
-The spurge probe is the weakest part. On the Montana block, tuned to catch 90% of spurge plots, it found 87% of the
-held-out ones and also flagged 41% of clean ones, so it sprays 79% of the block. Catching 70% sprays 35%. The app
-states the catch rate next to the map.
+On the Montana block the spurge model is tuned to catch 85% of the spurge plots in the clusters it trained on. On
+the four clusters inside the block, which it never saw, it found 90% of spurge plots and flagged 10% of clean ones,
+and it sprays 40% of the block (1 m cells). Catching more costs more: tuned to 90%, it finds 94% and sprays 68%.
+The app states the catch rate next to the map. Frozen DINOv2 features alone sprayed 68% to find 81%.
+
+Muse Spark Open was also tried as a reviewer of the photo mode's weed patches. On CoFly it called real weeds bare
+soil and agreed with the ground truth only 52% of the time, so it is not in the app (`evals/results_patch_review.md`).
 
 ## Limits
 
