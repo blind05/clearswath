@@ -8,3 +8,5 @@ data/logs/
 .DS_Store
 data/runs/
 /cache/
+data/datasets/
+evals/overlays/
