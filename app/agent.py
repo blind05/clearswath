@@ -36,11 +36,13 @@ class _ModelError(Exception):
 class _Job:
     """The run's state; each tool fills one part, and plan_spray fills in anything still missing."""
 
-    def __init__(self, field_path, label_path, month, method, excluded_rules=(), provider=None):
+    def __init__(self, field_path, label_path, month, method, excluded_rules=(), provider=None, inputs=None):
         self.field_path, self.label_path, self.month, self.method = field_path, label_path, month, method
         self.provider = provider
         self.excluded_rules = excluded_rules  # set by the user, never by the model
-        self.label = self.hazards = self.bulletin = self.result = None
+        self.field = self.label = self.hazards = self.bulletin = self.result = None
+        if inputs:  # already gathered (the demo cache): the tools return these, nothing else is fetched
+            self.field, self.label, self.hazards, self.bulletin = inputs
 
     def read_label(self):
         self.label = self.label or label_reader.read_label(self.label_path, self.provider)
@@ -50,8 +52,11 @@ class _Job:
 
     def find_hazards(self):
         self.hazards = self.hazards or segment.find_hazards(self.field_path)
-        return {k: len(self.hazards.get(k) or []) for k in ("water", "building", "habitat")} | {
+        out = {k: len(self.hazards.get(k) or []) for k in ("water", "building", "habitat")} | {
             "imagery_date": self.hazards.get("imagery_date"), "water_source": self.hazards.get("water_source")}
+        if self.hazards.get("weeds") is not None:
+            out |= {"weed_patches": len(self.hazards["weeds"]), "weed_source": self.hazards.get("weed_source")}
+        return out
 
     def check_bulletin(self):
         if self.bulletin is None:
@@ -62,13 +67,17 @@ class _Job:
     def plan_spray(self):
         self.find_hazards()
         self.check_bulletin()  # reads the label too
-        self.result = self.result or pipeline.assemble(geo.load_field(self.field_path), self.label,
-                                                       self.hazards, self.bulletin, self.month, self.method,
-                                                       self.excluded_rules)
+        field = self.field if self.field is not None else geo.load_field(self.field_path)
+        self.result = self.result or pipeline.assemble(field, self.label, self.hazards, self.bulletin, self.month,
+                                                       self.method, self.excluded_rules)
         plan = self.result["plan"]
-        return {"decision": LABELS[plan["status"]], "field_acres": plan["field_acres"],
-                "spray_acres": plan["spray_acres"], "excluded_acres": plan["excluded_acres"],
-                "reasons": plan["reasons"], "warnings": self.result["warnings"]}
+        out = {"decision": LABELS[plan["status"]], "field_acres": plan["field_acres"],
+               "spray_acres": plan["spray_acres"], "excluded_acres": plan["excluded_acres"],
+               "reasons": plan["reasons"], "warnings": self.result["warnings"]}
+        if self.result.get("cells"):
+            s = pipeline.cells.summary(self.result["cells"])
+            out["spot_spray"] = {k: s[k] for k in ("treated_acres", "clean_acres", "buffered_acres", "cell_size_m")}
+        return out
 
 
 def _template(result: dict) -> str:
@@ -106,11 +115,16 @@ def _agent_loop(job: _Job, trace: list) -> str | None:
     return None
 
 
-def run(field_path, label_path, month: str, method: str = "drone", excluded_rules=(), provider=None) -> dict:
-    """result is the full pipeline result (as pipeline.run returns), for pipeline.to_json."""
-    geo.load_field(field_path)  # validated before any tool can spend on it
+def run(field_path, label_path, month: str, method: str = "drone", excluded_rules=(), provider=None,
+        inputs=None) -> dict:
+    """result is the full pipeline result (as pipeline.run returns), for pipeline.to_json.
+
+    inputs: (field, label, hazards, bulletin) already gathered, as for the demo; then only the model call is live.
+    """
+    if inputs is None:
+        geo.load_field(field_path)  # validated before any tool can spend on it
     run_id = uuid.uuid4().hex
-    job, trace, mode = _Job(field_path, label_path, month, method, excluded_rules, provider), [], "agent"
+    job, trace, mode = _Job(field_path, label_path, month, method, excluded_rules, provider, inputs), [], "agent"
     try:
         answer = _agent_loop(job, trace)
     except _ModelError as e:

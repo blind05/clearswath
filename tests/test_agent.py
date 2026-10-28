@@ -167,6 +167,22 @@ def test_agent_refuses_a_bad_field_before_any_tool(monkeypatch, tmp_path):
         agent.run(p, "label.pdf", "2026-11")
 
 
+def test_agent_on_cached_inputs_makes_no_live_calls(monkeypatch, tmp_path):
+    monkeypatch.setattr(agent, "RUNS", tmp_path / "runs")
+    for mod, fn in ((label_reader, "read_label"), (segment, "find_hazards"), (bulletins, "check_bulletin")):
+        monkeypatch.setattr(mod, fn, lambda *a, **kw: pytest.fail("the demo must not fetch"))
+    hazards = {"water": [POND], "building": [], "habitat": [], "imagery_date": "2023-06-12", "water_source": "usgs",
+               "weeds": [FIELD.buffer(-0.001)], "weed_source": "probe at 90% catch"}
+    seen = script(monkeypatch, reply(call("find_hazards"), call("plan_spray", 1)),
+                  reply(content="ADJUST: spot spray the spurge, away from the pond."))
+    monkeypatch.setattr(agent.pipeline, "CELL_M", 50.0)
+    out = agent.run(None, None, "2026-06", "drone", inputs=(FIELD, LABEL, hazards, BULLETIN))
+    assert out["mode"] == "agent" and out["decision"] == "adjust" and out["answer"].startswith("ADJUST")
+    hz, plan = (json.loads(m["content"]) for m in seen[1] if m["role"] == "tool")
+    assert hz["weed_patches"] == 1 and hz["weed_source"] == "probe at 90% catch"
+    assert plan["spot_spray"]["treated_acres"] > 0 and plan["decision"] == "ADJUST"
+
+
 @pytest.mark.parametrize("text, kept", [
     ('ADJUST: the label says "Do not apply within 100 feet of water."', True),
     ('ADJUST: the label says "apply within 100 feet" so keep back.', True),  # an exact part of the quote

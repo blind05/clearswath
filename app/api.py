@@ -366,9 +366,40 @@ def demo_image(name: str):
     return FileResponse(path, media_type="image/webp")
 
 
+def _replay_key(method: str, excluded: list[int]) -> str:
+    return f"{method}|{','.join(map(str, sorted(excluded)))}"
+
+
+@app.post("/api/demo/agent")  # gated by Guard: the model call is live and paid
+def demo_agent(field: str = Form(""), method: str = Form("drone"), excluded_rules: str = Form("")):
+    """The Muse Spark agent on a cached demo: its tools return the saved inputs, only the model runs live.
+    The answer is saved to data/demo/cache/<demo>/agent.json, which GET /api/demo?agent=1 replays for free."""
+    if field not in DEMO_FIELDS:
+        raise HTTPException(422, f"field must be one of {sorted(k for k in DEMO_FIELDS if k)} or empty")
+    if method not in METHODS:
+        raise HTTPException(422, f"method must be one of {sorted(METHODS)}")
+    cache = DEMO / "cache" / DEMO_FIELDS[field]
+    if not pipeline.cache_file(cache):
+        raise HTTPException(404, "This demo has no saved inputs")
+    excluded = _rule_ids(excluded_rules)
+    try:
+        shape_, label, hazards, bulletin, month = pipeline.load_inputs(cache)
+        out = agent.run(None, None, month, method, excluded, inputs=(shape_, label, hazards, bulletin))
+        body = {**pipeline.to_json(out.pop("result")), **out}
+    except Exception as e:
+        raise _http_error(e) from e
+    if out["mode"] == "agent":  # only real model answers are worth replaying
+        replays = json.loads((cache / "agent.json").read_text()) if (cache / "agent.json").exists() else {}
+        replays[_replay_key(method, excluded)] = {
+            k: body[k] for k in ("answer", "decision", "trace")} | {"model": llm.spark_model(None),
+                                                                   "date": date.today().isoformat()}
+        (cache / "agent.json").write_text(json.dumps(replays, indent=1, default=str))
+    return body | {"demo": {"field": field, "cached": True, "month": month, "overlay": _overlay(DEMO_FIELDS[field])}}
+
+
 @app.get("/api/demo")
 def demo(request: Request, month: str | None = None, method: str = "drone", excluded_rules: str = "",
-         field: str = ""):
+         field: str = "", agent_answer: bool = False):
     """The demo field. From data/demo/cache when present (offline, instant; the plan is still recomputed),
     else live. field=corrected is the outline pulled back from the creek."""
     if field not in DEMO_FIELDS:
@@ -386,8 +417,14 @@ def demo(request: Request, month: str | None = None, method: str = "drone", excl
             raise _http_error(e) from e
         run_id = uuid.uuid4().hex
         pipeline.save_run(result, RUNS / run_id)
-        return {"run_id": run_id, **pipeline.to_json(result),
+        body = {"run_id": run_id, **pipeline.to_json(result),
                 "demo": {"field": field, "cached": True, "month": cached_month, "overlay": _overlay(name)}}
+        saved = json.loads((cache / "agent.json").read_text()) if agent_answer and (cache / "agent.json").exists() else {}
+        replay = saved.get(_replay_key(method, excluded))
+        if replay and replay["decision"] == result["plan"]["status"]:  # never replay an answer the plan has outgrown
+            body |= {"answer": replay["answer"], "trace": replay["trace"], "decision": replay["decision"],
+                     "mode": "replay", "replay": {"model": replay["model"], "date": replay["date"]}}
+        return body
     labels = [p for p in DEMO.glob("label.*") if p.suffix.lower() in LABEL_SUFFIXES]
     path = DEMO / f"{name}.geojson"
     if not path.exists() or not labels:

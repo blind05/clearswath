@@ -751,3 +751,33 @@ def test_no_weed_map_no_prescription(client, cached_demo):
     assert client.get(f"/api/export/{run_id}/dji", params={"rate": 19}).status_code == 409
     assert client.get(f"/api/export/{run_id}/shp").status_code == 404
     assert client.get("/api/export/not-a-run/geojson").status_code == 404
+
+
+def test_demo_agent_saves_an_answer_the_demo_replays(client, cached_demo, monkeypatch, tmp_path):
+    from app import agent
+
+    calls = []
+
+    def fake_run(fp, lp, month, method, excluded, inputs=None, **kw):
+        calls.append(inputs is not None)
+        result = pipeline.assemble(*inputs, month, method, excluded)
+        return {"run_id": "r1", "answer": "ADJUST: keep 100 ft from the pond.", "decision": result["plan"]["status"],
+                "trace": [{"tool": "plan_spray", "seconds": 0.1}], "mode": "agent", "result": result}
+
+    monkeypatch.setattr(agent, "run", fake_run)
+    r = client.post("/api/demo/agent", data={"field": "corrected", "method": "drone"})
+    assert r.status_code == 200 and r.json()["answer"].startswith("ADJUST") and calls == [True]
+    saved = json.loads((tmp_path / "demo" / "cache" / "field_corrected" / "agent.json").read_text())
+    assert saved["drone|"]["decision"] == "adjust"
+
+    replay = client.get("/api/demo?field=corrected&agent_answer=1").json()
+    assert replay["mode"] == "replay" and replay["answer"] == "ADJUST: keep 100 ft from the pond."
+    assert "answer" not in client.get("/api/demo?field=corrected").json()  # only when asked for
+    assert "answer" not in client.get("/api/demo?field=corrected&method=ground&agent_answer=1").json()  # other key
+
+
+def test_stale_replay_is_never_shown(client, cached_demo, tmp_path):
+    (tmp_path / "demo" / "cache" / "field_corrected" / "agent.json").write_text(json.dumps(
+        {"drone|": {"answer": "GO: spray it all.", "decision": "go", "trace": [], "model": "m", "date": "d"}}))
+    body = client.get("/api/demo?field=corrected&agent_answer=1").json()
+    assert body["status"] == "adjust" and "answer" not in body

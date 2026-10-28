@@ -191,12 +191,16 @@ function render(r) {
         el("input", { type: "checkbox", "data-rule": String(c.id), ...(c.applied ? { checked: "" } : {}) }),
         el("span", {}, `${c.summary} (p.${c.page}${c.condition ? `, only when ${c.condition}` : ""})`)))) : null,
     r.answer ? el("div", { class: "agent" },
-      el("div", { class: "tag" }, r.mode === "agent" ? "Muse Spark agent" : "Agent unavailable · plan summary"),
+      el("div", { class: "tag" }, r.mode === "agent" ? "Muse Spark agent"
+        : r.mode === "replay" ? `Saved Muse Spark answer (${r.replay.model.split("/").pop()}, ${r.replay.date})`
+        : "Agent unavailable · plan summary"),
       el("p", {}, r.answer),
       el("details", {}, el("summary", {}, "How it decided"),
         el("ol", {}, r.trace.map((t) => el("li", {}, t.tool
           ? `${t.tool}${t.seconds != null ? ` (${t.seconds}s)` : ""}${t.note ? ` — ${t.note}` : ""}`
           : t.note))))) : null,
+    r.demo && form.agent.checked && !r.answer ? el("button", { type: "button", id: "agent-live", class: "secondary" },
+      "Ask the Muse Spark agent live (access code)") : null,
     el("h2", {}, "Why"),
     r.reasons.length ? r.reasons.map((x) => el("div", { class: `reason ${x.source}` },
       el("div", { class: "tag" }, x.source === "label" ? `Label p.${x.page} · ${x.distance_ft} ft from ${x.target}` : x.source),
@@ -249,7 +253,8 @@ async function call(url, opts) {
   $("#busy").hidden = false;
   form.querySelectorAll("button").forEach((b) => (b.disabled = true));
   try {
-    const res = url.startsWith("/api/demo") ? await fetch(url, opts) : await liveFetch(url, opts);
+    const free = url.startsWith("/api/demo") && (!opts || !opts.method || opts.method === "GET");  // POSTs are paid
+    const res = free ? await fetch(url, opts) : await liveFetch(url, opts);
     const body = await res.json().catch(() => ({}));
     if (!res.ok) throw new Error(typeof body.detail === "string" ? body.detail : `Request failed (${res.status})`);
     render(body);
@@ -343,8 +348,19 @@ form.addEventListener("submit", (e) => {
 let demoField = "mt";
 function demoRun(excluded) {
   const q = `month=${form.month.value}&method=${form.method.value}&field=${demoField}`;
-  return call(`/api/demo?${q}&excluded_rules=${excluded}`);
+  lastExcluded = excluded;
+  return call(`/api/demo?${q}&excluded_rules=${excluded}${form.agent.checked ? "&agent_answer=1" : ""}`);
 }
+let lastExcluded = "";
+// No saved answer for this demo choice: run the agent live on the demo's saved inputs (needs the access code).
+$("#result").addEventListener("click", (e) => {
+  if (e.target.id !== "agent-live") return;
+  const body = new FormData();
+  body.append("field", demoField);
+  body.append("method", form.method.value);
+  body.append("excluded_rules", lastExcluded);
+  call("/api/demo/agent", { method: "POST", body });
+});
 $("#demo").addEventListener("click", () => {
   demoField = "mt";
   rerun = demoRun;
