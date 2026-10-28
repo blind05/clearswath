@@ -17,6 +17,8 @@ import httpx
 from dotenv import load_dotenv
 from openai import OpenAI
 
+from app import spend
+
 BASE_URL = "https://api.meta.ai/v1"
 SPARK = "muse-spark-1.3"
 SAM = "sam-3.1"
@@ -84,6 +86,7 @@ def log_call(model: str, purpose: str, seconds: float, usage) -> None:
            "seconds": round(seconds, 3), "usage": usage}
     with LOG_PATH.open("a") as f:
         f.write(json.dumps(row) + "\n")
+    spend.record(model, usage)
 
 
 def _complete(purpose: str, name: str, **kwargs):

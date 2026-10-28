@@ -8,11 +8,14 @@ def default_provider(monkeypatch):
 
 
 @pytest.fixture(autouse=True)
-def open_live_endpoints(monkeypatch):
-    """Tests run as local development: no access code, not on Render, fresh rate-limit counters."""
-    from app import api
+def open_live_endpoints(monkeypatch, tmp_path):
+    """Tests run as local development: no access code, not on Render, fresh rate-limit counters, and spend
+    written to a temporary file, never the real data/logs."""
+    from app import api, spend
 
-    for var in ("ACCESS_CODE", "RENDER", "RATE_LIMIT_PER_HOUR", "DAILY_RUN_CAP", "CLEARSWATH_LIVE_MODE"):
+    monkeypatch.setattr(spend, "PATH", tmp_path / "spend.json")
+    for var in ("ACCESS_CODE", "RENDER", "RUNS_PER_IP_PER_DAY", "DAILY_RUN_CAP", "DAILY_BUDGET_USD",
+                "CLEARSWATH_LIVE_MODE"):
         monkeypatch.delenv(var, raising=False)
     api.reset_limits()
     # no background clean-up during tests: it would sweep the real data/cache (tests call clean_up directly)

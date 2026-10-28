@@ -15,6 +15,7 @@ Don't change a contract unless the human asks.
 | `app/buffers.py` | `plan(field, hazards, rules, restricted, method, prohibited, gaps=())` | shapes and rules | `{status, method, field_acres, spray_acres, excluded_acres, spray_zone, no_spray, reasons}` |
 | `app/cells.py` | `grid(field_m, size_m)`, `classify(field, weeds, no_spray, size_m, threshold=0.01)`, `summary(result)` | field, weed shapes, the no-spray union, cell size (m) | cells with `cover` and `state` (`spray`, `clean`, `buffered`; buffered always wins), acres by state and a SHA-256 of the inputs. No model calls |
 | `app/pipeline.py` | `run(field_path, label_path, month, method, excluded_rules=())`, `assemble(...)`, `to_json(result)`, `save_inputs()`/`load_inputs()` (demo cache) | paths and options; ids of rules the user unticked; optional `hazards["weeds"]` (weed map) | full result, with `cells` (1 m spot-spray grid; a no-go plan sprays no cells) when there is a weed map; JSON with map layers (`spray_cells`, `buffered_cells`), `spot` acres, `confirm` and `excluded_rules` for the page |
+| `app/spend.py` | `cost(model, usage)`, `record(model, usage)`, `today()` | a call's model and token usage | estimated USD; today's total (UTC) in `data/logs/spend.json`. No network |
 | `app/exports.py` | `spot_raster(grid)`, `write_spot_tif(grid, path)`, `dji_zip(field, spot_tif, rate)` | the cell grid; rate per ha | GeoTIFF on the cell grid (1 spray, 0 not, 255 outside); zip with `DJI/ShapeFile/boundary.*` and `DJI/Rx/prescription.tif` (layout TODO(verify) on a controller). No model calls |
 | `app/agent.py` | `run(field_path, label_path, month, method, excluded_rules=(), provider=None)` | same | `{run_id, answer, decision, trace, mode, result}`; `result` is what `pipeline.run` returns |
 | `app/records.py` | `transcribe(path)`, `fill_record(text, job)` | audio; transcript and job dict | text; `AppRecord` with `missing` list; drone/aerial jobs add `part137` (14 CFR 137.71 items, own `missing` list) |
@@ -25,7 +26,9 @@ read from a photo, are listed in `confirm`; the user can untick them (`excluded_
 `label.rules`). Unticking anything else is refused. A model's condition can only make the plan stricter.
 
 Paid endpoints (`/api/plan`, `/api/agent`, `/api/label`, `/api/record`) need the `X-Access-Code` header when
-`ACCESS_CODE` is set (refused on Render without one), plus a per-IP hourly limit and a daily cap.
+`ACCESS_CODE` is set (refused on Render without one), plus 3 live runs per IP per day (`RUNS_PER_IP_PER_DAY`),
+a daily run cap (`DAILY_RUN_CAP`) and an estimated spend budget of $5 a day (`DAILY_BUDGET_USD`; every model call
+is costed by `app/spend.py` from `llm.log_call`, prices `TODO(verify)`).
 `CLEARSWATH_LIVE_MODE=off` refuses all of them (503); the cached demo keeps working, an uncached demo is gated too.
 
 `/api/demo?field=&method=&excluded_rules=` (`field` empty, `corrected` or `mt`) serves `data/demo/cache/<field>/inputs.json`

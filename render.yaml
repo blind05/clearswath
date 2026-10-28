@@ -14,8 +14,10 @@ services:
         sync: false
       - key: CLEARSWATH_LIVE_MODE  # set to "off" to stop all paid calls; the cached demo keeps working
         value: "on"
-      - key: RATE_LIMIT_PER_HOUR
-        value: "20"
+      - key: RUNS_PER_IP_PER_DAY
+        value: "3"
+      - key: DAILY_BUDGET_USD
+        value: "5"
       - key: DAILY_RUN_CAP
         value: "200"
       - key: LLM_PROVIDER

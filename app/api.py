@@ -20,7 +20,7 @@ from fastapi import FastAPI, File, Form, HTTPException, Request, UploadFile
 from fastapi.responses import FileResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 
-from app import agent, exports, geo, imagery, llm, label_reader, pipeline, records, segment
+from app import agent, exports, geo, imagery, llm, label_reader, pipeline, records, segment, spend
 
 ROOT = Path(__file__).resolve().parent.parent
 RUNS = ROOT / "data" / "runs"
@@ -110,7 +110,7 @@ class Guard:
 
 # Paid endpoints (model calls) are gated; the cached demo, KML and the page stay open.
 _lock = threading.Lock()
-# ip -> request / wrong-code times in the last hour, least recently hit first (an LRU)
+# ip -> live-run times (last day) / wrong-code times (last hour), least recently hit first (an LRU)
 _hits: OrderedDict[str, deque] = OrderedDict()
 _fails: OrderedDict[str, deque] = OrderedDict()
 MAX_TRACKED = 10_000  # addresses per table; bounds memory when many addresses (e.g. rotating IPv6) hit us
@@ -127,12 +127,12 @@ def reset_limits() -> None:
         _day.update(date=None, count=0)
 
 
-def _count(table: dict, ip: str, now: float) -> int:
-    """Hits from ip in the last hour. Never creates an entry; drops one that has expired."""
+def _count(table: dict, ip: str, now: float, window: float = 3600) -> int:
+    """Hits from ip in the last window seconds. Never creates an entry; drops one that has expired."""
     times = table.get(ip)
     if times is None:
         return 0
-    while times and now - times[0] > 3600:
+    while times and now - times[0] > window:
         times.popleft()
     if not times:
         del table[ip]
@@ -155,7 +155,8 @@ def _client_ip(request: Request) -> str:
 
 
 def paid_access(request: Request) -> None:
-    """Kill switch, access code, per-IP hourly limit and a global daily cap, checked before any paid model call."""
+    """Kill switch, access code, per-IP daily limit, a global daily run cap and spend budget, checked before any
+    paid model call."""
     if os.getenv("CLEARSWATH_LIVE_MODE", "on").strip().lower() in ("off", "0", "false", "no"):
         raise HTTPException(503, "Live runs are switched off right now. The demo still works.")
     now, ip = time.time(), _client_ip(request)
@@ -175,15 +176,16 @@ def paid_access(request: Request) -> None:
             raise HTTPException(401, "Live runs need the access code. The demo is open to everyone.")
     elif os.getenv("RENDER"):  # deployed without a code: refuse rather than spend for anyone
         raise HTTPException(503, "Live runs aren't switched on for this site yet. Try the demo.")
-    per_hour = int(os.getenv("RATE_LIMIT_PER_HOUR", "20"))
+    per_day = int(os.getenv("RUNS_PER_IP_PER_DAY", "3"))
     daily_cap = int(os.getenv("DAILY_RUN_CAP", "200"))
+    budget = float(os.getenv("DAILY_BUDGET_USD", "5"))
     with _lock:
         if _day["date"] != date.today():
             _day.update(date=date.today(), count=0)
-        if _day["count"] >= daily_cap:
+        if _day["count"] >= daily_cap or spend.today() >= budget:
             raise HTTPException(503, "Today's live-run budget is used up. The demo still works.")
-        if _count(_hits, ip, now) >= per_hour:
-            raise HTTPException(429, "Too many live runs from your address. Try again within the hour, or use the demo.")
+        if _count(_hits, ip, now, window=86400) >= per_day:
+            raise HTTPException(429, "Too many live runs from your address today. Try again tomorrow, or use the demo.")
         _add(_hits, ip, now)
         _day["count"] += 1
 

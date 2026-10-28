@@ -6,7 +6,7 @@ import pytest
 from fastapi.testclient import TestClient
 from shapely.geometry import Polygon, box, mapping
 
-from app import api, imagery, label_reader, llm, pipeline, records
+from app import api, imagery, label_reader, llm, pipeline, records, spend
 from app.label_reader import LabelRules
 
 REAL_TO_JSON = pipeline.to_json  # the client fixture stubs it; the cached demo test needs the real one
@@ -24,6 +24,7 @@ def result(spray=SPRAY, no_spray=NO_SPRAY, method="drone"):
 @pytest.fixture
 def client(tmp_path, monkeypatch):
     monkeypatch.setattr(api, "RUNS", tmp_path / "runs")
+    monkeypatch.setenv("RUNS_PER_IP_PER_DAY", "100")  # tests post many runs from one address
     monkeypatch.setattr(api, "DEMO", tmp_path / "demo")
     seen = {}
 
@@ -382,8 +383,8 @@ def test_render_without_a_code_refuses_to_spend(client, monkeypatch):
     assert r.status_code == 503 and "demo" in r.json()["detail"]
 
 
-def test_per_ip_hourly_limit(client, monkeypatch):
-    monkeypatch.setenv("RATE_LIMIT_PER_HOUR", "2")
+def test_per_ip_daily_limit(client, monkeypatch):
+    monkeypatch.setenv("RUNS_PER_IP_PER_DAY", "2")
     assert [post_plan(client).status_code for _ in range(3)] == [200, 200, 429]
     other = client.post("/api/plan", headers={"X-Forwarded-For": "203.0.113.9"}, data={"month": "2026-11"},
                         files={"field": ("f.geojson", json.dumps(mapping(FIELD))), "label": ("l.pdf", b"%PDF")})
@@ -399,7 +400,7 @@ def test_daily_cap_across_everyone(client, monkeypatch):
 
 
 def test_forwarded_for_uses_the_last_hop(client, monkeypatch):
-    monkeypatch.setenv("RATE_LIMIT_PER_HOUR", "1")
+    monkeypatch.setenv("RUNS_PER_IP_PER_DAY", "1")
     spoof = {"X-Forwarded-For": "1.1.1.1, 198.51.100.7"}
     files = lambda: {"field": ("f.geojson", json.dumps(mapping(FIELD))), "label": ("l.pdf", b"%PDF")}  # noqa: E731
     assert client.post("/api/plan", headers=spoof, data={"month": "2026-11"}, files=files()).status_code == 200
@@ -541,7 +542,7 @@ def test_unauthorised_upload_is_refused_before_it_is_parsed(client, monkeypatch)
 
 
 def test_guard_counts_each_run_once(client, monkeypatch):
-    monkeypatch.setenv("RATE_LIMIT_PER_HOUR", "2")
+    monkeypatch.setenv("RUNS_PER_IP_PER_DAY", "2")
     assert [post_plan(client).status_code for _ in range(3)] == [200, 200, 429]
 
 
@@ -781,3 +782,17 @@ def test_stale_replay_is_never_shown(client, cached_demo, tmp_path):
         {"drone|": {"answer": "GO: spray it all.", "decision": "go", "trace": [], "model": "m", "date": "d"}}))
     body = client.get("/api/demo?field=corrected&agent_answer=1").json()
     assert body["status"] == "adjust" and "answer" not in body
+
+
+def test_spend_budget_stops_live_runs(client, monkeypatch):
+    monkeypatch.setenv("DAILY_BUDGET_USD", "1")
+    assert post_plan(client).status_code == 200
+    spend.record("muse-spark-1.3", {"prompt_tokens": 1_000_000})  # $1.25 spent today
+    r = post_plan(client)
+    assert r.status_code == 503 and "budget" in r.json()["detail"]
+    assert client.get("/api/health").status_code == 200  # free routes keep working
+
+
+def test_three_live_runs_per_address_per_day_by_default(client, monkeypatch):
+    monkeypatch.delenv("RUNS_PER_IP_PER_DAY")
+    assert [post_plan(client).status_code for _ in range(4)] == [200, 200, 200, 429]
