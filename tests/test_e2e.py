@@ -74,7 +74,8 @@ def test_demo_record_uses_the_plan(client, monkeypatch):
     rec = r.json()
     assert r.status_code == 200 and rec["product_name"] == "Warrior II with Zeon Technology"
     assert rec["epa_reg_no"] == "100-1295" and rec["area_treated_acres"] == pytest.approx(31.17, abs=0.05)
-    assert rec["method"] == "drone" and rec["missing"] == ["certification_number"]
+    assert rec["method"] == "drone" and "certification_number" in rec["missing"]
+    assert not {"product_name", "epa_reg_no", "area_treated_acres", "location"} & set(rec["missing"])
     p137 = rec["part137"]
     assert p137["material"] == "Warrior II with Zeon Technology (EPA Reg. No. 100-1295)"
     assert p137["quantity"] == "12 gal" and p137["service_date"] == "2026-11-02"

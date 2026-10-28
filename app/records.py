@@ -7,15 +7,22 @@ from pydantic import BaseModel
 
 from app import llm
 
-# USDA restricted-use pesticide recordkeeping items. States may require more.
-REQUIRED = ["applicator_name", "certification_number", "application_date", "product_name",
-            "epa_reg_no", "amount_applied", "area_treated_acres", "crop_or_site", "location"]
+# USDA restricted-use pesticide recordkeeping items plus Montana ARM 4.10.207 (commercial applicators; record
+# within 24 hours, keep 2 years). Operator and growth stage are "if applicable", so not required.
+REQUIRED = ["applicator_name", "certification_number", "application_date", "start_time", "end_time",
+            "owner_name", "owner_address", "location", "equipment", "product_name", "manufacturer", "epa_reg_no",
+            "rate", "amount_applied", "area_treated_acres", "pest", "crop_or_site", "wind_speed_mph",
+            "wind_direction", "temperature_f"]
+# ARM 4.10.207: "do not use general terms such as weeds and bugs"
+GENERIC_PESTS = {"weed", "weeds", "bug", "bugs", "pest", "pests", "insect", "insects", "broadleaf weeds"}
 # What the notes can supply; the rest comes from the job.
 FROM_NOTES = {
     "applicator_name": "string", "certification_number": "string", "application_date": "string",
     "start_time": "string", "end_time": "string", "amount_applied": "string", "rate": "string",
     "crop_or_site": "string", "wind_speed_mph": "number", "wind_direction": "string",
     "temperature_f": "number", "notes": "string",
+    "operator_name": "string", "owner_name": "string", "owner_address": "string", "equipment": "string",
+    "manufacturer": "string", "pest": "string", "growth_stage": "string",
     # FAA Part 137 (14 CFR 137.71) items the plan can't know
     "customer_name": "string", "customer_address": "string", "pilot_name": "string", "pilot_address": "string",
     "pilot_certificate_number": "string", "pilot_knowledge_test_date": "string",
@@ -48,17 +55,24 @@ class Part137(BaseModel):
 class AppRecord(BaseModel):
     applicator_name: str | None = None
     certification_number: str | None = None
+    operator_name: str | None = None
+    owner_name: str | None = None  # property owner or lessee
+    owner_address: str | None = None
     application_date: str | None = None
     start_time: str | None = None
     end_time: str | None = None
     product_name: str | None = None
+    manufacturer: str | None = None
     epa_reg_no: str | None = None
     amount_applied: str | None = None
     rate: str | None = None
     area_treated_acres: float | None = None
+    pest: str | None = None
     crop_or_site: str | None = None
+    growth_stage: str | None = None
     location: str | None = None
     method: str | None = None
+    equipment: str | None = None
     wind_speed_mph: float | None = None
     wind_direction: str | None = None
     temperature_f: float | None = None
@@ -82,6 +96,8 @@ def fill_record(text: str, job: dict, today: date | None = None) -> AppRecord:
     fields = {k: v for k, v in found.items() if k in AppRecord.model_fields}
     fields |= {k: v for k, v in job.items() if k in AppRecord.model_fields and v not in (None, "")}
     record = AppRecord(**fields, transcript=text)
+    if record.pest and record.pest.strip().lower() in GENERIC_PESTS:
+        record.pest = None  # not a valid record entry; the applicator must name the pest
     record.missing = [k for k in REQUIRED if getattr(record, k) in (None, "")]
     if record.method in AIR_METHODS:
         material = record.product_name and (f"{record.product_name} (EPA Reg. No. {record.epa_reg_no})"

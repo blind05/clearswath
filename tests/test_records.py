@@ -20,8 +20,10 @@ def fake_model(monkeypatch, **found):
 
 def test_full_record(monkeypatch):
     seen = fake_model(monkeypatch, applicator_name="Sam Ortiz", certification_number="IA-12345",
-                      application_date="2026-10-26", amount_applied="12 gal", crop_or_site="soybeans",
-                      wind_speed_mph=6, wind_direction="NW")
+                      application_date="2026-10-26", start_time="09:10", end_time="09:40",
+                      owner_name="Lund Ranch", owner_address="12 Ranch Rd, Florence MT", equipment="DJI Agras T50",
+                      manufacturer="Corteva", rate="2 qt/acre", amount_applied="12 gal", pest="leafy spurge",
+                      crop_or_site="soybeans", wind_speed_mph=6, wind_direction="NW", temperature_f=64)
     r = records.fill_record("Sam Ortiz, cert IA-12345, 12 gallons on soybeans", JOB, date(2026, 10, 26))
     assert r.missing == []
     assert r.product_name == "INTREPID 2F" and r.area_treated_acres == 35.5 and r.wind_speed_mph == 6
@@ -45,7 +47,18 @@ def test_model_cannot_set_job_fields(monkeypatch):
 def test_missing_lists_required_gaps(monkeypatch):
     fake_model(monkeypatch, applicator_name="Sam Ortiz", certification_number="")
     r = records.fill_record("Sam here", JOB)
-    assert r.missing == ["certification_number", "application_date", "amount_applied", "crop_or_site"]
+    assert r.missing == ["certification_number", "application_date", "start_time", "end_time", "owner_name",
+                         "owner_address", "equipment", "manufacturer", "rate", "amount_applied", "pest",
+                         "crop_or_site", "wind_speed_mph", "wind_direction", "temperature_f"]
+
+
+def test_general_pest_terms_are_not_a_record_entry(monkeypatch):
+    # ARM 4.10.207: name the pest, "do not use general terms such as weeds and bugs"
+    fake_model(monkeypatch, pest="Weeds")
+    r = records.fill_record("sprayed the weeds", JOB)
+    assert r.pest is None and "pest" in r.missing
+    fake_model(monkeypatch, pest="leafy spurge")
+    assert records.fill_record("spurge", JOB).pest == "leafy spurge"
 
 
 def test_transcribe_uses_voice_model(monkeypatch, tmp_path):

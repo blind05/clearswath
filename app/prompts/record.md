@@ -7,7 +7,14 @@ value, and never fill a field from general knowledge.
 - start_time, end_time: 24-hour HH:MM.
 - amount_applied: total product used, with its unit as said (e.g. "12 gal", "3.5 lb").
 - rate: rate with its unit as said (e.g. "1 qt/acre").
-- crop_or_site: the crop or site treated (e.g. "corn", "soybeans", "pasture").
+- crop_or_site: the crop or site treated (e.g. "corn", "soybeans", "pasture", "rangeland").
+- growth_stage: the crop's stage of development, only if said.
+- pest: the specific pest(s) named (e.g. "leafy spurge"). Never a general term like "weeds" or "bugs";
+  if only a general term was said, return null.
+- operator_name: a licensed operator who made the application under the applicator, only if said.
+- owner_name, owner_address: the property owner or lessee where the job was done, only if said.
+- equipment: the sprayer or drone used, as said (e.g. "DJI Agras T50").
+- manufacturer: the pesticide company or manufacturer, only if said.
 - wind_speed_mph: number in miles per hour; convert if another unit was used.
 - wind_direction: compass direction the wind came from (e.g. "NW").
 - temperature_f: number in degrees Fahrenheit; convert if another unit was used.

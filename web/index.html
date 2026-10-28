@@ -242,11 +242,13 @@ async function call(url, opts) {
 }
 
 const RECORD_FIELDS = [
-  ["applicator_name", "Applicator"], ["certification_number", "Certification no."],
+  ["applicator_name", "Applicator"], ["certification_number", "Certification no."], ["operator_name", "Operator"],
   ["application_date", "Date"], ["start_time", "Start"], ["end_time", "End"],
-  ["product_name", "Product"], ["epa_reg_no", "EPA Reg. No."], ["amount_applied", "Amount applied"],
-  ["rate", "Rate"], ["area_treated_acres", "Area (ac)"], ["crop_or_site", "Crop / site"],
-  ["location", "Location"], ["method", "Method"], ["wind_speed_mph", "Wind (mph)"],
+  ["owner_name", "Owner / lessee"], ["owner_address", "Owner address"],
+  ["product_name", "Product"], ["manufacturer", "Manufacturer"], ["epa_reg_no", "EPA Reg. No."],
+  ["amount_applied", "Amount applied"], ["rate", "Rate"], ["area_treated_acres", "Area (ac)"],
+  ["pest", "Pest"], ["crop_or_site", "Crop / site"], ["growth_stage", "Growth stage"],
+  ["location", "Location"], ["method", "Method"], ["equipment", "Equipment"], ["wind_speed_mph", "Wind (mph)"],
   ["wind_direction", "Wind from"], ["temperature_f", "Temp (°F)"], ["notes", "Notes"],
 ];
 
