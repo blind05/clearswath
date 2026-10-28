@@ -28,6 +28,18 @@ def test_matches(pred, ok):
     assert ev.matches(pred, rule()) is ok
 
 
+@pytest.mark.parametrize("unit, value, ok", [
+    ("quarts per acre per annual growing season", 2, True),
+    ("qt/acre", 2, True),
+    ("pints", 4, True),  # 4 pt = 2 qt
+    ("quarts", 1, False),
+    ("lb a.i./acre", 2, False),
+])
+def test_rate_units_compare_the_amount_only(unit, value, ok):
+    key = rule(kind="rate", target=None, applies_to="all", value=2, unit="quarts")
+    assert ev.matches(rule(kind="rate", target=None, applies_to="all", value=value, unit=unit), key) is ok
+
+
 def test_valueless_rules_match_on_page():
     drift = {"kind": "wind", "target": None, "applies_to": "all", "value": None, "unit": None}
     assert ev.matches(drift | {"page": 17}, drift | {"page": 17})

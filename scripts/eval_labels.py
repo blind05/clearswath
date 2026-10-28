@@ -12,11 +12,15 @@ sys.path.insert(0, str(ROOT))
 
 # unit -> (base unit, factor)
 UNITS = {"ft": ("ft", 1.0), "feet": ("ft", 1.0), "foot": ("ft", 1.0), "m": ("ft", 1 / 0.3048),
-         "meters": ("ft", 1 / 0.3048), "mph": ("mph", 1.0), "miles per hour": ("mph", 1.0)}
+         "meters": ("ft", 1 / 0.3048), "mph": ("mph", 1.0), "miles per hour": ("mph", 1.0),
+         "qt": ("qt", 1.0), "quart": ("qt", 1.0), "quarts": ("qt", 1.0), "pt": ("qt", 0.5), "pint": ("qt", 0.5),
+         "pints": ("qt", 0.5), "fl oz": ("qt", 1 / 32), "fluid ounces": ("qt", 1 / 32), "fluid ounce": ("qt", 1 / 32)}
 
 
 def _base(rule: dict) -> tuple:
-    unit, factor = UNITS.get((rule.get("unit") or "").lower(), (rule.get("unit"), 1.0))
+    # rates come back as e.g. "quarts per acre per annual growing season": compare the amount unit only
+    unit = (rule.get("unit") or "").lower().split(" per ")[0].split("/")[0].strip()
+    unit, factor = UNITS.get(unit, (unit or rule.get("unit"), 1.0))
     value = rule.get("value")
     return (None if value is None else value * factor), unit
 
