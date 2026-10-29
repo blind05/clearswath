@@ -12,3 +12,5 @@ data/datasets/
 evals/overlays/
 .playwright-mcp/
 data/video/
+web-app/node_modules/
+web/dist/
