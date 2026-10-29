@@ -90,6 +90,9 @@
         <button type="button" class="secondary" id="demo">Try demo</button>
       </div>
     </form>
+    <p id="busy" class="meta" hidden>Reading label, finding hazards and checking bulletins&hellip;</p>
+    <p id="error" class="error" role="alert"></p>
+    <section id="result" hidden aria-live="polite"></section>
     <form id="photo-form" class="photo">
       <h2>Try it on your own photo</h2>
       <p class="meta">A photo looking straight down at a crop from 1 to 3 m. The weed head was trained on cotton
@@ -97,9 +100,6 @@
       <label>Photo (JPEG, PNG or WebP)<input type="file" name="photo" accept=".jpg,.jpeg,.png,.webp" required></label>
       <button type="submit" class="secondary">Find weeds</button>
     </form>
-    <p id="busy" class="meta" hidden>Reading label, finding hazards and checking bulletins&hellip;</p>
-    <p id="error" class="error" role="alert"></p>
-    <section id="result" hidden aria-live="polite"></section>
   </aside>
   <div id="map" aria-label="Map of the field and spray zone"></div>
 </main>
