@@ -1,6 +1,7 @@
 """Label reader recall and precision against answer keys. Live, costs credits (cached after the first run).
 
-uv run python scripts/eval_labels.py [--provider meta|baseten] [evals/labels/<key>.json ...]
+uv run python scripts/eval_labels.py [--provider meta|baseten|fireworks] [--runs N] [evals/labels/<key>.json ...]
+--runs N reads each label N times; repeats bypass the app's cache, so they are fresh paid reads.
 """
 
 import json
@@ -13,7 +14,7 @@ sys.path.insert(0, str(ROOT))
 # unit -> (base unit, factor)
 UNITS = {"ft": ("ft", 1.0), "feet": ("ft", 1.0), "foot": ("ft", 1.0), "m": ("ft", 1 / 0.3048),
          "meters": ("ft", 1 / 0.3048), "mph": ("mph", 1.0), "miles per hour": ("mph", 1.0),
-         "qt": ("qt", 1.0), "quart": ("qt", 1.0), "quarts": ("qt", 1.0), "pt": ("qt", 0.5), "pint": ("qt", 0.5),
+         "qt": ("qt", 1.0), "qts": ("qt", 1.0), "quart": ("qt", 1.0), "quarts": ("qt", 1.0), "pt": ("qt", 0.5), "pint": ("qt", 0.5),
          "pints": ("qt", 0.5), "fl oz": ("qt", 1 / 32), "fluid ounces": ("qt", 1 / 32), "fluid ounce": ("qt", 1 / 32),
          **{u: ("lb a.i.", 1.0) for u in ("lb a.i.", "lb ai", "lbs a.i.", "lb active ingredient", "lbs active ingredient",
                                           "pound active ingredient", "pounds active ingredient")}}
@@ -78,31 +79,50 @@ def score(preds: list[dict], keys: list[dict], also_valid: list[dict] = ()) -> d
             "bad_condition": bad_condition}
 
 
-def main(paths: list[str], provider: str | None = None) -> None:
+def main(paths: list[str], provider: str | None = None, runs: int = 1) -> None:
     from app import label_reader, llm
 
     print(f"provider {llm.resolve_provider(provider)} ({llm.spark_model(provider)})")
     paths = paths or sorted(str(p) for p in (ROOT / "evals" / "labels").glob("*.json"))
-    for path in paths:
-        key = json.loads(Path(path).read_text())
-        out = label_reader.read_label(ROOT / key["pdf"], provider)
-        preds = [r.model_dump() for r in out.rules if r.kind in key["scored_kinds"]]
-        s = score(preds, key["rules"], key.get("also_valid", []))
-        flag = "" if key.get("reviewed") else "  (answer key NOT reviewed; don't report)"
-        print(f"{key['product_name']}: recall {s['recall']:.0%} ({len(s['found'])}/{len(key['rules'])}), "
-              f"precision {s['precision']:.0%} ({len(preds) - len(s['extra'])}/{len(preds)}), "
-              f"conditions {s['conditions']:.0%}, {len(out.dropped)} dropped by the quote check{flag}")
-        for k in s["missed"]:
-            print(f"  missed: {k['kind']} {k.get('target')} {k['applies_to']} {k['value']} {k['unit']} (p{k['page']})")
-        for p in s["extra"]:
-            print(f"  wrong:  {p['kind']} {p.get('target')} {p['applies_to']} {p['value']} {p['unit']} "
-                  f"(p{p['page']}): {p['summary']}")
-        for k, p in s["bad_condition"]:
-            want = "conditional" if k.get("conditional") else "unconditional"
-            print(f"  condition: {p['kind']} {p['value']} {p['unit']} (p{p['page']}) should be {want}, "
-                  f"got {p.get('condition')!r}")
-        for d in out.dropped:
-            print(f"  dropped: {d.get('reason')}: {(d.get('quote') or '')[:90]!r}")
+    cache, totals = label_reader.CACHE, {}
+    for run in range(runs):
+        label_reader.CACHE = cache if run == 0 else cache / f"repeat{run}"  # run 1 is the app's cached read
+        if runs > 1:
+            print(f"-- run {run + 1} of {runs}")
+        for path in paths:
+            totals.setdefault(path, []).append(_report(path, provider))
+    label_reader.CACHE = cache
+    if runs > 1:
+        for path, rs in totals.items():
+            rec, pre = [r["recall"] for r in rs], [r["precision"] for r in rs]
+            print(f"{Path(path).stem}: recall {min(rec):.0%}-{max(rec):.0%}, precision {min(pre):.0%}-{max(pre):.0%} "
+                  f"over {runs} runs")
+
+
+def _report(path: str, provider: str | None) -> dict:
+    """Reads and scores one label, prints what it got wrong, and returns recall and precision."""
+    from app import label_reader
+
+    key = json.loads(Path(path).read_text())
+    out = label_reader.read_label(ROOT / key["pdf"], provider)
+    preds = [r.model_dump() for r in out.rules if r.kind in key["scored_kinds"]]
+    s = score(preds, key["rules"], key.get("also_valid", []))
+    flag = "" if key.get("reviewed") else "  (answer key NOT reviewed; don't report)"
+    print(f"{key['product_name']}: recall {s['recall']:.0%} ({len(s['found'])}/{len(key['rules'])}), "
+          f"precision {s['precision']:.0%} ({len(preds) - len(s['extra'])}/{len(preds)}), "
+          f"conditions {s['conditions']:.0%}, {len(out.dropped)} dropped by the quote check{flag}")
+    for k in s["missed"]:
+        print(f"  missed: {k['kind']} {k.get('target')} {k['applies_to']} {k['value']} {k['unit']} (p{k['page']})")
+    for p in s["extra"]:
+        print(f"  wrong:  {p['kind']} {p.get('target')} {p['applies_to']} {p['value']} {p['unit']} "
+              f"(p{p['page']}): {p['summary']}")
+    for k, p in s["bad_condition"]:
+        want = "conditional" if k.get("conditional") else "unconditional"
+        print(f"  condition: {p['kind']} {p['value']} {p['unit']} (p{p['page']}) should be {want}, "
+              f"got {p.get('condition')!r}")
+    for d in out.dropped:
+        print(f"  dropped: {d.get('reason')}: {(d.get('quote') or '')[:90]!r}")
+    return {"recall": s["recall"], "precision": s["precision"]}
 
 
 if __name__ == "__main__":
@@ -110,6 +130,7 @@ if __name__ == "__main__":
 
     ap = argparse.ArgumentParser()
     ap.add_argument("--provider", choices=["meta", "baseten", "fireworks"])
+    ap.add_argument("--runs", type=int, default=1)
     ap.add_argument("keys", nargs="*")
     args = ap.parse_args()
-    main(args.keys, args.provider)
+    main(args.keys, args.provider, args.runs)

@@ -31,6 +31,7 @@ def test_matches(pred, ok):
 @pytest.mark.parametrize("unit, value, ok", [
     ("quarts per acre per annual growing season", 2, True),
     ("qt/acre", 2, True),
+    ("qts/acre/year", 2, True),
     ("pints", 4, True),  # 4 pt = 2 qt
     ("quarts", 1, False),
     ("lb a.i./acre", 2, False),
