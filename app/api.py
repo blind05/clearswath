@@ -537,7 +537,18 @@ def export(run_id: str, fmt: str, rate: float | None = None):
                     headers={"Content-Disposition": f'attachment; filename="clearswath-{run_id[:8]}-dji.zip"'})
 
 
+class Page(StaticFiles):
+    """Static files, but the HTML is revalidated on every load: it names the hashed bundles, so a cached copy left over
+    from the last deploy would point at files that no longer exist. The bundles themselves cache as usual."""
+
+    async def get_response(self, path, scope):
+        r = await super().get_response(path, scope)
+        if r.headers.get("content-type", "").startswith("text/html"):
+            r.headers["Cache-Control"] = "no-cache"
+        return r
+
+
 app.add_middleware(Guard)
 # The React build (web-app/, `npm run build`) when present, else the plain page.
 WEB = ROOT / "web" / "dist" if (ROOT / "web" / "dist" / "index.html").exists() else ROOT / "web"
-app.mount("/", StaticFiles(directory=WEB, html=True, check_dir=False), name="web")
+app.mount("/", Page(directory=WEB, html=True, check_dir=False), name="web")

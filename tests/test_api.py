@@ -357,6 +357,16 @@ def test_page_pins_its_scripts(client):
         assert "basemap.nationalmap.gov" in page and "remain responsible" in page
 
 
+def test_page_is_revalidated_but_its_bundles_cache(client):
+    import re
+
+    page = client.get("/")
+    assert page.headers["cache-control"] == "no-cache"
+    for src in re.findall(r'src="/?(assets/[^"]+\.js)"', page.text)[:1]:
+        r = client.get(f"/{src}")
+        assert r.status_code == 200 and "cache-control" not in r.headers
+
+
 def test_health(client):
     r = client.get("/api/health")
     assert r.status_code == 200 and r.json() == {"ok": True}
