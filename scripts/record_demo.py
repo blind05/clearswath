@@ -66,6 +66,7 @@ def main(port: int, slow: float) -> None:
             page.fill("#dji-rate", "50")
             shot("montana-dji-export", 3)
             # 3. South Dakota cropland: the creek buffer, then the corrected outline
+            page.evaluate("document.querySelector('#setup').open = true")  # the form folds away after a plan
             page.uncheck("input[name=agent]")
             page.click("#demo-switch")
             page.wait_for_selector("text=Show the corrected field", timeout=60_000)

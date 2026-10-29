@@ -9,99 +9,203 @@
 <link rel="stylesheet" href="https://unpkg.com/leaflet-draw@1.0.4/dist/leaflet.draw.css"
       integrity="sha256-XzD3RpaHPv7lzX9qt+2n1j5cWj48O24KsgaGYpKN8x8=" crossorigin="">
 <style>
-  :root { --go: #1a7f37; --adjust: #b35900; --nogo: #c62828; --ink: #1d2327; --muted: #5f6b73;
-          --line: #d8dee2; --bg: #f5f7f6; --card: #fff; }
+  /* IBM Plex, served from web/fonts (SIL Open Font License, web/fonts/OFL.txt) */
+  @font-face { font-family: "IBM Plex Sans"; src: url(fonts/ibm-plex-sans.woff2) format("woff2");
+               font-weight: 100 700; font-display: swap; }
+  @font-face { font-family: "IBM Plex Sans Condensed"; src: url(fonts/ibm-plex-sans-condensed-400.woff2) format("woff2");
+               font-weight: 400; font-display: swap; }
+  /* Tokens: DESIGN.md */
+  :root {
+    --ink: #1E2B24; --muted: #5B6760; --rule: #D6DBD6; --page: #F2F4F1; --panel: #FFFFFF;
+    --clear: #2E7D32; --adjust: #9A6200; --stop: #B42318; --spray: #C4127A; --held: #37474F; --water: #2B83BA;
+    --sans: "IBM Plex Sans", system-ui, sans-serif; --condensed: "IBM Plex Sans Condensed", "Arial Narrow", sans-serif;
+    --r: 4px;
+  }
   * { box-sizing: border-box; }
-  body { margin: 0; font: 15px/1.45 system-ui, -apple-system, Segoe UI, sans-serif; color: var(--ink); background: var(--bg); }
-  header { padding: 12px 20px; background: #12352a; color: #fff; display: flex; align-items: baseline; gap: 12px; }
-  header h1 { margin: 0; font-size: 20px; }
-  header span { opacity: .8; font-size: 14px; }
-  main { display: grid; grid-template-columns: 380px 1fr; height: calc(100vh - 50px); }
-  aside { overflow-y: auto; padding: 16px; border-right: 1px solid var(--line); background: var(--card); }
-  #map { height: 100%; }
-  form { display: grid; gap: 10px; }
-  label { display: grid; gap: 4px; font-weight: 600; font-size: 13px; }
-  input, select, button { font: inherit; }
-  input[type=month], select { padding: 6px; border: 1px solid var(--line); border-radius: 6px; }
-  .row { display: flex; gap: 8px; }
-  .row > * { flex: 1; }
-  button { padding: 9px; border: 0; border-radius: 6px; background: #12352a; color: #fff; font-weight: 600; cursor: pointer; }
-  button.secondary { background: #e4ebe8; color: var(--ink); }
-  button:disabled { opacity: .6; cursor: wait; }
-  #status { margin: 16px 0 8px; padding: 14px; border-radius: 8px; color: #fff; font-size: 28px; font-weight: 800; text-align: center; letter-spacing: .04em; }
-  .go { background: var(--go); } .adjust { background: var(--adjust); } .no-go { background: var(--nogo); }
-  .acres { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; text-align: center; margin-bottom: 12px; }
-  .acres div { background: var(--bg); border-radius: 6px; padding: 6px; }
-  .acres b { display: block; font-size: 18px; }
-  .acres small { color: var(--muted); }
-  .warn { background: #fff4e5; border: 2px solid var(--adjust); border-radius: 8px; padding: 10px 12px; margin-bottom: 12px; }
-  .warn h3 { margin: 0 0 6px; font-size: 14px; color: var(--adjust); }
-  .warn ul { margin: 0; padding-left: 18px; }
-  h2 { font-size: 14px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); margin: 16px 0 6px; }
-  .reason { border-left: 4px solid var(--line); padding: 4px 10px; margin-bottom: 8px; }
-  .reason.label { border-color: #1565c0; } .reason.bulletin { border-color: var(--nogo); } .reason.rule\:water { border-color: #0097a7; }
-  .reason blockquote { margin: 4px 0; font-style: italic; color: var(--muted); }
-  .tag { font-size: 11px; font-weight: 700; text-transform: uppercase; color: var(--muted); }
+  body { margin: 0; font: 15px/1.5 var(--sans); color: var(--ink); background: var(--page); }
+  h1, h2, h3, p { margin: 0; }
+  a { color: inherit; }
+  :focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }
+
+  header { height: 52px; padding: 0 20px; display: flex; align-items: center; gap: 28px; background: var(--panel);
+           border-bottom: 1px solid var(--rule); }
+  .brand { display: flex; align-items: center; gap: 10px; }
+  .brand h1 { font-size: 18px; font-weight: 600; letter-spacing: -0.01em; }
+  .brand svg { display: block; }
+  .tabs { display: flex; gap: 4px; height: 100%; }
+  .tabs button { all: unset; cursor: pointer; padding: 0 12px; display: flex; align-items: center; font-weight: 500;
+                 white-space: nowrap;
+                 color: var(--muted); border-bottom: 2px solid transparent; }
+  .tabs button[aria-selected="true"] { color: var(--ink); border-bottom-color: var(--ink); }
+  .tabs button:focus-visible { outline: 2px solid var(--ink); outline-offset: -2px; }
+  .tagline { margin-left: auto; color: var(--muted); font-size: 13px; }
+
+  main { display: grid; grid-template-columns: 400px 1fr; height: calc(100vh - 52px); }
+  aside { overflow-y: auto; background: var(--panel); border-right: 1px solid var(--rule); }
+  .panel { padding: 20px 24px 40px; }
+  #map { height: 100%; background: #dfe3df; }
+
+  /* sections: separated by space and one hairline, not boxes */
+  #result > section + section, #photo > section + section, #photo-result > section { border-top: 1px solid var(--rule); }
+  section { padding: 18px 0; }
+  h2 { font-size: 15px; font-weight: 600; margin-bottom: 8px; }
   .meta { color: var(--muted); font-size: 13px; }
-  .error { color: var(--nogo); font-weight: 600; }
-  a.kml { display: block; text-align: center; margin-top: 12px; padding: 9px; border: 2px solid #12352a; border-radius: 6px; color: #12352a; font-weight: 700; text-decoration: none; }
-  .photo { margin-top: 18px; border-top: 1px solid #ddd; padding-top: 8px; }
-  .shot { position: relative; margin: 8px 0; }
+  .num { font-variant-numeric: tabular-nums; }
+
+  /* setup form, folds away once a plan is shown */
+  details.setup > summary { cursor: pointer; font-weight: 600; list-style: none; display: flex; justify-content: space-between; }
+  details.setup > summary::-webkit-details-marker { display: none; }
+  details.setup > summary::after { content: "Show"; color: var(--muted); font-weight: 400; font-size: 13px; }
+  details.setup[open] > summary::after { content: "Hide"; }
+  form { display: grid; gap: 12px; }
+  details.setup form { margin-top: 12px; }
+  label { display: grid; gap: 4px; font-weight: 500; font-size: 13px; }
+  label.check { display: flex; align-items: flex-start; gap: 8px; font-weight: 400; font-size: 14px; }
+  label.check input { margin-top: 3px; }
+  input, select, button, textarea { font: inherit; color: inherit; }
+  input[type=month], input[type=number], select, textarea { padding: 7px 8px; border: 1px solid var(--rule);
+    border-radius: var(--r); background: var(--panel); }
+  input[type=file] { font-size: 13px; }
+  .row { display: flex; gap: 10px; }
+  .row > * { flex: 1; }
+  button { padding: 9px 12px; border: 1px solid var(--ink); border-radius: var(--r); background: var(--ink);
+           color: #fff; font-weight: 500; cursor: pointer; }
+  button.secondary { background: var(--panel); color: var(--ink); }
+  button:disabled { opacity: .55; cursor: progress; }
+  #busy { padding: 14px 0 0; }
+  .error { color: var(--stop); font-weight: 500; }
+  #error:not(:empty) { padding-top: 14px; }
+
+  /* the decision: the largest thing on screen */
+  .decision { padding-top: 22px; }
+  .verdict { display: flex; align-items: center; gap: 12px; font-size: 28px; font-weight: 600; line-height: 1.2;
+             letter-spacing: -0.01em; }
+  .verdict::before { content: ""; flex: none; width: 16px; height: 16px; background: currentColor; }
+  .verdict.go { color: var(--clear); } .verdict.adjust { color: var(--adjust); } .verdict.no-go { color: var(--stop); }
+  .headline { margin-top: 10px; font-size: 18px; }
+  .figures { display: flex; flex-wrap: wrap; gap: 4px 20px; margin-top: 12px; font-size: 13px; color: var(--muted); }
+  .figures b { color: var(--ink); font-weight: 600; font-size: 15px; margin-right: 4px; }
+  .unchecked { margin-top: 12px; }
+  @media (prefers-reduced-motion: no-preference) { .decision { animation: arrive 200ms ease-out; } }
+  @keyframes arrive { from { opacity: 0; } to { opacity: 1; } }
+
+  .check-first { border-left: 3px solid var(--adjust); padding: 2px 0 2px 14px; }
+  .check-first ul, .missing ul { margin: 6px 0 0; padding-left: 18px; }
+  .check-first li + li { margin-top: 4px; }
+
+  /* the label's own words: condensed, a hairline, the page */
+  .excerpt { margin: 12px 0 0; }
+  .excerpt blockquote { margin: 0; padding-left: 12px; border-left: 1px solid var(--ink);
+                        font: 15px/1.4 var(--condensed); }
+  .excerpt figcaption { margin-top: 4px; padding-left: 13px; font-size: 13px; color: var(--muted); }
+  .finding { margin-top: 10px; }
+  .finding::before { content: ""; display: inline-block; width: 8px; height: 8px; margin-right: 8px; background: var(--muted); }
+
+  .agent .who { font-size: 13px; color: var(--muted); margin-bottom: 6px; }
+  .agent p.answer { white-space: pre-line; }
+  details.trace { margin-top: 10px; font-size: 13px; color: var(--muted); }
+  details.trace summary { cursor: pointer; }
+  details.trace ol { margin: 6px 0 0; padding-left: 20px; }
+
+  .rules label.check { margin-top: 8px; font-size: 13px; }
+  .switch { margin-top: 6px; }
+
+  .files { display: grid; gap: 10px; }
+  .files .links { display: flex; flex-wrap: wrap; gap: 8px; }
+  a.button { display: inline-block; padding: 8px 12px; border: 1px solid var(--ink); border-radius: var(--r);
+             text-decoration: none; font-weight: 500; font-size: 14px; }
+  a.button[aria-disabled] { opacity: .4; cursor: not-allowed; }
+
+  .record { display: grid; gap: 10px; }
+  table.rec { width: 100%; border-collapse: collapse; margin-top: 10px; font-size: 13px; }
+  table.rec th { text-align: left; color: var(--muted); font-weight: 400; padding: 4px 10px 4px 0; white-space: nowrap; vertical-align: top; }
+  table.rec td { padding: 4px 0; border-bottom: 1px solid var(--rule); }
+  table.rec tr.gap td { color: var(--stop); }
+  .missing { color: var(--stop); }
+
+  .shot { position: relative; margin: 10px 0; }
   .shot img { display: block; width: 100%; }
   .shot img + img { position: absolute; inset: 0; height: 100%; }
-  a.kml[aria-disabled] { opacity: 0.45; cursor: not-allowed; }
-  .export label { display: block; margin-top: 12px; }
-  label.check { display: flex; align-items: center; gap: 8px; font-weight: 500; }
-  .agent { background: #eef4fb; border-left: 4px solid #1565c0; border-radius: 6px; padding: 8px 12px; margin-bottom: 12px; }
-  .agent p { margin: 4px 0; white-space: pre-line; }
-  .agent details { font-size: 13px; color: var(--muted); }
-  .agent ol { margin: 4px 0; padding-left: 20px; }
-  .confirm { background: #fffbe6; border: 1px solid #e6c200; border-radius: 8px; padding: 8px 12px; margin-bottom: 12px; }
-  .confirm h3 { margin: 0 0 4px; font-size: 14px; }
-  .confirm label.check { align-items: flex-start; font-size: 13px; margin: 6px 0; }
-  .record { display: grid; gap: 8px; }
-  textarea { font: inherit; padding: 6px; border: 1px solid var(--line); border-radius: 6px; resize: vertical; }
-  table.rec { width: 100%; border-collapse: collapse; margin-top: 8px; font-size: 13px; }
-  table.rec th { text-align: left; color: var(--muted); font-weight: 600; padding: 3px 8px 3px 0; white-space: nowrap; }
-  table.rec td { padding: 3px 0; }
-  table.rec tr.gap td { color: var(--nogo); font-weight: 700; }
-  @media (max-width: 800px) { main { grid-template-columns: 1fr; height: auto; } #map { height: 60vh; } }
+
+  /* map legend, replacing Leaflet's default layer list */
+  .legend { background: var(--panel); padding: 10px 12px; border-radius: var(--r); box-shadow: 0 1px 4px rgba(30, 43, 36, .25);
+            font: 13px/1.4 var(--sans); color: var(--ink); min-width: 190px; }
+  .legend h3 { font-size: 13px; font-weight: 600; margin-bottom: 6px; }
+  .legend h3 button { all: unset; cursor: pointer; width: 100%; display: flex; justify-content: space-between; gap: 12px; }
+  .legend h3 button::after { content: "Hide"; color: var(--muted); font-weight: 400; }
+  .legend.folded h3 { margin: 0; } .legend.folded h3 button::after { content: "Show"; }
+  .legend.folded label { display: none; }
+  .legend label { display: flex; align-items: center; gap: 8px; font-weight: 400; margin-top: 3px; cursor: pointer; }
+  .legend i { width: 14px; height: 10px; flex: none; }
+  .leaflet-container { font-family: var(--sans); }
+
+  @media (max-width: 800px) {
+    header { gap: 8px; padding: 0 12px; } .tagline { display: none; }
+    .brand h1 { font-size: 16px; } .tabs button { padding: 0 8px; font-size: 14px; }
+    main { grid-template-columns: 1fr; height: auto; }
+    #map { height: 55vh; order: -1; }
+    aside { border-right: 0; }
+    .panel { padding: 16px 16px 32px; }
+  }
 </style>
 </head>
 <body>
-<header><h1>ClearSwath</h1><span>Find the weeds. Read the label. Spray only where both say yes.</span></header>
+<header>
+  <div class="brand">
+    <svg width="22" height="22" viewBox="0 0 22 22" aria-hidden="true"><rect x="1" y="1" width="20" height="20" fill="none" stroke="#1E2B24" stroke-width="2"/><rect x="6" y="1" width="5" height="20" fill="#C4127A"/></svg>
+    <h1>ClearSwath</h1>
+  </div>
+  <nav class="tabs" role="tablist">
+    <button role="tab" id="tab-plan" aria-selected="true" aria-controls="plan">Plan a spray</button>
+    <button role="tab" id="tab-photo" aria-selected="false" aria-controls="photo">Check a photo</button>
+  </nav>
+  <p class="tagline">Find the weeds. Read the label. Spray only where both say yes.</p>
+</header>
 <main>
   <aside>
-    <form id="form">
-      <p class="meta" id="drawn-note">Draw the field on the map (polygon or rectangle tool, top left), or upload it:</p>
-      <label>Field outline (GeoJSON, optional if drawn)<input type="file" name="field" accept=".geojson,.json"></label>
-      <label>Pesticide label (PDF or photo)<input type="file" name="label" accept=".pdf,.png,.jpg,.jpeg,.webp" required></label>
-      <div class="row">
-        <label>Month<input type="month" name="month" required></label>
-        <label>Method<select name="method"><option value="drone">Drone</option><option value="ground">Ground</option></select></label>
-      </div>
-      <label class="check"><input type="checkbox" id="mark-managed"> Draw managed land next to the field (roads, other
-        fields, farmsteads): label drift buffers skip it</label>
-      <p class="meta" id="managed-note" hidden></p>
-      <label>Wind from (for drift buffers)<select name="wind_from"><option value="">Not set: buffer every direction</option><option value="0">North</option><option value="45">Northeast</option><option value="90">East</option><option value="135">Southeast</option><option value="180">South</option><option value="225">Southwest</option><option value="270">West</option><option value="315">Northwest</option></select></label>
-      <label class="check"><input type="checkbox" name="agent"> Ask the Muse Spark agent to explain</label>
-      <div class="row">
-        <button type="submit">Plan spray</button>
-        <button type="button" class="secondary" id="demo">Try demo</button>
-      </div>
-    </form>
-    <p id="busy" class="meta" hidden>Reading label, finding hazards and checking bulletins&hellip;</p>
-    <p id="error" class="error" role="alert"></p>
-    <section id="result" hidden aria-live="polite"></section>
-    <form id="photo-form" class="photo">
-      <h2>Try it on your own photo</h2>
-      <p class="meta">A photo looking straight down at a crop from 1 to 3 m. The weed head was trained on cotton
-        and sugar beet, so other crops are a stretch; it marks in orange what it takes for weeds.</p>
-      <label>Photo (JPEG, PNG or WebP)<input type="file" name="photo" accept=".jpg,.jpeg,.png,.webp" required></label>
-      <button type="submit" class="secondary">Find weeds</button>
-    </form>
+    <div class="panel" id="plan" role="tabpanel" aria-labelledby="tab-plan">
+      <details class="setup" id="setup" open>
+        <summary>Field and label</summary>
+        <form id="form">
+          <p class="meta" id="drawn-note">Draw the field with the polygon or rectangle tool on the map, or upload it.</p>
+          <label>Field outline (GeoJSON, not needed if drawn)<input type="file" name="field" accept=".geojson,.json"></label>
+          <label>Pesticide label (PDF or photo)<input type="file" name="label" accept=".pdf,.png,.jpg,.jpeg,.webp" required></label>
+          <div class="row">
+            <label>Month<input type="month" name="month" required></label>
+            <label>Method<select name="method"><option value="drone">Drone</option><option value="ground">Ground</option></select></label>
+          </div>
+          <label>Wind from<select name="wind_from"><option value="">Not set: drift buffers in every direction</option><option value="0">North</option><option value="45">Northeast</option><option value="90">East</option><option value="135">Southeast</option><option value="180">South</option><option value="225">Southwest</option><option value="270">West</option><option value="315">Northwest</option></select></label>
+          <label class="check"><input type="checkbox" id="mark-managed"> Draw managed land next to the field (roads, other
+            fields, farmsteads). Drift buffers skip it.</label>
+          <p class="meta" id="managed-note" hidden></p>
+          <label class="check"><input type="checkbox" name="agent"> Ask Muse Spark to explain the plan</label>
+          <div class="row">
+            <button type="submit">Plan the spray</button>
+            <button type="button" class="secondary" id="demo">Try the demo</button>
+          </div>
+        </form>
+      </details>
+      <p id="busy" class="meta" hidden>Reading the label, mapping hazards and checking the bulletin&hellip;</p>
+      <p id="error" class="error" role="alert"></p>
+      <div id="result" hidden aria-live="polite"></div>
+    </div>
+    <div class="panel" id="photo" role="tabpanel" aria-labelledby="tab-photo" hidden>
+      <section>
+        <h2>Check a photo for weeds</h2>
+        <p class="meta">Take a photo looking straight down at the crop from 1 to 3 m. The weed model was trained on
+          cotton and sugar beet, so other crops are a stretch. It marks what it takes for weeds in magenta: a guide
+          for scouting, not a spray map.</p>
+        <form id="photo-form">
+          <label>Photo (JPEG, PNG or WebP)<input type="file" name="photo" accept=".jpg,.jpeg,.png,.webp" required></label>
+          <button type="submit">Find weeds</button>
+        </form>
+      </section>
+      <p id="photo-busy" class="meta" hidden>Looking for weeds&hellip;</p>
+      <p id="photo-error" class="error" role="alert"></p>
+      <div id="photo-result"></div>
+    </div>
   </aside>
-  <div id="map" aria-label="Map of the field and spray zone"></div>
+  <div id="map" aria-label="Map of the field and spray plan"></div>
 </main>
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
         integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
@@ -112,12 +216,54 @@ const $ = (s) => document.querySelector(s);
 const form = $("#form");
 form.month.value = new Date().toISOString().slice(0, 7);
 
+function el(tag, attrs = {}, ...kids) {
+  const e = document.createElement(tag);
+  Object.entries(attrs).forEach(([k, v]) => (k === "class" ? (e.className = v) : e.setAttribute(k, v)));
+  kids.flat().forEach((k) => k != null && e.append(k));
+  return e;
+}
+
+// Tabs: plan a spray, or check one photo.
+document.querySelectorAll(".tabs button").forEach((tab) => tab.addEventListener("click", () => {
+  document.querySelectorAll(".tabs button").forEach((t) => {
+    t.setAttribute("aria-selected", String(t === tab));
+    $(`#${t.getAttribute("aria-controls")}`).hidden = t !== tab;
+  });
+}));
+
 const map = L.map("map").setView([42, -93], 5);
 // USGS The National Map imagery: public domain; native tiles stop at zoom 16, so higher zooms enlarge them.
 L.tileLayer("https://basemap.nationalmap.gov/arcgis/rest/services/USGSImageryOnly/MapServer/tile/{z}/{y}/{x}", {
   maxZoom: 19, maxNativeZoom: 16, attribution: "USDA, USGS The National Map: Orthoimagery",
 }).addTo(map);
-const control = L.control.layers(null, null, { collapsed: false }).addTo(map);
+
+// The legend names each layer in plain words and toggles it (Leaflet's own layer list isn't used).
+const Legend = L.Control.extend({
+  options: { position: "bottomright" },
+  onAdd() {
+    // folded on phones, where it would cover the field; open on desktop
+    this.box = L.DomUtil.create("div", window.innerWidth < 800 ? "legend folded" : "legend");
+    L.DomEvent.disableClickPropagation(this.box);
+    this.box.hidden = true;
+    return this.box;
+  },
+  set(entries) {
+    const toggle = el("button", { type: "button", "aria-expanded": String(!this.box.classList.contains("folded")) }, "Key");
+    toggle.addEventListener("click", () => {
+      this.box.classList.toggle("folded");
+      toggle.setAttribute("aria-expanded", String(!this.box.classList.contains("folded")));
+    });
+    this.box.replaceChildren(el("h3", {}, toggle), ...entries.map(([name, layer, swatch]) => {
+      const box = el("input", { type: "checkbox", checked: "" });
+      box.addEventListener("change", () => (box.checked ? layer.addTo(map) : map.removeLayer(layer)));
+      const i = el("i");
+      Object.assign(i.style, swatch);
+      return el("label", {}, box, i, name);
+    }));
+    this.box.hidden = !entries.length;
+  },
+});
+const legend = new Legend().addTo(map);
 
 // The field the user draws. One shape at a time; drawing again replaces it.
 const drawn = new L.FeatureGroup().addTo(map);
@@ -131,22 +277,22 @@ const managed = new L.FeatureGroup().addTo(map);
 function managedNote() {
   const n = managed.getLayers().length, note = $("#managed-note");
   note.hidden = !n;
-  note.replaceChildren(`${n} area${n === 1 ? "" : "s"} of managed land marked \u00b7 `,
-    Object.assign(el("a", { href: "#" }, "clear"), { onclick: (ev) => { ev.preventDefault(); managed.clearLayers(); managedNote(); } }));
+  note.replaceChildren(`${n} area${n === 1 ? "" : "s"} of managed land marked. `,
+    Object.assign(el("a", { href: "#" }, "Clear"), { onclick: (ev) => { ev.preventDefault(); managed.clearLayers(); managedNote(); } }));
 }
 map.on(L.Draw.Event.CREATED, (e) => {
   if ($("#mark-managed").checked) {
-    e.layer.setStyle?.({ color: "#9e9e9e", dashArray: "4", fillOpacity: 0.25 });
+    e.layer.setStyle?.({ color: "#5B6760", dashArray: "4", fillOpacity: 0.2, weight: 2 });
     managed.addLayer(e.layer);
     managedNote();
     return;
   }
   drawn.clearLayers();
   drawn.addLayer(e.layer);
-  $("#drawn-note").textContent = "Field drawn on the map (it replaces any uploaded file). Draw again to change it.";
+  $("#drawn-note").textContent = "Field drawn on the map. It replaces any uploaded file; draw again to change it.";
 });
 map.on(L.Draw.Event.DELETED, () => {
-  if (!drawn.getLayers().length) $("#drawn-note").textContent = "Draw the field on the map, or upload it:";
+  if (!drawn.getLayers().length) $("#drawn-note").textContent = "Draw the field on the map, or upload it.";
 });
 
 function fieldFile() {
@@ -156,109 +302,140 @@ function fieldFile() {
 }
 let overlays = [];
 
+// [legend name, Leaflet style, legend swatch]; drawn in this order, so the field edge ends on top.
 const STYLES = {
-  spray_zone: ["Spray zone", { color: "#1a7f37", fillOpacity: 0.35, weight: 1 }],
-  no_spray: ["No spray", { color: "#c62828", fillOpacity: 0.4, weight: 1 }],
-  spray_cells: ["Spot spray (weeds)", { color: "#e65100", fillOpacity: 0.4, weight: 0 }],
-  buffered_cells: ["Weeds held back by a buffer", { color: "#6d4c41", fillOpacity: 0.6, weight: 0 }],
-  restricted: ["Bulletin area", { color: "#6a1b9a", fillOpacity: 0.25, dashArray: "4" }],
-  water: ["Water", { color: "#29b6f6", fillOpacity: 0.5, weight: 2 }],
-  building: ["Buildings", { color: "#ffb300", fillOpacity: 0.5, weight: 1 }],
-  habitat: ["Habitat", { color: "#7cb342", fillOpacity: 0.3, weight: 1 }],
-  field: ["Field", { color: "#fff", fill: false, weight: 3 }],
+  spray_zone: ["Can be sprayed", { color: "#2E7D32", weight: 2, fillOpacity: 0.08 }],
+  no_spray: ["No spray", { color: "#B42318", weight: 1, fillOpacity: 0.25 }],
+  restricted: ["Bulletin area", { color: "#6a1b9a", fillOpacity: 0.2, dashArray: "4", weight: 2 }],
+  spray_cells: ["Spot spray: weeds found", { color: "#C4127A", fillOpacity: 0.4, weight: 0 }],
+  buffered_cells: ["Weeds held back by a buffer", { color: "#37474F", fillOpacity: 0.6, weight: 0 }],
+  water: ["Water", { color: "#2B83BA", fillOpacity: 0.45, weight: 2 }],
+  building: ["Buildings", { color: "#5B6760", fillOpacity: 0.5, weight: 1 }],
+  habitat: ["Habitat", { color: "#558b2f", fillOpacity: 0.3, weight: 1 }],
+  field: ["Field edge", { color: "#fff", fill: false, weight: 3 }],
 };
 
-function el(tag, attrs = {}, ...kids) {
-  const e = document.createElement(tag);
-  Object.entries(attrs).forEach(([k, v]) => (k === "class" ? (e.className = v) : e.setAttribute(k, v)));
-  kids.flat().forEach((k) => k != null && e.append(k));
-  return e;
+function swatch(style) {
+  return style.fill === false ? { borderTop: `3px solid ${style.color}`, background: "#6b7d4f", height: "8px" }
+    : { background: style.color, opacity: String(Math.max(style.fillOpacity || 0.4, 0.35) + 0.25),
+        outline: style.weight ? `1px solid ${style.color}` : "" };
 }
 
 function drawMap(layers, image) {
-  overlays.forEach((l) => { map.removeLayer(l); control.removeLayer(l); });
+  overlays.forEach((l) => map.removeLayer(l));
   overlays = [];
+  const entries = [];
   if (image) {  // the demo's own drone imagery, under the plan layers
     const [w, s, e, n] = image.bounds;
     const img = L.imageOverlay(image.url, [[s, w], [n, e]], { attribution: image.credit || "" }).addTo(map);
-    control.addOverlay(img, "Drone imagery");
+    entries.push(["Drone imagery", img, { background: "linear-gradient(135deg, #6b7d4f, #a89b74)" }]);
     overlays.push(img);
   }
   for (const [key, [name, style]] of Object.entries(STYLES)) {
     const data = layers[key];
     if (!data || (data.features && !data.features.length)) continue;
     const layer = L.geoJSON(data, { style }).addTo(map);
-    control.addOverlay(layer, name);
+    entries.push([name, layer, swatch(style)]);
     overlays.push(layer);
-    if (key === "field") map.fitBounds(layer.getBounds(), { padding: [30, 30] });
+    if (key === "field") map.fitBounds(layer.getBounds(), window.innerWidth < 800 ? { padding: [20, 20] }
+      : { paddingTopLeft: [70, 30], paddingBottomRight: [250, 30] });  // clear of the draw tools and the legend
   }
+  legend.set(entries);
+}
+
+const VERDICT = { go: "No conflicts in checked rules", adjust: "Adjust", "no-go": "Do not spray" };
+const ac = (x, d = 1) => `${x.toFixed(d)} ac`;
+
+function headline(r) {
+  const a = r.acres;
+  if (r.status === "no-go") return "Nothing on this field can be sprayed until the reasons below are resolved.";
+  if (r.status === "adjust" && a.excluded_acres > 0)
+    return `${a.spray_acres.toFixed(1)} of ${a.field_acres.toFixed(1)} acres can be sprayed. The rest is held back.`;
+  if (r.status === "adjust") return `All ${a.field_acres.toFixed(1)} acres can be sprayed once the step below is done.`;
+  return `All ${a.field_acres.toFixed(1)} acres can be sprayed.`;
+}
+
+function excerpt(quote, caption) {
+  return el("figure", { class: "excerpt" }, el("blockquote", {}, quote), el("figcaption", {}, caption));
+}
+
+function reasonView(x, product) {
+  if (x.source === "label") {
+    const what = x.kind === "runoff" ? "runoff mitigation points required"
+      : `${x.distance_ft} ft from ${x.target}`;
+    return excerpt(x.quote, `${product}, page ${x.page}. Applied as ${what}.`);
+  }
+  return el("p", { class: "finding" }, x.summary);
 }
 
 function render(r) {
   const out = $("#result");
-  const status = { go: "GO", adjust: "ADJUST", "no-go": "NO-GO" }[r.status];
-  const acres = r.acres;
+  const product = r.label.product_name || "The label";
+  const a = r.acres;
+  const pct = r.spot ? Math.round(100 * r.spot.treated_acres / r.spot.field_acres) : null;
+  const demoName = r.demo ? (r.demo.field === "mt" ? "Montana rangeland, leafy spurge" : "South Dakota cropland") : null;
   out.replaceChildren(...[
-    r.demo ? el("p", { class: "meta" }, `${r.demo.field === "mt" ? "Demo: Montana rangeland, leafy spurge" : "Demo field"}`
-      + `${r.demo.cached ? ` (saved run, bulletin for ${r.demo.month})` : ""} \u00b7 `,
-      el("a", { href: "#", id: "demo-switch" }, r.demo.field === "mt" ? "Show the South Dakota cropland demo"
-        : r.demo.field ? "Show the field drawn up to the creek" : "Show the corrected field")) : null,
-    el("div", { id: "status", class: r.status }, status),
-    el("div", { class: "acres" },
-      el("div", {}, el("b", {}, acres.field_acres.toFixed(1)), el("small", {}, "field ac")),
-      el("div", {}, el("b", {}, acres.spray_acres.toFixed(1)), el("small", {}, "sprayable ac")),
-      el("div", {}, el("b", {}, acres.excluded_acres.toFixed(1)), el("small", {}, "excluded ac"))),
-    r.spot ? el("p", { class: "meta" }, `Spot spray: ${r.spot.treated_acres.toFixed(2)} ac of ${r.spot.field_acres.toFixed(1)} `
-      + `(${(100 * r.spot.treated_acres / r.spot.field_acres).toFixed(1)}%), ${r.spot.cell_size_m} m cells`
-      + `${r.weed_source ? ` \u00b7 weeds: ${r.weed_source}` : ""}`) : null,
-    r.warnings.length ? el("div", { class: "warn", role: "alert" },
-      el("h3", {}, "Check before spraying"), el("ul", {}, r.warnings.map((w) => el("li", {}, w)))) : null,
-    r.confirm.length ? el("div", { class: "confirm" },
-      el("h3", {}, r.label.source === "image" ? "Confirm rules read from the photo" : "Rules that may not apply to you"),
-      el("p", { class: "meta" }, "Applied unless you untick them. Unticking is recorded in the result."),
+    el("section", { class: "decision" },
+      r.demo ? el("p", { class: "meta" }, `Demo: ${demoName}${r.demo.cached ? `, saved run, bulletin for ${r.demo.month}` : ""}.`) : null,
+      r.demo ? el("p", { class: "meta switch" }, el("a", { href: "#", id: "demo-switch" }, r.demo.field === "mt"
+        ? "Show the South Dakota cropland demo" : r.demo.field ? "Show the field drawn up to the creek" : "Show the corrected field")) : null,
+      el("p", { id: "status", class: `verdict ${r.status}`, style: "margin-top:12px" }, VERDICT[r.status]),
+      el("p", { class: "headline" }, headline(r)),
+      el("div", { class: "figures num" },
+        el("span", {}, el("b", {}, a.field_acres.toFixed(1)), "ac field"),
+        el("span", {}, el("b", {}, a.spray_acres.toFixed(1)), "ac sprayable"),
+        el("span", {}, el("b", {}, a.excluded_acres.toFixed(1)), "ac held back"),
+        r.spot ? el("span", {}, el("b", {}, r.spot.treated_acres.toFixed(1)), `ac spot sprayed (${pct}%)`) : null),
+      el("p", { class: "meta unchecked" }, "Not checked: weather and inversions, runoff points, your licence, field conditions.")),
+    r.warnings.length ? el("section", {}, el("div", { class: "check-first", role: "alert" },
+      el("h2", {}, "Check before spraying"), el("ul", {}, r.warnings.map((w) => el("li", {}, w))))) : null,
+    el("section", { class: "why" }, el("h2", {}, "Why"),
+      r.reasons.length ? r.reasons.map((x) => reasonView(x, product))
+        : el("p", { class: "meta" }, "No hazard, setback or bulletin limit affects this field.")),
+    r.answer ? el("section", { class: "agent" },
+      el("p", { class: "who" }, r.mode === "agent" ? "Explained by Muse Spark"
+        : r.mode === "replay" ? `Saved Muse Spark answer (${r.replay.model.split("/").pop()}, ${r.replay.date})`
+        : "Muse Spark was unavailable; this is the plan's own summary"),
+      el("p", { class: "answer" }, r.answer),
+      el("details", { class: "trace" }, el("summary", {}, "How it decided"),
+        el("ol", {}, r.trace.map((t) => el("li", {}, t.tool
+          ? `${t.tool}${t.seconds != null ? ` (${t.seconds} s)` : ""}${t.note ? `: ${t.note}` : ""}`
+          : t.note))))) : null,
+    r.demo && form.agent.checked && !r.answer ? el("section", {}, el("button", { type: "button", id: "agent-live", class: "secondary" },
+      "Ask Muse Spark live (needs the access code)")) : null,
+    r.confirm.length ? el("section", { class: "rules" },
+      el("h2", {}, r.label.source === "image" ? "Confirm the rules read from the photo" : "Rules that may not apply to you"),
+      el("p", { class: "meta" }, "Each is applied unless you untick it. Unticking is recorded in the result."),
       r.confirm.map((c) => el("label", { class: "check" },
         el("input", { type: "checkbox", "data-rule": String(c.id), ...(c.applied ? { checked: "" } : {}) }),
-        el("span", {}, `${c.summary} (p.${c.page}${c.condition ? `, only when ${c.condition}` : ""})`)))) : null,
-    r.answer ? el("div", { class: "agent" },
-      el("div", { class: "tag" }, r.mode === "agent" ? "Muse Spark agent"
-        : r.mode === "replay" ? `Saved Muse Spark answer (${r.replay.model.split("/").pop()}, ${r.replay.date})`
-        : "Agent unavailable · plan summary"),
-      el("p", {}, r.answer),
-      el("details", {}, el("summary", {}, "How it decided"),
-        el("ol", {}, r.trace.map((t) => el("li", {}, t.tool
-          ? `${t.tool}${t.seconds != null ? ` (${t.seconds}s)` : ""}${t.note ? ` — ${t.note}` : ""}`
-          : t.note))))) : null,
-    r.demo && form.agent.checked && !r.answer ? el("button", { type: "button", id: "agent-live", class: "secondary" },
-      "Ask the Muse Spark agent live (access code)") : null,
-    el("h2", {}, "Why"),
-    r.reasons.length ? r.reasons.map((x) => el("div", { class: `reason ${x.source}` },
-      el("div", { class: "tag" }, x.source !== "label" ? x.source
-        : x.kind === "runoff" ? `Label p.${x.page} · runoff points` : `Label p.${x.page} · ${x.distance_ft} ft from ${x.target}`),
-      el("div", {}, x.summary),
-      x.quote ? el("blockquote", {}, `“${x.quote}”`) : null)) : el("p", { class: "meta" }, "No hazards or limitations affect this field."),
-    el("h2", {}, "Product"),
-    el("p", {}, `${r.label.product_name || "Unknown product"} · EPA Reg. No. ${r.label.epa_reg_no || "not found"}`),
-    el("p", { class: "meta" }, r.bulletin.citation),
-    el("p", { class: "meta" }, `Imagery ${r.imagery_date || "unknown"} · water from ${r.water_source} · ${r.method}, ${r.month}`),
-    el("a", { class: "kml", href: `/api/kml/${r.run_id}`, download: "" }, "Download KML for sprayer"),
-    r.spot ? el("div", { class: "export" },
-      el("label", {}, "Spray volume (L/ha) for the DJI prescription ",
+        el("span", {}, `${c.summary} (p. ${c.page}${c.condition ? `, only when ${c.condition}` : ""})`)))) : null,
+    r.spot ? el("section", {}, el("h2", {}, "Spray map"),
+      el("p", { class: "num" }, `The weed map sprays ${ac(r.spot.treated_acres, 2)} of ${ac(r.spot.field_acres)}, in ${r.spot.cell_size_m} m cells.`),
+      r.weed_source ? el("p", { class: "meta", style: "margin-top:6px" }, `Weed map: ${r.weed_source}.`) : null) : null,
+    el("section", { class: "files" }, el("h2", {}, "Files for the sprayer"),
+      r.spot ? el("label", {}, "Spray volume for the DJI prescription (L/ha)",
         el("input", { type: "number", id: "dji-rate", min: String(r.carrier_min?.l_ha || 0.1), max: "1000", step: "0.1",
-                      "data-run": r.run_id, ...(r.carrier_min ? { placeholder: `at least ${r.carrier_min.l_ha}` } : {}) })),
-      r.carrier_min ? el("p", { class: "meta" }, `Label minimum: ${r.carrier_min.l_ha} L/ha (p.${r.carrier_min.page}).`) : null,
-      el("a", { class: "kml", id: "dji-link", "aria-disabled": "true" }, "Download DJI Agras zip"),
-      el("a", { class: "kml", href: `/api/export/${r.run_id}/geojson`, download: "" }, "Download GeoJSON")) : null,
-    el("p", { class: "meta notice" }, "Decision support only. You remain responsible for following the label and the official Bulletin."),
-    el("h2", {}, "Record application"),
-    el("form", { id: "record", class: "record" },
-      el("label", {}, "Voice note (WAV)", el("input", { type: "file", name: "audio", accept: ".wav,audio/wav" })),
-      el("label", {}, "or type notes", el("textarea", { name: "text", rows: "3",
-        placeholder: "Sam Ortiz, cert IA-12345, 12 gallons on soybeans, wind 6 mph NW, 58 degrees" })),
-      el("button", { type: "submit" }, "Fill record")),
-    el("div", { id: "record-out" }),
+                      "data-run": r.run_id, ...(r.carrier_min ? { placeholder: `At least ${r.carrier_min.l_ha}` } : {}) })) : null,
+      r.spot && r.carrier_min ? excerpt(r.carrier_min.quote, `${product}, page ${r.carrier_min.page}. The largest `
+        + `minimum spray volume on the label: at least ${r.carrier_min.l_ha} L/ha.`) : null,
+      el("div", { class: "links" },
+        r.spot ? el("a", { class: "button", id: "dji-link", "aria-disabled": "true" }, "DJI Agras prescription") : null,
+        el("a", { class: "button", href: `/api/kml/${r.run_id}`, download: "" }, "KML"),
+        r.spot ? el("a", { class: "button", href: `/api/export/${r.run_id}/geojson`, download: "" }, "GeoJSON") : null),
+      el("p", { class: "meta" }, `${product}, EPA Reg. No. ${r.label.epa_reg_no || "not found"}. ${r.bulletin.citation}`),
+      el("p", { class: "meta" }, `Imagery ${r.imagery_date || "date unknown"}; water from ${r.water_source}; ${r.method}, ${r.month}. `
+        + "Decision support only: you remain responsible for following the label and the official bulletin.")),
+    el("section", {}, el("h2", {}, "Application record"),
+      el("form", { id: "record", class: "record" },
+        el("label", {}, "Voice note (WAV)", el("input", { type: "file", name: "audio", accept: ".wav,audio/wav" })),
+        el("label", {}, "Or type your notes", el("textarea", { name: "text", rows: "3",
+          placeholder: "Sam Ortiz, licence MT-12345, 12 gallons on rangeland, leafy spurge, wind 6 mph NW, 64 degrees" })),
+        el("button", { type: "submit", class: "secondary" }, "Fill the record")),
+      el("div", { id: "record-out" })),
   ].flat().filter(Boolean));
   $("#record").addEventListener("submit", (e) => recordApplication(e, r.run_id));
   out.hidden = false;
+  $("#setup").open = false;  // the plan is what matters now; the form reopens from its heading
   drawMap(r.layers, r.demo?.overlay);
 }
 
@@ -271,7 +448,7 @@ async function liveFetch(url, opts) {
   const send = () => fetch(url, { ...opts, headers: { ...(opts.headers || {}), "X-Access-Code": storedCode() } });
   let res = await send();
   if (res.status === 401) {
-    const code = window.prompt("Live runs need the access code (the demo is free to try):");
+    const code = window.prompt("Live runs need the access code. The demo is free to try.");
     if (code) {
       try { localStorage.setItem("clearswath-code", code.trim()); } catch {}
       res = await send();
@@ -288,7 +465,7 @@ async function call(url, opts) {
     const free = url.startsWith("/api/demo") && (!opts || !opts.method || opts.method === "GET");  // POSTs are paid
     const res = free ? await fetch(url, opts) : await liveFetch(url, opts);
     const body = await res.json().catch(() => ({}));
-    if (!res.ok) throw new Error(typeof body.detail === "string" ? body.detail : `Request failed (${res.status})`);
+    if (!res.ok) throw new Error(typeof body.detail === "string" ? body.detail : `The request failed (${res.status}). Try again.`);
     render(body);
   } catch (e) {
     $("#error").textContent = e.message;
@@ -299,14 +476,14 @@ async function call(url, opts) {
 }
 
 const RECORD_FIELDS = [
-  ["applicator_name", "Applicator"], ["certification_number", "Certification no."], ["operator_name", "Operator"],
+  ["applicator_name", "Applicator"], ["certification_number", "Licence no."], ["operator_name", "Operator"],
   ["application_date", "Date"], ["start_time", "Start"], ["end_time", "End"],
-  ["owner_name", "Owner / lessee"], ["owner_address", "Owner address"],
+  ["owner_name", "Owner or lessee"], ["owner_address", "Owner address"],
   ["product_name", "Product"], ["manufacturer", "Manufacturer"], ["epa_reg_no", "EPA Reg. No."],
   ["amount_applied", "Amount applied"], ["rate", "Rate"], ["area_treated_acres", "Area (ac)"],
-  ["pest", "Pest"], ["crop_or_site", "Crop / site"], ["growth_stage", "Growth stage"],
+  ["pest", "Pest"], ["crop_or_site", "Crop or site"], ["growth_stage", "Growth stage"],
   ["location", "Location"], ["method", "Method"], ["equipment", "Equipment"], ["wind_speed_mph", "Wind (mph)"],
-  ["wind_direction", "Wind from"], ["temperature_f", "Temp (°F)"], ["notes", "Notes"],
+  ["wind_direction", "Wind from"], ["temperature_f", "Temperature (°F)"], ["notes", "Notes"],
 ];
 
 const PART137_FIELDS = [
@@ -316,13 +493,9 @@ const PART137_FIELDS = [
   ["pilot_knowledge_test_date", "Pilot met 137.19(e) on"],
 ];
 
-function part137Table(p) {
-  return [
-    el("h2", {}, "FAA Part 137 record"),
-    el("p", { class: "meta" }, "14 CFR 137.71, for commercial agricultural aircraft operators: keep at your home base for at least 12 months."),
-    el("table", { class: "rec" }, PART137_FIELDS.map(([k, name]) => el("tr", { class: p.missing.includes(k) ? "gap" : "" },
-      el("th", {}, name), el("td", {}, p[k] ?? "\u2014")))),
-  ];
+function recordTable(fields, rec, missing) {
+  return el("table", { class: "rec" }, fields.map(([k, name]) => el("tr", { class: missing.includes(k) ? "gap" : "" },
+    el("th", {}, name), el("td", {}, rec[k] ?? (missing.includes(k) ? "Missing" : "—")))));
 }
 
 async function recordApplication(e, runId) {
@@ -332,21 +505,22 @@ async function recordApplication(e, runId) {
   if (f.audio.files[0]) body.append("audio", f.audio.files[0]);
   body.append("text", f.text.value);
   f.querySelector("button").disabled = true;
-  out.replaceChildren(el("p", { class: "meta" }, "Filling record…"));
+  out.replaceChildren(el("p", { class: "meta", style: "margin-top:10px" }, "Filling the record…"));
   try {
     const res = await liveFetch("/api/record", { method: "POST", body });
     const rec = await res.json().catch(() => ({}));
-    if (!res.ok) throw new Error(typeof rec.detail === "string" ? rec.detail : `Request failed (${res.status})`);
+    if (!res.ok) throw new Error(typeof rec.detail === "string" ? rec.detail : `The request failed (${res.status}). Try again.`);
     out.replaceChildren(...[
-      rec.missing.length ? el("div", { class: "warn", role: "alert" }, el("h3", {}, "Still needed"),
-        el("ul", {}, rec.missing.map((k) => el("li", {}, RECORD_FIELDS.find(([f]) => f === k)?.[1] || k)))) : null,
-      el("table", { class: "rec" }, RECORD_FIELDS.map(([k, name]) => el("tr", { class: rec.missing.includes(k) ? "gap" : "" },
-        el("th", {}, name), el("td", {}, rec[k] ?? "—")))),
-      rec.part137 ? part137Table(rec.part137) : null,
-      el("p", { class: "meta" }, `Heard: “${rec.transcript}”`),
+      rec.missing.length ? el("div", { class: "missing", role: "alert", style: "margin-top:10px" },
+        el("p", {}, `Still needed: ${rec.missing.map((k) => RECORD_FIELDS.find(([fk]) => fk === k)?.[1] || k).join(", ")}.`)) : null,
+      recordTable(RECORD_FIELDS, rec, rec.missing),
+      rec.part137 ? [el("h2", { style: "margin-top:18px" }, "FAA Part 137 record"),
+        el("p", { class: "meta" }, "14 CFR 137.71, for commercial agricultural aircraft operators: keep at your home base for at least 12 months."),
+        recordTable(PART137_FIELDS, rec.part137, rec.part137.missing)] : null,
+      el("p", { class: "meta", style: "margin-top:10px" }, `Heard: “${rec.transcript}”`),
     ].flat().filter(Boolean));
   } catch (err) {
-    out.replaceChildren(el("p", { class: "error" }, err.message));
+    out.replaceChildren(el("p", { class: "error", style: "margin-top:10px" }, err.message));
   } finally {
     f.querySelector("button").disabled = false;
   }
@@ -364,7 +538,7 @@ form.addEventListener("submit", (e) => {
   e.preventDefault();
   const field = fieldFile();  // captured now, so reruns use this field even if the drawing changes
   if (!field) {
-    $("#error").textContent = "Draw the field on the map or choose a GeoJSON file.";
+    $("#error").textContent = "Draw the field on the map or choose a GeoJSON file, then plan again.";
     return;
   }
   const url = form.agent.checked ? "/api/agent" : "/api/plan";
@@ -379,12 +553,12 @@ form.addEventListener("submit", (e) => {
   rerun("");
 });
 let demoField = "mt";
+let lastExcluded = "";
 function demoRun(excluded) {
   const q = `month=${form.month.value}&method=${form.method.value}&field=${demoField}&wind_from=${form.wind_from.value}`;
   lastExcluded = excluded;
   return call(`/api/demo?${q}&excluded_rules=${excluded}${form.agent.checked ? "&agent_answer=1" : ""}`);
 }
-let lastExcluded = "";
 // No saved answer for this demo choice: run the agent live on the demo's saved inputs (needs the access code).
 $("#result").addEventListener("click", (e) => {
   if (e.target.id !== "agent-live") return;
@@ -399,31 +573,31 @@ $("#demo").addEventListener("click", () => {
   rerun = demoRun;
   rerun("");
 });
-// Live photo mode: the photo with the weed head's overlay on top (a live GPU call: needs the access code).
+// Check a photo: the photo with the weed model's overlay on top (a live GPU call: needs the access code).
 $("#photo-form").addEventListener("submit", async (e) => {
   e.preventDefault();
   const file = e.target.photo.files[0];
   if (!file) return;
   const body = new FormData();
   body.append("photo", file);
-  $("#error").textContent = "";
-  $("#busy").hidden = false;
+  $("#photo-error").textContent = "";
+  $("#photo-busy").hidden = false;
+  e.target.querySelector("button").disabled = true;
   try {
     const res = await liveFetch("/api/photo", { method: "POST", body });
     const r = await res.json().catch(() => ({}));
-    if (!res.ok) throw new Error(typeof r.detail === "string" ? r.detail : `Request failed (${res.status})`);
-    const out = $("#result");
-    out.hidden = false;
+    if (!res.ok) throw new Error(typeof r.detail === "string" ? r.detail : `The request failed (${res.status}). Try again.`);
     const trained = Object.entries(r.trained_on || {}).map(([k, n]) => `${k} (${n} images)`).join(" and ");
-    out.replaceChildren(el("h2", {}, "Your photo"),
+    $("#photo-result").replaceChildren(el("section", {},
+      el("p", { class: "verdict", style: "font-size:22px; color: var(--spray)" }, `${(100 * r.share_flagged).toFixed(1)}% flagged as weeds`),
       el("div", { class: "shot" }, el("img", { src: URL.createObjectURL(file), alt: "Your photo" }),
-        el("img", { src: `data:image/png;base64,${r.overlay_png}`, alt: "Weeds the head found, in orange" })),
-      el("p", {}, `${(100 * r.share_flagged).toFixed(1)}% of the photo flagged as weeds.`),
-      el("p", { class: "meta" }, `DINOv3 features with a head trained on ${trained}. A guide for scouting, not a spray map.`));
+        el("img", { src: `data:image/png;base64,${r.overlay_png}`, alt: "Areas the weed model flagged, in magenta" })),
+      el("p", { class: "meta" }, `DINOv3 features with a head trained on ${trained}. A guide for scouting, not a spray map.`)));
   } catch (err) {
-    $("#error").textContent = err.message;
+    $("#photo-error").textContent = err.message;
   } finally {
-    $("#busy").hidden = true;
+    $("#photo-busy").hidden = true;
+    e.target.querySelector("button").disabled = false;
   }
 });
 // The DJI link only works once a rate is typed: the prescription never guesses one.
