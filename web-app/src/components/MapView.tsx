@@ -5,8 +5,31 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import MapGL, { Layer, NavigationControl, Source, type MapRef } from "react-map-gl/maplibre";
 import { TerraDraw, TerraDrawPolygonMode, TerraDrawRectangleMode, TerraDrawSelectMode } from "terra-draw";
 import { TerraDrawMapLibreGLAdapter } from "terra-draw-maplibre-gl-adapter";
-import { cn } from "@/lib/utils";
+import * as stylex from "@stylexjs/stylex";
+import { color } from "@/tokens.stylex";
 import type { Overlay, Plan } from "@/types";
+
+// The map's own controls sit over imagery, so they are the one place with a shadow (DESIGN.md).
+const s = stylex.create({
+  wrap: { position: "relative", width: "100%", height: "100%" },
+  card: { position: "absolute", borderRadius: 4, backgroundColor: color.panel, boxShadow: "0 1px 4px rgba(30,43,36,.25)" },
+  tools: { left: 12, top: 12, display: "flex", flexDirection: "column", gap: 4, padding: 4 },
+  tool: {
+    borderRadius: 3, paddingInline: 10, paddingBlock: 6, textAlign: "left", fontSize: 13, fontWeight: 500,
+    font: "inherit", border: 0, cursor: "pointer", color: color.ink, backgroundColor: { default: "transparent", ":hover": color.page },
+  },
+  toolOn: { color: "#FFFFFF", backgroundColor: { default: color.ink, ":hover": color.ink } },
+  key: { bottom: 32, right: 12, minWidth: 200, paddingInline: 12, paddingBlock: 8, fontSize: 13 },
+  keyToggle: {
+    display: "flex", width: "100%", justifyContent: "space-between", gap: 12, fontWeight: 600,
+    font: "inherit", border: 0, padding: 0, background: "none", cursor: "pointer", color: color.ink,
+  },
+  hint: { fontWeight: 400, color: color.muted },
+  keyList: { marginTop: 6, display: "grid", gap: 4, listStyle: "none", padding: 0 },
+  keyRow: { display: "flex", alignItems: "center", gap: 8, cursor: "pointer" },
+  tick: { accentColor: color.ink },
+  swatch: { display: "inline-block", width: 14, height: 10, flex: "none" },
+});
 
 // USGS The National Map imagery: public domain; native tiles stop at zoom 16, MapLibre enlarges them beyond.
 const BASEMAP: StyleSpecification = {
@@ -153,7 +176,7 @@ export function MapView({ plan, onDrawing, clearDrawing }: Props) {
   };
 
   return (
-    <div className="relative h-full w-full">
+    <div {...stylex.props(s.wrap)}>
       <MapGL ref={mapRef} onLoad={onLoad} mapStyle={BASEMAP} initialViewState={{ longitude: -101, latitude: 43, zoom: 3.6 }}
            maxZoom={21} style={{ width: "100%", height: "100%" }}
            attributionControl={{ compact: window.innerWidth < 800, customAttribution: overlay?.credit ?? undefined }}>
@@ -183,8 +206,7 @@ export function MapView({ plan, onDrawing, clearDrawing }: Props) {
         <NavigationControl position="top-right" showCompass={false} />
       </MapGL>
 
-      <div className="absolute left-3 top-3 flex flex-col gap-1 rounded-[4px] bg-panel p-1 shadow-[0_1px_4px_rgba(30,43,36,.25)]"
-           role="toolbar" aria-label="Draw on the map">
+      <div {...stylex.props(s.card, s.tools)} role="toolbar" aria-label="Draw on the map">
         <ToolButton active={tool === "polygon" && target === "field"} onClick={() => pick("field", "polygon")}>Draw field</ToolButton>
         <ToolButton active={tool === "rectangle" && target === "field"} onClick={() => pick("field", "rectangle")}>Rectangle</ToolButton>
         <ToolButton active={tool !== null && target === "managed"} onClick={() => pick("managed", "polygon")}>Managed land</ToolButton>
@@ -192,13 +214,13 @@ export function MapView({ plan, onDrawing, clearDrawing }: Props) {
       </div>
 
       {(present.length > 0 || overlay) && (
-        <div className="absolute bottom-8 right-3 min-w-[200px] rounded-[4px] bg-panel px-3 py-2 text-[13px] shadow-[0_1px_4px_rgba(30,43,36,.25)]">
-          <button type="button" className="flex w-full justify-between gap-3 font-semibold" aria-expanded={keyOpen}
+        <div {...stylex.props(s.card, s.key)}>
+          <button type="button" {...stylex.props(s.keyToggle)} aria-expanded={keyOpen}
                   onClick={() => setKeyOpen((o) => !o)}>
-            Key <span className="font-normal text-muted">{keyOpen ? "Hide" : "Show"}</span>
+            Key <span {...stylex.props(s.hint)}>{keyOpen ? "Hide" : "Show"}</span>
           </button>
           {keyOpen && (
-            <ul className="mt-1.5 space-y-1">
+            <ul {...stylex.props(s.keyList)}>
               {overlay && <KeyRow name="Drone imagery" swatch={{ background: "linear-gradient(135deg,#6b7d4f,#a89b74)" }}
                                   on={!hidden.drone} toggle={() => setHidden((h) => ({ ...h, drone: !h.drone }))} />}
               {present.map((l) => (
@@ -217,8 +239,7 @@ export function MapView({ plan, onDrawing, clearDrawing }: Props) {
 function ToolButton({ active, onClick, children }: { active: boolean; onClick: () => void; children: React.ReactNode }) {
   return (
     <button type="button" onClick={onClick} aria-pressed={active}
-            className={cn("rounded-[3px] px-2.5 py-1.5 text-left text-[13px] font-medium",
-                          active ? "bg-ink text-white" : "text-ink hover:bg-page")}>
+            {...stylex.props(s.tool, active && s.toolOn)}>
       {children}
     </button>
   );
@@ -227,9 +248,9 @@ function ToolButton({ active, onClick, children }: { active: boolean; onClick: (
 function KeyRow({ name, swatch, on, toggle }: { name: string; swatch: React.CSSProperties; on: boolean; toggle: () => void }) {
   return (
     <li>
-      <label className="flex cursor-pointer items-center gap-2">
-        <input type="checkbox" checked={on} onChange={toggle} className="accent-ink" />
-        <i className="inline-block h-2.5 w-3.5 flex-none" style={swatch} />
+      <label {...stylex.props(s.keyRow)}>
+        <input type="checkbox" checked={on} onChange={toggle} {...stylex.props(s.tick)} />
+        <i {...stylex.props(s.swatch)} style={swatch} />
         {name}
       </label>
     </li>

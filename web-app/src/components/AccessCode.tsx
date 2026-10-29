@@ -1,9 +1,13 @@
 // Asks for the access code when a live run gets a 401, instead of the browser's prompt().
 import { useEffect, useRef, useState } from "react";
+import * as stylex from "@stylexjs/stylex";
 import { onCodeNeeded } from "@/api";
-import { Button } from "@/components/ui/button";
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { Input } from "@/components/ui/input";
+import { Button } from "@astryxdesign/core/Button";
+import { Dialog, DialogHeader } from "@astryxdesign/core/Dialog";
+import { TextInput } from "@astryxdesign/core/TextInput";
+import { text } from "@/styles";
+
+const s = stylex.create({ actions: { display: "flex", justifyContent: "flex-end", gap: 8 } });
 
 export function AccessCode() {
   const [open, setOpen] = useState(false);
@@ -14,20 +18,16 @@ export function AccessCode() {
   const close = (value: string | null) => { setOpen(false); resolve.current(value); };
 
   return (
-    <Dialog open={open} onOpenChange={(o) => !o && close(null)}>
-      <DialogContent>
-        <DialogHeader>
-          <DialogTitle>Live runs need the access code</DialogTitle>
-          <DialogDescription>Live runs call the models and cost money, so they're limited. The demo is free to try.</DialogDescription>
-        </DialogHeader>
-        <form onSubmit={(e) => { e.preventDefault(); close(code); }} className="grid gap-3">
-          <Input autoFocus type="password" value={code} onChange={(e) => setCode(e.target.value)} aria-label="Access code" />
-          <DialogFooter>
-            <Button type="button" variant="outline" onClick={() => close(null)}>Cancel</Button>
-            <Button type="submit" disabled={!code.trim()}>Continue</Button>
-          </DialogFooter>
-        </form>
-      </DialogContent>
+    <Dialog isOpen={open} onOpenChange={(o) => !o && close(null)} purpose="form" width={440}>
+      <DialogHeader title="Live runs need the access code" onOpenChange={(o) => !o && close(null)}
+                    subtitle="Live runs call the models and cost money, so they're limited. The demo is free to try." />
+      <form onSubmit={(e) => { e.preventDefault(); close(code); }} {...stylex.props(text.stack)}>
+        <TextInput type="password" label="Access code" hasAutoFocus value={code} onChange={setCode} />
+        <div {...stylex.props(s.actions)}>
+          <Button variant="secondary" label="Cancel" onClick={() => close(null)} />
+          <Button type="submit" variant="primary" label="Continue" isDisabled={!code.trim()} />
+        </div>
+      </form>
     </Dialog>
   );
 }

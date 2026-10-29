@@ -1,8 +1,12 @@
 // The draft application record, filled from a voice note or typed notes. Missing fields are shown, not guessed.
 import { useState } from "react";
+import * as stylex from "@stylexjs/stylex";
 import { post } from "@/api";
-import { Button } from "@/components/ui/button";
-import { Label } from "@/components/ui/label";
+import { Button } from "@astryxdesign/core/Button";
+import { FileInput } from "@astryxdesign/core/FileInput";
+import { TextArea } from "@astryxdesign/core/TextArea";
+import { text } from "@/styles";
+import { color } from "@/tokens.stylex";
 import type { AppRecord } from "@/types";
 
 const RECORD_FIELDS: [string, string][] = [
@@ -22,14 +26,23 @@ const PART137_FIELDS: [string, string][] = [
   ["pilot_knowledge_test_date", "Pilot met 137.19(e) on"],
 ];
 
+const s = stylex.create({
+  table: { marginTop: 10, width: "100%", borderCollapse: "collapse", fontSize: 13 },
+  missing: { color: color.stop },
+  th: { whiteSpace: "nowrap", paddingBlock: 4, paddingRight: 10, textAlign: "left", verticalAlign: "top", fontWeight: 400, color: color.muted },
+  td: { borderBottomWidth: 1, borderBottomStyle: "solid", borderBottomColor: color.rule, paddingBlock: 4 },
+  gap: { marginTop: 10 },
+  h3: { marginTop: 16, fontSize: 15, fontWeight: 600 },
+});
+
 function RecordTable({ fields, rec, missing }: { fields: [string, string][]; rec: Record<string, unknown>; missing: string[] }) {
   return (
-    <table className="mt-2.5 w-full border-collapse text-[13px]">
+    <table {...stylex.props(s.table)}>
       <tbody>
         {fields.map(([k, name]) => (
-          <tr key={k} className={missing.includes(k) ? "text-stop" : ""}>
-            <th className="whitespace-nowrap py-1 pr-2.5 text-left align-top font-normal text-muted">{name}</th>
-            <td className="border-b border-rule py-1">{rec[k] != null ? String(rec[k]) : missing.includes(k) ? "Missing" : "—"}</td>
+          <tr key={k} {...stylex.props(missing.includes(k) && s.missing)}>
+            <th {...stylex.props(s.th)}>{name}</th>
+            <td {...stylex.props(s.td)}>{rec[k] != null ? String(rec[k]) : missing.includes(k) ? "Missing" : "—"}</td>
           </tr>
         ))}
       </tbody>
@@ -38,7 +51,7 @@ function RecordTable({ fields, rec, missing }: { fields: [string, string][]; rec
 }
 
 export function RecordForm({ runId }: { runId: string }) {
-  const [text, setText] = useState("");
+  const [notes, setNotes] = useState("");
   const [audio, setAudio] = useState<File | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
@@ -49,7 +62,7 @@ export function RecordForm({ runId }: { runId: string }) {
     const body = new FormData();
     body.append("run_id", runId);
     if (audio) body.append("audio", audio);
-    body.append("text", text);
+    body.append("text", notes);
     setBusy(true); setError("");
     try { setRec(await post<AppRecord>("/api/record", body)); }
     catch (err) { setError((err as Error).message); }
@@ -59,28 +72,26 @@ export function RecordForm({ runId }: { runId: string }) {
   const label = (k: string) => RECORD_FIELDS.find(([f]) => f === k)?.[1] ?? k;
   return (
     <div>
-      <form id="record" onSubmit={submit} className="grid gap-2.5">
-        <div className="grid gap-1"><Label htmlFor="audio">Voice note (WAV)</Label>
-          <input id="audio" type="file" accept=".wav,audio/wav" className="text-[13px]" onChange={(e) => setAudio(e.target.files?.[0] ?? null)} /></div>
-        <div className="grid gap-1"><Label htmlFor="notes">Or type your notes</Label>
-          <textarea id="notes" rows={3} value={text} onChange={(e) => setText(e.target.value)}
-                    className="rounded-[4px] border border-rule px-2 py-1.5"
-                    placeholder="Sam Ortiz, licence MT-12345, 12 gallons on rangeland, leafy spurge, wind 6 mph NW, 64 degrees" /></div>
-        <Button type="submit" variant="outline" disabled={busy}>{busy ? "Filling the record…" : "Fill the record"}</Button>
+      <form id="record" onSubmit={submit} {...stylex.props(text.stack)}>
+        <FileInput id="audio" mode="input" label="Voice note (WAV)" accept=".wav,audio/wav"
+                   value={audio} onChange={(f) => setAudio(Array.isArray(f) ? f[0] ?? null : f)} />
+        <TextArea id="notes" label="Or type your notes" rows={3} value={notes} onChange={setNotes}
+                  placeholder="Sam Ortiz, licence MT-12345, 12 gallons on rangeland, leafy spurge, wind 6 mph NW, 64 degrees" />
+        <Button type="submit" variant="secondary" isLoading={busy} label={busy ? "Filling the record…" : "Fill the record"} />
       </form>
-      {error && <p role="alert" className="mt-2.5 font-medium text-stop">{error}</p>}
+      {error && <p role="alert" {...stylex.props(text.error)}>{error}</p>}
       {rec && (
         <div>
-          {rec.missing.length > 0 && <p role="alert" className="mt-2.5 text-stop">Still needed: {rec.missing.map(label).join(", ")}.</p>}
+          {rec.missing.length > 0 && <p role="alert" {...stylex.props(s.missing, s.gap)}>Still needed: {rec.missing.map(label).join(", ")}.</p>}
           <RecordTable fields={RECORD_FIELDS} rec={rec} missing={rec.missing} />
           {rec.part137 && (
             <>
-              <h3 className="mt-4 text-[15px] font-semibold">FAA Part 137 record</h3>
-              <p className="text-[13px] text-muted">14 CFR 137.71, for commercial agricultural aircraft operators: keep at your home base for at least 12 months.</p>
+              <h3 {...stylex.props(s.h3)}>FAA Part 137 record</h3>
+              <p {...stylex.props(text.small)}>14 CFR 137.71, for commercial agricultural aircraft operators: keep at your home base for at least 12 months.</p>
               <RecordTable fields={PART137_FIELDS} rec={rec.part137} missing={rec.part137.missing} />
             </>
           )}
-          <p className="mt-2.5 text-[13px] text-muted">Heard: “{rec.transcript}”</p>
+          <p {...stylex.props(text.small, s.gap)}>Heard: “{rec.transcript}”</p>
         </div>
       )}
     </div>

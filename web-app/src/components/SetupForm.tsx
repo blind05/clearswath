@@ -1,74 +1,71 @@
 // Field and label: what a live plan needs. It folds away once a plan is shown.
-import { Button } from "@/components/ui/button";
-import { Checkbox } from "@/components/ui/checkbox";
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import * as stylex from "@stylexjs/stylex";
+import { Button } from "@astryxdesign/core/Button";
+import { CheckboxInput } from "@astryxdesign/core/CheckboxInput";
+import { Collapsible } from "@astryxdesign/core/Collapsible";
+import { FileInput } from "@astryxdesign/core/FileInput";
+import { Selector } from "@astryxdesign/core/Selector";
+import { text } from "@/styles";
+import { color } from "@/tokens.stylex";
 
 export interface Setup {
   fieldFile: File | null; labelFile: File | null; month: string; method: "drone" | "ground"; windFrom: string; agent: boolean;
 }
 
-const WINDS: [string, string][] = [["none", "Not set: drift buffers in every direction"], ["0", "North"], ["45", "Northeast"],
-  ["90", "East"], ["135", "Southeast"], ["180", "South"], ["225", "Southwest"], ["270", "West"], ["315", "Northwest"]];
+const WINDS = [["none", "Not set: drift buffers in every direction"], ["0", "North"], ["45", "Northeast"],
+  ["90", "East"], ["135", "Southeast"], ["180", "South"], ["225", "Southwest"], ["270", "West"], ["315", "Northwest"]]
+  .map(([value, label]) => ({ value, label }));
+const METHODS = [{ value: "drone", label: "Drone" }, { value: "ground", label: "Ground" }];
+
+const s = stylex.create({
+  root: { paddingBlock: 18 },
+  trigger: { fontWeight: 600 },
+  form: { marginTop: 12 },
+  pair: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, alignItems: "end" },
+  month: { display: "grid", gap: 6, fontSize: 15, fontWeight: 500 },
+  // Astryx has no month picker; the native one, dressed like its inputs
+  monthInput: {
+    height: 32, paddingInline: 8, borderWidth: 1, borderStyle: "solid", borderColor: color.rule, borderRadius: 4,
+    font: "inherit", fontSize: 15, color: color.ink, backgroundColor: color.panel,
+  },
+});
 
 interface Props {
   setup: Setup; onChange: (s: Setup) => void; open: boolean; onOpenChange: (o: boolean) => void;
   fieldDrawn: boolean; managedCount: number; busy: boolean; onPlan: () => void; onDemo: () => void;
 }
 
-export function SetupForm({ setup: s, onChange, open, onOpenChange, fieldDrawn, managedCount, busy, onPlan, onDemo }: Props) {
-  const set = <K extends keyof Setup>(k: K, v: Setup[K]) => onChange({ ...s, [k]: v });
+export function SetupForm({ setup: v, onChange, open, onOpenChange, fieldDrawn, managedCount, busy, onPlan, onDemo }: Props) {
+  const set = <K extends keyof Setup>(k: K, x: Setup[K]) => onChange({ ...v, [k]: x });
+  const one = (f: File | File[] | null) => (Array.isArray(f) ? f[0] ?? null : f);
   return (
-    <Collapsible open={open} onOpenChange={onOpenChange} className="py-[18px]">
-      <CollapsibleTrigger className="flex w-full justify-between font-semibold">
-        Field and label <span className="text-[13px] font-normal text-muted">{open ? "Hide" : "Show"}</span>
-      </CollapsibleTrigger>
-      <CollapsibleContent>
-        <form id="form" className="mt-3 grid gap-3" onSubmit={(e) => { e.preventDefault(); onPlan(); }}>
-          <p className="text-[13px] text-muted">
-            {fieldDrawn ? "Field drawn on the map. It replaces any uploaded file."
-              : "Draw the field with the tools on the map, or upload it."}
-            {managedCount > 0 && ` ${managedCount} area${managedCount === 1 ? "" : "s"} of managed land marked: drift buffers skip ${managedCount === 1 ? "it" : "them"}.`}
-          </p>
-          <Field id="field" label="Field outline (GeoJSON, not needed if drawn)">
-            <input id="field" type="file" accept=".geojson,.json" className="text-[13px]"
-                   onChange={(e) => set("fieldFile", e.target.files?.[0] ?? null)} />
-          </Field>
-          <Field id="label" label="Pesticide label (PDF or photo)">
-            <input id="label" type="file" accept=".pdf,.png,.jpg,.jpeg,.webp" className="text-[13px]"
-                   onChange={(e) => set("labelFile", e.target.files?.[0] ?? null)} />
-          </Field>
-          <div className="grid grid-cols-2 gap-2.5">
-            <Field id="month" label="Month"><Input id="month" type="month" value={s.month} onChange={(e) => set("month", e.target.value)} /></Field>
-            <Field id="method" label="Method">
-              <Select value={s.method} onValueChange={(v) => set("method", v as Setup["method"])}>
-                <SelectTrigger id="method" className="w-full"><SelectValue /></SelectTrigger>
-                <SelectContent><SelectItem value="drone">Drone</SelectItem><SelectItem value="ground">Ground</SelectItem></SelectContent>
-              </Select>
-            </Field>
-          </div>
-          <Field id="wind" label="Wind from">
-            <Select value={s.windFrom || "none"} onValueChange={(v) => set("windFrom", v === "none" ? "" : v)}>
-              <SelectTrigger id="wind" className="w-full"><SelectValue /></SelectTrigger>
-              <SelectContent>{WINDS.map(([v, n]) => <SelectItem key={v} value={v}>{n}</SelectItem>)}</SelectContent>
-            </Select>
-          </Field>
-          <div className="flex items-start gap-2 text-[14px]">
-            <Checkbox id="agent" checked={s.agent} onCheckedChange={(on) => set("agent", on === true)} className="mt-0.5" />
-            <label htmlFor="agent">Ask Muse Spark to explain the plan</label>
-          </div>
-          <div className="grid grid-cols-2 gap-2.5">
-            <Button type="submit" disabled={busy}>Plan the spray</Button>
-            <Button type="button" id="demo" variant="outline" disabled={busy} onClick={onDemo}>Try the demo</Button>
-          </div>
-        </form>
-      </CollapsibleContent>
+    <Collapsible isOpen={open} onOpenChange={onOpenChange} xstyle={s.root}
+                 trigger={<span {...stylex.props(s.trigger)}>Field and label</span>}>
+      <form id="form" {...stylex.props(text.stack, s.form)} onSubmit={(e) => { e.preventDefault(); onPlan(); }}>
+        <p {...stylex.props(text.small)}>
+          {fieldDrawn ? "Field drawn on the map. It replaces any uploaded file."
+            : "Draw the field with the tools on the map, or upload it."}
+          {managedCount > 0 && ` ${managedCount} area${managedCount === 1 ? "" : "s"} of managed land marked: drift buffers skip ${managedCount === 1 ? "it" : "them"}.`}
+        </p>
+        <FileInput id="field" mode="input" label="Field outline (GeoJSON, not needed if drawn)" accept=".geojson,.json"
+                   value={v.fieldFile} onChange={(f) => set("fieldFile", one(f))} />
+        <FileInput id="label" mode="input" label="Pesticide label (PDF or photo)" accept=".pdf,.png,.jpg,.jpeg,.webp"
+                   value={v.labelFile} onChange={(f) => set("labelFile", one(f))} />
+        <div {...stylex.props(s.pair)}>
+          <label {...stylex.props(s.month)}>Month
+            <input id="month" type="month" value={v.month} onChange={(e) => set("month", e.target.value)} {...stylex.props(s.monthInput)} />
+          </label>
+          <Selector id="method" label="Method" options={METHODS} value={v.method}
+                    onChange={(m) => set("method", m as Setup["method"])} />
+        </div>
+        <Selector id="wind" label="Wind from" options={WINDS} value={v.windFrom || "none"}
+                  onChange={(w) => set("windFrom", w === "none" ? "" : w)} />
+        <CheckboxInput label="Ask Muse Spark to explain the plan" value={v.agent} onChange={(on) => set("agent", on)} />
+        <div {...stylex.props(s.pair)}>
+          <Button type="submit" variant="primary" label="Plan the spray" isDisabled={busy} />
+          <Button id="demo" variant="secondary" label="Try the demo" isDisabled={busy} onClick={onDemo} />
+        </div>
+      </form>
     </Collapsible>
   );
-}
-
-function Field({ id, label, children }: { id: string; label: string; children: React.ReactNode }) {
-  return <div className="grid gap-1"><Label htmlFor={id}>{label}</Label>{children}</div>;
 }
