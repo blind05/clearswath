@@ -120,6 +120,12 @@ def test_label(client, monkeypatch):
     assert r.status_code == 200 and r.json()["epa_reg_no"] == "1-2"
 
 
+# Tests that load the page need its build; they say so instead of failing on a fresh checkout.
+needs_page = pytest.mark.skipif(not (api.WEB / "index.html").exists(),
+                                reason="build the page first: cd web-app && npm ci && npm run build")
+
+
+@needs_page
 def test_serves_page(client):
     r = client.get("/")
     assert r.status_code == 200 and "<title>ClearSwath</title>" in r.text
@@ -341,22 +347,23 @@ def test_demo_rejects_unknown_field(client):
     assert client.get("/api/demo?field=other").status_code == 422
 
 
-def test_page_pins_its_scripts(client):
-    """The built page (web/dist) loads nothing from third parties; the plain page pins each script with a hash."""
+def test_unbuilt_page_says_how_to_build_it(client, monkeypatch, tmp_path):
+    monkeypatch.setattr(api, "WEB", tmp_path / "missing")
+    r = client.get("/")
+    assert r.status_code == 404 and "npm run build" in r.text
+
+
+@needs_page
+def test_page_loads_no_third_party_scripts(client):
     import re
 
     page = client.get("/").text
-    tags = re.findall(r"<(?:script|link)[^>]+(?:src|href)=\"https://[^\"]+\"[^>]*>", page)
-    if api.WEB.name == "dist":
-        assert tags == []
-        bundle = "".join(client.get(f"/{src}").text for src in re.findall(r'src="/?(assets/[^"]+\.js)"', page))
-        assert "basemap.nationalmap.gov" in bundle and "remain responsible" in bundle
-    else:
-        assert any("leaflet-draw@1.0.4" in t for t in tags) and len(tags) == 4
-        assert all('integrity="sha256-' in t for t in tags)
-        assert "basemap.nationalmap.gov" in page and "remain responsible" in page
+    assert re.findall(r"<(?:script|link)[^>]+(?:src|href)=\"https://[^\"]+\"[^>]*>", page) == []
+    bundle = "".join(client.get(f"/{src}").text for src in re.findall(r'src="/?(assets/[^"]+\.js)"', page))
+    assert "basemap.nationalmap.gov" in bundle and "remain responsible" in bundle
 
 
+@needs_page
 def test_page_is_revalidated_but_its_bundles_cache(client):
     import re
 
@@ -389,7 +396,7 @@ def test_access_code_gates_paid_endpoints(client, monkeypatch):
 def test_free_endpoints_stay_open(client, monkeypatch):
     monkeypatch.setenv("ACCESS_CODE", "s3cret-code-for-tests")
     assert client.get("/api/health").status_code == 200
-    assert client.get("/").status_code == 200
+    assert client.get("/").status_code != 401  # 404 on a checkout without the page built
     assert client.get("/api/demo").status_code == 404  # no demo files in this test: not 401
     assert client.get("/api/kml/" + "0" * 32).status_code == 404
 

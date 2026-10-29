@@ -35,7 +35,7 @@ def block_utm():
 
 
 def overlay() -> None:
-    """block.jpg (UTM-aligned) -> block.webp in lon/lat with transparent corners, for a Leaflet image overlay."""
+    """block.jpg (UTM-aligned) -> block.webp in lon/lat with transparent corners, for the map's image overlay."""
     import numpy as np
     from PIL import Image
     from rasterio.transform import from_origin

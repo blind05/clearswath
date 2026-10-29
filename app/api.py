@@ -1,4 +1,4 @@
-"""HTTP API for web/index.html. Run with: uv run uvicorn app.api:app"""
+"""HTTP API for the page in web-app/, served from its build in web/dist. Run with: uv run uvicorn app.api:app"""
 
 import hmac
 import json
@@ -17,7 +17,7 @@ import simplekml
 from shapely import union_all
 from PIL import Image, ImageOps
 from fastapi import FastAPI, File, Form, HTTPException, Request, UploadFile
-from fastapi.responses import FileResponse, JSONResponse, Response
+from fastapi.responses import FileResponse, JSONResponse, PlainTextResponse, Response
 from fastapi.staticfiles import StaticFiles
 
 from app import agent, exports, geo, imagery, llm, label_reader, pipeline, records, segment, spend
@@ -541,7 +541,13 @@ class Page(StaticFiles):
     """Static files, but the HTML is revalidated on every load: it names the hashed bundles, so a cached copy left over
     from the last deploy would point at files that no longer exist. The bundles themselves cache as usual."""
 
+    async def check_config(self):
+        if WEB.is_dir():  # not built yet: every page path gets the hint below instead of a crash
+            await super().check_config()
+
     async def get_response(self, path, scope):
+        if not WEB.is_dir():
+            return PlainTextResponse("The page isn't built: cd web-app && npm ci && npm run build", status_code=404)
         r = await super().get_response(path, scope)
         if r.headers.get("content-type", "").startswith("text/html"):
             r.headers["Cache-Control"] = "no-cache"
@@ -549,6 +555,6 @@ class Page(StaticFiles):
 
 
 app.add_middleware(Guard)
-# The React build (web-app/, `npm run build`) when present, else the plain page.
-WEB = ROOT / "web" / "dist" if (ROOT / "web" / "dist" / "index.html").exists() else ROOT / "web"
+# The page, built by `cd web-app && npm run build` (the Docker image builds it too).
+WEB = ROOT / "web" / "dist"
 app.mount("/", Page(directory=WEB, html=True, check_dir=False), name="web")
