@@ -102,10 +102,13 @@ def test_montana_spot_spray_story(client):
     assert any(w.startswith("Drone imagery is missing") for w in mt["warnings"])
     assert mt["layers"]["spray_cells"]["features"] and mt["layers"]["buffered_cells"]["features"]
 
-    rx = client.get(f"/api/export/{mt['run_id']}/dji", params={"rate": 19})
+    assert mt["carrier_min"]["l_ha"] == pytest.approx(46.8, abs=0.1)  # 5 gal/acre: the largest minimum on the label
+    low = client.get(f"/api/export/{mt['run_id']}/dji", params={"rate": 19})
+    assert low.status_code == 422 and "46.8 L/ha" in low.json()["detail"]
+    rx = client.get(f"/api/export/{mt['run_id']}/dji", params={"rate": 50})
     assert rx.status_code == 200
     with zipfile.ZipFile(io.BytesIO(rx.content)) as z:
         with rasterio.open(io.BytesIO(z.read("DJI/Rx/prescription.tif"))) as src:
             cells = src.read(1)
-    assert np.isclose(cells, 19).sum() * 1.0 / 4046.86 == pytest.approx(mt["spot"]["treated_acres"], abs=0.1)
+    assert np.isclose(cells, 50).sum() * 1.0 / 4046.86 == pytest.approx(mt["spot"]["treated_acres"], abs=0.1)
     assert "Spot spray" in client.get(f"/api/kml/{mt['run_id']}").text
