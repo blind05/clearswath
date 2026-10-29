@@ -7,7 +7,11 @@ import { Dialog, DialogHeader } from "@astryxdesign/core/Dialog";
 import { TextInput } from "@astryxdesign/core/TextInput";
 import { text } from "@/styles";
 
-const s = stylex.create({ actions: { display: "flex", justifyContent: "flex-end", gap: 8 } });
+const s = stylex.create({
+  // DialogHeader insets its title by 16 px inside the dialog's padding; the body matches it
+  body: { paddingInline: 16, paddingBottom: 16 },
+  actions: { display: "flex", justifyContent: "flex-end", gap: 8 },
+});
 
 export function AccessCode() {
   const [open, setOpen] = useState(false);
@@ -21,7 +25,7 @@ export function AccessCode() {
     <Dialog isOpen={open} onOpenChange={(o) => !o && close(null)} purpose="form" width={440}>
       <DialogHeader title="Live runs need the access code" onOpenChange={(o) => !o && close(null)}
                     subtitle="Live runs call the models and cost money, so they're limited. The demo is free to try." />
-      <form onSubmit={(e) => { e.preventDefault(); close(code); }} {...stylex.props(text.stack)}>
+      <form onSubmit={(e) => { e.preventDefault(); close(code); }} {...stylex.props(text.stack, s.body)}>
         <TextInput type="password" label="Access code" hasAutoFocus value={code} onChange={setCode} />
         <div {...stylex.props(s.actions)}>
           <Button variant="secondary" label="Cancel" onClick={() => close(null)} />

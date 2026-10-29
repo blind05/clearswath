@@ -7,4 +7,6 @@
 
 html, body, #root { height: 100%; }
 body { margin: 0; background: #F2F4F1; color: #1E2B24; font: 15px/1.5 "IBM Plex Sans", system-ui, sans-serif; }
+/* DESIGN.md: one ink focus ring everywhere, Astryx controls and our own alike */
+:focus-visible { outline: 2px solid #1E2B24; outline-offset: 2px; }
 @media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation: none !important; transition: none !important; } }

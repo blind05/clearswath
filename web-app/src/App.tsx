@@ -105,14 +105,14 @@ export function App() {
           </svg>
           <h1 {...stylex.props(s.name)}>ClearSwath</h1>
         </div>
-        <TabList value={tab} onChange={setTab} aria-label="Mode">
-          <Tab value="plan" label="Plan a spray" />
-          <Tab value="photo" label="Check a photo" />
+        <TabList role="tablist" value={tab} onChange={setTab} aria-label="Mode">
+          <Tab value="plan" label="Plan a spray" panelId="panel-plan" />
+          <Tab value="photo" label="Check a photo" panelId="panel-photo" />
         </TabList>
         <p {...stylex.props(text.small, s.tagline)}>Find the weeds. Read the label. Spray only where both say yes.</p>
       </header>
       <main {...stylex.props(s.main)}>
-        <aside {...stylex.props(s.aside)}>
+        <aside id={`panel-${tab}`} role="tabpanel" aria-label={tab === "plan" ? "Plan a spray" : "Check a photo"} {...stylex.props(s.aside)}>
           {tab === "plan" ? (
             <>
               <SetupForm setup={setup} onChange={setSetup} open={formOpen} onOpenChange={setFormOpen}
