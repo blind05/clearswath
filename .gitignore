@@ -11,3 +11,4 @@ data/runs/
 data/datasets/
 evals/overlays/
 .playwright-mcp/
+data/video/
