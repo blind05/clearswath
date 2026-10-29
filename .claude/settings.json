@@ -1,13 +1,11 @@
 {
   "attribution": { "commit": "", "pr": "" },
   "permissions": {
-    "ask": ["Bash(git add:*)", "Bash(git commit:*)"],
-    "deny": [
-      "Bash(git push:*)",
+    "ask": ["Bash(git add:*)", "Bash(git commit:*)","Bash(git push:*)",
       "Bash(git reset:*)",
       "Bash(git rebase:*)",
-      "Bash(git commit --amend:*)",
-      "Read(./.env)"
+      "Bash(git commit --amend:*)"],
+    "deny": ["Read(./.env)"
     ]
   }
 }

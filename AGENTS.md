@@ -11,7 +11,8 @@ Developer Hackathon, Oct 26 - Nov 4, 2026. Architecture and contracts: docs/CONT
 - Commit messages are a single subject line: 'type: summary' (feat, fix, test, docs,
   chore, refactor, style), max 72 characters. No body, no trailers, no
   Co-authored-by, no "Generated with", no session links.
-- NEVER push, reset, rebase or amend. I push at the end of each session.
+- Push, reset, rebase, amend or rewrite history only when I ask for it, and say
+  first what it will change. I usually push at the end of each session.
 - Never put API keys in code. MODEL_API_KEY comes from .env via app/llm.py.
 - Don't add dependencies without asking.
 - All Meta model calls go through app/llm.py.

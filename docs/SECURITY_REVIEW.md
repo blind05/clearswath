@@ -65,7 +65,7 @@ can upload files and trigger paid Meta Model API / Baseten calls during judging 
 | Supply chain | Known vulnerabilities | `uvx pip-audit -r <uv export --frozen --no-dev>` (87 pinned packages): "No known vulnerabilities found"; dev deps: same. |
 | Supply chain | Pinning and sources | `uv.lock`: 92 packages, all from `https://pypi.org/simple`, none from git/URL/path. The page loads no third-party scripts or stylesheets (`tests/test_api.py::test_page_loads_no_third_party_scripts`); npm packages are pinned to exact versions in `web-app/package.json` and `package-lock.json`, fonts self-hosted. |
 | Supply chain | Dockerfile | `python:3.12-slim`, `uv sync --frozen --no-dev`, runs as user `clearswath` (`docker exec ... id -un` -> `clearswath`). |
-| Repo | Agent config | No `.mcp.json`, no `.claude/settings.local.json`, no `bypassPermissions`; `git add`/`git commit` are `ask`; push and reset denied (see M6, L5). |
+| Repo | Agent config | No `.mcp.json`, no `.claude/settings.local.json`, no `bypassPermissions`; `git add`, `commit`, `push`, `reset`, `rebase` and `--amend` are `ask` (since 2026-10-29: history changes only on request, AGENTS.md); `Read(./.env)` is `ask` (see M6, L5). |
 | Repo | Git hooks | `core.hooksPath = .githooks`; `pre-commit` (blocks `.env`, keys, failing tests) and `commit-msg` are executable; `git grep no-verify` -> none. |
 | Repo | GitHub secret scanning | `secret_scanning: enabled`, `push_protection: enabled`. |
 
@@ -103,7 +103,7 @@ before saving; L2 README with attribution; L5 extra deny rules. M1 is mostly cov
    notes, never in the repo or video.
 3. **GitHub**: Settings > Code security > enable **Dependabot alerts**; Settings > Branches > add a rule for `main`
    blocking force pushes and deletion. Keep secret scanning and push protection on.
-4. **`.claude/settings.json`**: decide whether the removed rebase/amend deny rules were intentional (M6).
+4. **`.claude/settings.json`**: decided 2026-10-29: push, reset, rebase and amend moved from `deny` to `ask` on purpose (M6).
 5. **Demo field**: confirm the field near 44.234 N, 96.92 W isn't family or a neighbour's land.
 6. **Employer mention** (L3): removed from the docs 2026-10-28 and from the git history 2026-10-29.
 7. **Eligibility**: cleared with Cerebral Valley on 2026-10-28.
