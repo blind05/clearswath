@@ -51,12 +51,13 @@ def main(port: int, slow: float) -> None:
             page.goto(f"http://127.0.0.1:{port}/")
             shot("landing", 3)
             # 1. Montana: the label, the stream, the spurge map and Muse Spark's saved answer
-            page.check("input[name=agent]")
+            page.get_by_role("checkbox", name="Ask Muse Spark to explain the plan").click()
             page.click("#demo")
             page.wait_for_selector("text=Saved Muse Spark answer", timeout=120_000)
             shot("montana-plan", 4)
-            page.click(".leaflet-control-zoom-in")
-            page.click(".leaflet-control-zoom-in")
+            page.wait_for_timeout(int(1500 * slow))  # the map's one reveal: field, buffers and water, then weeds
+            page.click(".maplibregl-ctrl-zoom-in")
+            page.click(".maplibregl-ctrl-zoom-in")
             shot("montana-spot-spray", 4)
             page.click("text=How it decided")
             page.locator(".agent").scroll_into_view_if_needed()
@@ -66,14 +67,14 @@ def main(port: int, slow: float) -> None:
             page.fill("#dji-rate", "50")
             shot("montana-dji-export", 3)
             # 3. South Dakota cropland: the creek buffer, then the corrected outline
-            page.evaluate("document.querySelector('#setup').open = true")  # the form folds away after a plan
-            page.uncheck("input[name=agent]")
+            page.get_by_role("button", name="Field and label").click()  # the form folds away after a plan
+            page.get_by_role("checkbox", name="Ask Muse Spark to explain the plan").click()
             page.click("#demo-switch")
             page.wait_for_selector("text=Show the corrected field", timeout=60_000)
             shot("dakota-creek-buffer", 4)
-            ulv = page.locator("label.check", has_text="ULV").locator("input[data-rule]")
+            ulv = page.locator("[data-rule-row]", has_text="ULV").get_by_role("checkbox")
             if ulv.count():
-                ulv.first.uncheck()
+                ulv.first.click()
                 page.wait_for_timeout(int(3000 * slow))
                 shot("dakota-ulv-unticked", 3)
             page.click("#demo-switch")
