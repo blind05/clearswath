@@ -2,6 +2,7 @@
 
 import json
 import logging
+import os
 import re
 import time
 import uuid
@@ -93,12 +94,12 @@ def _template(result: dict) -> str:
     return "\n".join(lines)
 
 
-def _agent_loop(job: _Job, trace: list) -> str | None:
+def _agent_loop(job: _Job, trace: list, provider: str | None) -> str | None:
     messages = [{"role": "system", "content": llm.load_prompt("agent")},
                 {"role": "user", "content": f"Can I spray this field by {job.method} in {job.month}?"}]
     for _ in range(MAX_STEPS):
         try:
-            msg = llm.chat(messages, tools=TOOLS, purpose="agent", provider=job.provider)
+            msg = llm.chat(messages, tools=TOOLS, purpose="agent", provider=provider)
         except Exception as e:  # any model failure falls back to the pipeline
             raise _ModelError() from e
         if not msg.tool_calls:
@@ -127,14 +128,21 @@ def run(field_path, label_path, month: str, method: str = "drone", excluded_rule
         geo.load_field(field_path)  # validated before any tool can spend on it
     run_id = uuid.uuid4().hex
     job = _Job(field_path, label_path, month, method, excluded_rules, provider, inputs, managed, wind_from_deg)
-    trace, mode = [], "agent"
-    try:
-        answer = _agent_loop(job, trace)
-    except _ModelError as e:
-        log.warning("agent model call failed; falling back to pipeline", exc_info=e.__cause__)
-        # type name only: the error text can carry upstream response details
-        trace.append({"note": f"agent unavailable ({type(e.__cause__).__name__}); ran the pipeline instead"})
-        answer, mode = None, "pipeline"
+    # A second Spark provider (AGENT_FALLBACK_PROVIDER, e.g. baseten) answers if the first is down; the tools'
+    # results are kept on the job, so nothing is fetched twice. After both, the plan's own summary.
+    first = llm.resolve_provider(provider)  # also loads .env
+    fallback = os.getenv("AGENT_FALLBACK_PROVIDER")
+    providers = [first] + ([fallback] if fallback and fallback != first else [])
+    trace, answer, mode, model = [], None, "pipeline", None
+    for i, which in enumerate(providers):
+        try:
+            answer, mode, model = _agent_loop(job, trace, which), "agent", llm.spark_model(which)
+            break
+        except _ModelError as e:
+            log.warning("agent model call failed on %s", which, exc_info=e.__cause__)
+            # type name only: the error text can carry upstream response details
+            then = f"trying {providers[i + 1]}" if i + 1 < len(providers) else "ran the pipeline instead"
+            trace.append({"note": f"agent unavailable on {which} ({type(e.__cause__).__name__}); {then}"})
 
     if job.result is None:
         job.plan_spray()
@@ -157,4 +165,4 @@ def run(field_path, label_path, month: str, method: str = "drone", excluded_rule
         answer = None
     pipeline.save_run(job.result, RUNS / run_id)
     return {"run_id": run_id, "answer": answer or _template(job.result), "decision": decision,
-            "trace": trace, "mode": mode, "result": job.result}
+            "trace": trace, "mode": mode, "model": model if answer else None, "result": job.result}

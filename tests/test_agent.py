@@ -195,3 +195,29 @@ def test_quoted_text_must_be_on_the_label(field_path, steps, monkeypatch, text, 
     assert (out["answer"] == text) is kept
     if not kept:
         assert "not on the label" in out["trace"][-1]["note"]
+
+
+def test_fallback_provider_answers_when_the_first_is_down(field_path, steps, monkeypatch):
+    monkeypatch.setenv("AGENT_FALLBACK_PROVIDER", "baseten")
+    asked = []
+
+    def chat(messages, tools=None, provider=None, **kw):
+        asked.append(provider)
+        if provider == "meta":
+            raise RuntimeError("down")
+        return reply(content="ADJUST: keep 100 ft from the pond.") if len(asked) > 2 else reply(call("plan_spray"))
+
+    monkeypatch.setattr(llm, "chat", chat)
+    out = agent.run(field_path, "label.pdf", "2026-11")
+    assert asked == ["meta", "baseten", "baseten"] and out["mode"] == "agent"
+    assert out["model"] == llm.spark_model("baseten") and out["answer"].startswith("ADJUST")
+    assert "agent unavailable on meta (RuntimeError); trying baseten" in out["trace"][0]["note"]
+
+
+def test_both_providers_down_falls_back_to_the_plan(field_path, steps, monkeypatch):
+    monkeypatch.setenv("AGENT_FALLBACK_PROVIDER", "baseten")
+    monkeypatch.setattr(llm, "chat", lambda *a, **kw: (_ for _ in ()).throw(RuntimeError("down")))
+    out = agent.run(field_path, "label.pdf", "2026-11")
+    assert out["mode"] == "pipeline" and out["model"] is None and out["answer"].startswith("ADJUST:")
+    assert [t["note"] for t in out["trace"][:2]] == ["agent unavailable on meta (RuntimeError); trying baseten",
+                                                     "agent unavailable on baseten (RuntimeError); ran the pipeline instead"]

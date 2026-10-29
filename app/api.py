@@ -416,7 +416,7 @@ def demo_agent(field: str = Form(""), method: str = Form("drone"), excluded_rule
     if out["mode"] == "agent":  # only real model answers are worth replaying
         replays = json.loads((cache / "agent.json").read_text()) if (cache / "agent.json").exists() else {}
         replays[_replay_key(method, excluded)] = {
-            k: body[k] for k in ("answer", "decision", "trace")} | {"model": llm.spark_model(None),
+            k: body[k] for k in ("answer", "decision", "trace")} | {"model": out.get("model") or llm.spark_model(None),
                                                                    "date": date.today().isoformat()}
         (cache / "agent.json").write_text(json.dumps(replays, indent=1, default=str))
     return body | {"demo": {"field": field, "cached": True, "month": month, "overlay": _overlay(DEMO_FIELDS[field])}}
