@@ -10,6 +10,12 @@ services:
         sync: false
       - key: BASETEN_API_KEY
         sync: false
+      - key: FIREWORKS_API_KEY
+        sync: false
+      - key: PHOTO_KEY  # the same value as PHOTO_KEY in the Modal secret "clearswath-photo"
+        sync: false
+      - key: PHOTO_URL  # printed by: PYTHONPATH=train uv run --with modal modal deploy serve/weeds_modal.py
+        value: https://clearswath--clearswath-photo-weeds-analyze.us-east.modal.run
       - key: ACCESS_CODE  # 16+ random characters (e.g. `openssl rand -base64 18`); shorter or missing = live runs refused
         sync: false
       - key: CLEARSWATH_LIVE_MODE  # set to "off" to stop all paid calls; the cached demo keeps working
@@ -20,5 +26,7 @@ services:
         value: "5"
       - key: DAILY_RUN_CAP
         value: "200"
-      - key: LLM_PROVIDER
-        value: meta
+      - key: LLM_PROVIDER  # meta once the Meta Model API key has access
+        value: fireworks
+      - key: AGENT_FALLBACK_PROVIDER  # answers for the agent if LLM_PROVIDER is down
+        value: baseten
