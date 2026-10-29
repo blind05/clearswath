@@ -891,3 +891,46 @@ def test_dji_export_refuses_a_rate_below_the_label_minimum(client, weedy_demo, t
 def test_dji_export_refused_when_the_minimum_is_unverified(client, weedy_demo, tmp_path):
     export = _weedy_run_with(client, weedy_demo, tmp_path, carrier_unverified=True)
     assert export(50).status_code == 409
+
+
+def _png_claiming(width: int, height: int) -> bytes:
+    """A 1-pixel PNG whose header says width x height: a decompression bomb's shape, without the memory."""
+    import io
+    import struct
+    import zlib
+
+    from PIL import Image
+
+    buf = io.BytesIO()
+    Image.new("L", (1, 1)).save(buf, "PNG")
+    data = bytearray(buf.getvalue())
+    ihdr = struct.pack(">II", width, height) + bytes(data[24:29])
+    data[16:29] = ihdr
+    data[29:33] = struct.pack(">I", zlib.crc32(b"IHDR" + ihdr))
+    return bytes(data)
+
+
+@pytest.mark.parametrize("url, field", [("/api/photo", "photo"), ("/api/label", "label")])
+def test_an_image_claiming_to_be_huge_is_refused_before_decoding(client, monkeypatch, url, field):
+    from PIL import Image
+
+    def never(*a, **kw):
+        raise AssertionError("must not decode")
+
+    # 120 megapixels: under Pillow's own refusal (~179 MP), where it only warns, decodes, and needs ~360 MB
+    bomb = _png_claiming(12_000, 10_000)
+    monkeypatch.setattr(llm, "weed_photo", never)
+    monkeypatch.setattr(Image.Image, "load", never)  # a decode would call this
+    r = client.post(url, files={field: ("big.png", bomb)})
+    assert r.status_code == 413 and "megapixels" in r.json()["detail"]
+
+
+def test_a_normal_photo_still_passes_the_size_check(client, monkeypatch):
+    import io
+
+    from PIL import Image
+
+    monkeypatch.setattr(llm, "weed_photo", lambda p: {"overlay_png": "x", "share_flagged": 0.0})
+    buf = io.BytesIO()
+    Image.new("RGB", (4000, 3000), "green").save(buf, "JPEG")  # a 12-megapixel phone photo
+    assert client.post("/api/photo", files={"photo": ("p.jpg", buf.getvalue())}).status_code == 200

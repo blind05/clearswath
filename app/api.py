@@ -228,12 +228,17 @@ def _check_type(path: Path) -> None:
 
 IMAGE_FORMATS = {".png": "PNG", ".webp": "WEBP", ".jpg": "JPEG", ".jpeg": "JPEG"}
 MAX_IMAGE_SIDE = 3000  # px; plenty to read a label, and it bounds the model's image cost
+MAX_IMAGE_PIXELS = 50_000_000  # declared size, checked before decoding: a small file can claim a huge image
 
 
 def _clean_image(path: Path) -> None:
     """Re-encodes a photo upright, at most MAX_IMAGE_SIDE, with no EXIF (GPS, camera) before it's stored or sent."""
     try:
-        with Image.open(path) as im:
+        with Image.open(path) as im:  # reads only the header: nothing is decoded yet
+            if im.width * im.height > MAX_IMAGE_PIXELS:
+                path.unlink(missing_ok=True)
+                raise HTTPException(413, f"That image is too large: the limit is {MAX_IMAGE_PIXELS // 1_000_000} "
+                                         "megapixels.")
             im = ImageOps.exif_transpose(im)  # apply the orientation tag before it's dropped
             im.thumbnail((MAX_IMAGE_SIDE, MAX_IMAGE_SIDE))
         fmt = IMAGE_FORMATS[path.suffix.lower()]
