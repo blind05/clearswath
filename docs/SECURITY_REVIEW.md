@@ -1,6 +1,6 @@
 # ClearSwath security review (Phase 1, read-only)
 
-Date: 2026-10-27. Scope: the repo at `10edb81`..`b2765a7` plus working tree, the Docker image built from it, and the
+Date: 2026-10-27. Scope: the repo at `cb03304`..`a87a31a` plus working tree, the Docker image built from it, and the
 app run locally (the live Render site does not exist yet). Threat model: public GitHub repo; public site where anyone
 can upload files and trigger paid Meta Model API / Baseten calls during judging week (Nov 4-9).
 
@@ -34,7 +34,7 @@ can upload files and trigger paid Meta Model API / Baseten calls during judging 
 | M7 | Medium | Availability | `app/api.py` (`_clean_image`) | Found 2026-10-29: Pillow refuses images over ~179 megapixels but only warns from 89 MP, then decodes; a small PNG declaring 120 MP decodes to ~360 MB on a 512 MB host. Label photos and live photos both decode here. | **Fixed:** the declared size is checked before decoding; over 50 MP is refused (413). Tested with a forged header. |
 | L1 | Low | Uploads | `app/api.py:82-86` | Uploads are saved before month/method are validated, so invalid requests still write files. | Validate form fields first. |
 | L2 | Low | Docs/licensing | `README.md` (0 lines) | No data attribution (USDA NAIP, USGS NHD + National Map imagery, EPA PPLS label, EPA BLT "informational"), no "built during the event" statement (a rule). | Write the README (planned for Tue Nov 3). |
-| L3 | Low | Privacy | `docs/PROJECT_CONTEXT.md:171`, `:54` | Public doc named Hunter's employer and family background. | Employer name removed 2026-10-28; it stays in unpushed commits fe7a309 and 83f6d70 unless they are squashed before the push. |
+| L3 | Low | Privacy | `docs/PROJECT_CONTEXT.md:171`, `:54` | Public doc named Hunter's employer and family background. | Employer name removed from the docs 2026-10-28 and from the git history 2026-10-29. |
 | L4 | Low | GitHub | repo settings | `gh api repos/blind05/clearswath` -> `dependabot: disabled`; `branches/main/protection` -> `Branch not protected` (404). Secret scanning and push protection: **enabled**. | Enable Dependabot alerts; protect `main` against force-push and deletion (see manual steps). |
 | L5 | Low | Agent guardrails | `.claude/settings.json` | `Read(./.env)` blocks the Read tool only, not shell reads like `cat .env`; `git commit --no-verify` is not denied (commits are on `ask`, so each needs approval). | Add `Bash(cat .env*)`, `Bash(git commit --no-verify:*)`, `Bash(git commit -n:*)` to `deny`. |
 | L6 | Low | Logging | `app/api.py:36` | `log.exception` logs full exception text; a Pydantic error on a record can include fragments of model output from a voice transcript. Server log only, never sent to the browser. | Accept, or log only the exception type for record errors. |
@@ -105,5 +105,5 @@ before saving; L2 README with attribution; L5 extra deny rules. M1 is mostly cov
    blocking force pushes and deletion. Keep secret scanning and push protection on.
 4. **`.claude/settings.json`**: decide whether the removed rebase/amend deny rules were intentional (M6).
 5. **Demo field**: confirm the field near 44.234 N, 96.92 W isn't family or a neighbour's land.
-6. **Employer mention** (L3): removed from the docs 2026-10-28; squash fe7a309 and 83f6d70 before pushing to keep it out of history.
+6. **Employer mention** (L3): removed from the docs 2026-10-28 and from the git history 2026-10-29.
 7. **Eligibility**: cleared with Cerebral Valley on 2026-10-28.
