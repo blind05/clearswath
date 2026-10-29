@@ -5,7 +5,8 @@ The label text is given page by page, each page starting with `=== Page N ===`.
 For every rule return:
 - kind: `buffer` (a setback distance from something), `drift` (a spray-drift buffer: a distance to keep between
   the treated area and sensitive or non-target areas, such as the endangered-species drift buffers on newer
-  labels), `wind`, `rain`, `rate`, `runoff` (the label requires
+  labels), `wind`, `rain`, `rate` (product per area), `carrier` (the minimum total spray volume of the mix per area,
+  e.g. "2 or more gallons per acre by air"; unit `gal/acre` or `L/ha`), `runoff` (the label requires
   runoff mitigation points, e.g. from EPA's mitigation menu or PALM, before application), or `other`.
   `buffer` and `drift` are only for a stated distance on the ground between the spray and something else. A rule
   with no such distance is `other`: "do not apply directly to water", boom width, nozzle direction, droplet size,

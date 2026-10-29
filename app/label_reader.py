@@ -16,16 +16,19 @@ MAX_PAGES = 80  # real labels run 20-70 pages; more would be a very large paid p
 
 class LabelTooLongError(ValueError):
     """A PDF over MAX_PAGES; the message is safe to show users."""
-KINDS = ["buffer", "drift", "wind", "rain", "rate", "runoff", "other"]
+KINDS = ["buffer", "drift", "wind", "rain", "rate", "carrier", "runoff", "other"]
 TARGETS = ["water", "building", "habitat"]
 APPLIES_TO = ["all", "aerial", "ground"]
 # a label says "feet" or "ft"; store the short form buffers.plan expects
+# spray volume per area -> L/ha (1 US gal/acre = 3.785411784 L / 0.40468564224 ha)
+CARRIER_L_HA = {"gal/acre": 9.353958, "gal/a": 9.353958, "gallons per acre": 9.353958, "gallon per acre": 9.353958,
+                "gpa": 9.353958, "l/ha": 1.0, "liters per hectare": 1.0, "litres per hectare": 1.0}
 BUFFER_UNITS = {"ft": "ft", "feet": "ft", "foot": "ft", "m": "m", "meter": "m", "meters": "m",
                 "metre": "m", "metres": "m"}
 
 
 class LabelRule(BaseModel):
-    kind: Literal["buffer", "drift", "wind", "rain", "rate", "runoff", "other"]
+    kind: Literal["buffer", "drift", "wind", "rain", "rate", "carrier", "runoff", "other"]
     target: Literal["water", "building", "habitat"] | None
     applies_to: Literal["all", "aerial", "ground"]
     value: float | None
@@ -109,6 +112,9 @@ def _check(rule: dict, pages: list[str]) -> str | None:
         if rule.get("value") is None or unit is None:
             return f"{rule['kind']} without a distance in ft or m"
         rule["unit"] = unit
+    if rule.get("kind") == "carrier":
+        if rule.get("value") is None or (rule.get("unit") or "").strip().lower() not in CARRIER_L_HA:
+            return "carrier without a spray volume per acre or hectare"
     return None
 
 

@@ -268,3 +268,14 @@ def test_weeds_survive_the_demo_cache(monkeypatch, tmp_path):
     pipeline.save_inputs(tmp_path / "c", FIELD, raw_label(), hazards, bulletin(), "2026-11")
     _, _, hz, _, _ = pipeline.load_inputs(tmp_path / "c")
     assert hz["weeds"][0].equals_exact(WEED_FAR, 1e-9) and hz["weed_source"] == "test"
+
+
+def test_carrier_minimum_is_the_strictest_for_the_method():
+    def carrier(value, unit, applies_to):
+        return RULE.model_copy(update={"kind": "carrier", "target": None, "value": value, "unit": unit,
+                                       "applies_to": applies_to})
+
+    lbl = label(rules=[carrier(2, "gal/acre", "aerial"), carrier(10, "gal/acre", "ground"), carrier(15, "L/ha", "all")])
+    assert pipeline.carrier_minimum(lbl, "drone")["l_ha"] == pytest.approx(18.7, abs=0.05)  # 2 gal/acre beats 15 L/ha
+    assert pipeline.carrier_minimum(lbl, "ground")["l_ha"] == pytest.approx(93.5, abs=0.05)
+    assert pipeline.carrier_minimum(label(), "drone") is None

@@ -84,6 +84,7 @@ def test_fixes_wrong_page(monkeypatch, pdf):
     ({"value": None}, "buffer without a distance in ft or m"),
     ({"target": "river"}, "invalid fields: target"),
     ({"kind": "drift", "target": None, "value": None}, "drift without a distance in ft or m"),
+    ({"kind": "carrier", "target": None, "unit": "gallons"}, "carrier without a spray volume per acre or hectare"),
     ({"kind": "setback", "applies_to": "drones"}, "invalid fields: kind, applies_to"),
 ])
 def test_drops_unusable_rules(monkeypatch, pdf, bad, reason):

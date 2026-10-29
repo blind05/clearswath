@@ -126,13 +126,30 @@ def save_run(result: dict, run_dir: Path) -> None:
         exports.write_spot_tif(grid, Path(run_dir) / "spot.tif")
     geo.save_shapes(shapes, Path(run_dir) / "plan.geojson", [{"name": n} for n in names])
     treated = cells.summary(result["cells"])["treated_acres"] if result.get("cells") else plan["spray_acres"]
-    job = {"product_name": label.product_name, "epa_reg_no": label.epa_reg_no, "area_treated_acres": treated, "location": f"{centre.y:.5f}, {centre.x:.5f}",
+    job = {"carrier_min": carrier_minimum(label, plan["method"]),
+           "carrier_unverified": any(d.get("kind") == "carrier" for d in label.dropped),
+           "product_name": label.product_name, "epa_reg_no": label.epa_reg_no, "area_treated_acres": treated, "location": f"{centre.y:.5f}, {centre.x:.5f}",
            "method": plan["method"]}
     (Path(run_dir) / "job.json").write_text(json.dumps(job))
 
 
 def _fc(shapes) -> dict:
     return geo.to_feature_collection([s for s in shapes if s is not None and not s.is_empty])
+
+
+def carrier_minimum(label, method: str) -> dict | None:
+    """The strictest minimum spray volume on the label for this method, in L/ha, with its quote; None if none.
+
+    Labels set minimums per use site (forest, rangeland, cropland) and the reader doesn't reliably tell which
+    applies, so the largest one is used: a volume at or above it meets every section's minimum.
+    """
+    best = None
+    for r in label.rules:
+        if r.kind == "carrier" and buffers._applies(r.model_dump(), method):
+            l_ha = r.value * label_reader.CARRIER_L_HA[r.unit.strip().lower()]
+            if best is None or l_ha > best["l_ha"]:
+                best = {"l_ha": round(l_ha, 1), "quote": r.quote, "page": r.page}
+    return best
 
 
 def _cell_layers(grid: dict | None) -> dict:
@@ -167,6 +184,7 @@ def to_json(result: dict) -> dict:
         "water_source": result["hazards"].get("water_source"),
         "weed_source": result["hazards"].get("weed_source"),
         "spot": cells.summary(grid) if grid else None,
+        "carrier_min": carrier_minimum(result["label"], plan["method"]),
         "layers": {
             "field": mapping(result["field"]),
             "spray_zone": _fc([plan["spray_zone"]]),

@@ -129,7 +129,8 @@ def test_plan_saves_job(client, tmp_path):
     run_id = post_plan(client).json()["run_id"]
     job = json.loads((tmp_path / "runs" / run_id / "job.json").read_text())
     assert job == {"product_name": "INTREPID 2F", "epa_reg_no": "62719-442", "area_treated_acres": 35.5,
-                   "location": "42.00500, -92.99500", "method": "drone"}
+                   "location": "42.00500, -92.99500", "method": "drone", "carrier_min": None,
+                   "carrier_unverified": False}
 
 
 @pytest.fixture
@@ -871,3 +872,22 @@ def test_photo_mode_off_until_configured(client, monkeypatch):
 def test_photo_mode_is_gated_like_live_runs(client, monkeypatch):
     monkeypatch.setenv("ACCESS_CODE", "s3cret-code-for-tests")
     assert client.post("/api/photo", files={"photo": ("p.png", b"x")}).status_code == 401
+
+
+def _weedy_run_with(client, weedy_demo, tmp_path, **job):
+    path = tmp_path / "runs" / weedy_demo / "job.json"
+    path.write_text(json.dumps(json.loads(path.read_text()) | job))
+    return lambda rate: client.get(f"/api/export/{weedy_demo}/dji", params={"rate": rate})
+
+
+def test_dji_export_refuses_a_rate_below_the_label_minimum(client, weedy_demo, tmp_path):
+    export = _weedy_run_with(client, weedy_demo, tmp_path,
+                             carrier_min={"l_ha": 18.7, "quote": "2 or more gallons per acre by air", "page": 28})
+    r = export(10)
+    assert r.status_code == 422 and "18.7 L/ha" in r.json()["detail"] and "p.28" in r.json()["detail"]
+    assert export(19).status_code == 200
+
+
+def test_dji_export_refused_when_the_minimum_is_unverified(client, weedy_demo, tmp_path):
+    export = _weedy_run_with(client, weedy_demo, tmp_path, carrier_unverified=True)
+    assert export(50).status_code == 409

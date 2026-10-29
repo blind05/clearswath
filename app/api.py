@@ -518,6 +518,14 @@ def export(run_id: str, fmt: str, rate: float | None = None):
         raise HTTPException(409, "This plan has no weed map, so there is no spot-spray prescription")
     if rate is None or not 0 < rate <= 1000:
         raise HTTPException(422, "Give the spray rate per hectare, between 0 and 1000")
+    job = json.loads((run / "job.json").read_text()) if (run / "job.json").exists() else {}
+    if job.get("carrier_unverified"):
+        raise HTTPException(409, "A spray-volume rule on the label couldn't be verified, so the minimum isn't known. "
+                                 "Check the label.")
+    if (low := job.get("carrier_min")) and rate < low["l_ha"]:
+        raise HTTPException(422, f"{rate:g} L/ha is below {low['l_ha']} L/ha, the largest minimum spray volume on the "
+                                 f"label (p.{low['page']}: \"{low['quote']}\"). A volume at or above it meets "
+                                 "every section's minimum.")
     field = geo.load_shapes(run / "plan.geojson")
     zipped = exports.dji_zip(union_all(field[:2]), run / "spot.tif", rate)
     return Response(zipped, media_type="application/zip",

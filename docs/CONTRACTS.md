@@ -55,3 +55,7 @@ Live photo mode: `/api/photo` takes one JPEG, PNG or WebP (re-encoded upright, E
 `llm.weed_photo` posts it to the Modal endpoint in `serve/weeds_modal.py` (`PHOTO_URL`, with `PHOTO_KEY` sent as
 `X-Photo-Key`). The endpoint runs DINOv3 and the head from `train/deploy_head_modal.py` (CoFly-WeedDB + PhenoBench)
 and returns an RGBA overlay PNG, the share flagged and what the head was trained on. A scouting guide, not a spray map.
+
+Spray volume: `carrier` rules (a minimum total spray volume, gal/acre or L/ha) give `pipeline.carrier_minimum`, the
+largest minimum on the label for the method in L/ha, saved in `job.json` and shown on the page. `/api/export/{id}/dji`
+refuses a rate below it (422, with the quote), and refuses (409) when a carrier rule on the label failed its checks.
