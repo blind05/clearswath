@@ -45,7 +45,8 @@ a cache it runs live (`mt` is cache only). `demo.overlay` is the demo's drone im
 `status` is `go` (nothing removed), `adjust` (some acres removed, the green zone is sprayable; or the label
 requires runoff mitigation points, which the user completes in EPA's PALM: a `runoff` rule never changes the map)
 or `no-go` (bulletin prohibits, no sprayable area, or `gaps`: data the plan needs is missing, such as a
-failed USGS water layer or a buffer rule whose quote couldn't be verified; nothing is sprayable then). It always comes from `buffers.plan`.
+failed USGS water layer, a buffer rule whose quote couldn't be verified, or a label read that returned no rules at
+all; nothing is sprayable then). It always comes from `buffers.plan`.
 
 Every reason in `plan.reasons` has `source` (`label`, `bulletin`, `rule:water` or `data`); label
 reasons also carry `quote`, `page` and `distance_ft`.

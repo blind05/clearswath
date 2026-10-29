@@ -48,6 +48,9 @@ def assemble(field, label, hazards: dict, bulletin: dict, month: str, method: st
     rules = [r for i, r in enumerate(label.rules) if i not in excluded]
     # Data the plan can't do without. Each makes the plan NO-GO (fail closed) instead of a warning.
     gaps = list(hazards.get("water_warnings") or [])
+    if not label.rules and not label.dropped:  # every real label has rules: an empty read is a failed read
+        gaps.append("The label reader found no rules on this label, so its setbacks may be missing. "
+                    "Try again or use another provider.")
     dropped_buffers = [d for d in label.dropped if d.get("kind") in ("buffer", "drift")]
     if dropped_buffers:
         gaps.append(f"{len(dropped_buffers)} buffer rule(s) on the label could not be verified, so a required "

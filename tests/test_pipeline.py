@@ -111,6 +111,13 @@ def test_unverified_buffer_rule_is_no_go(monkeypatch, field_path):
     assert result["warnings"] == ["1 label rule(s) could not be verified and were not applied. Check the label yourself."]
 
 
+def test_a_label_read_with_no_rules_is_no_go(monkeypatch, field_path):
+    wire(monkeypatch, lbl=label(rules=[], dropped=[]))
+    result = pipeline.run(field_path, "label.pdf", "2026-11")
+    assert result["plan"]["status"] == "no-go" and result["plan"]["spray_acres"] == 0
+    assert any("found no rules" in r["summary"] for r in result["plan"]["reasons"])
+
+
 def test_unverified_drift_rule_is_no_go(monkeypatch, field_path):
     wire(monkeypatch, lbl=label(dropped=[{"kind": "drift", "reason": "quote not found in label text"}]))
     assert pipeline.run(field_path, "label.pdf", "2026-11")["plan"]["status"] == "no-go"
