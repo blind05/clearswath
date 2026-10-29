@@ -69,7 +69,7 @@ decoration, and never for whole blocks.
 - Sprayable zone: a green outline with an 8% fill, so the imagery stays readable.
 - No-spray area: red outline, 25% fill.
 - Spot spray: magenta cells at 55%. Held back: slate at 60%. Water: blue.
-- A legend names every layer in plain words and toggles it. Leaflet's default layer list is not used.
+- A legend names every layer in plain words and toggles it. The map library's default layer control is not used.
 
 ## Motion
 
@@ -82,3 +82,8 @@ The decision fades in once (200 ms) when a plan arrives. Nothing else moves on i
 - Buttons say what happens: "Plan the spray", "Try the demo", "Find weeds", "Fill the record".
 - Under every decision: "Not checked: weather and inversions, runoff points, your licence, field conditions."
 - Errors say what went wrong and what to do, without apologising.
+
+## Build
+
+Components are Astryx, themed from these tokens in `web-app/src/theme.ts`. Our own styles use StyleX, with the same
+palette in `web-app/src/tokens.stylex.ts`.

@@ -106,9 +106,10 @@ soil and agreed with the ground truth only 52% of the time, so it is not in the 
 - CoFly-WeedDB, CC BY 4.0. PhenoBench, CC BY-SA 4.0 (www.phenobench.org).
 - National Hydrography Dataset, The National Map and NAIP imagery (public domain). EPA Bulletins Live! Two and EPA
   product labels.
-- Leaflet and Leaflet.draw (BSD-2-Clause).
+- MapLibre GL JS (BSD-3-Clause); React, react-map-gl, Terra Draw, Astryx and StyleX (MIT); IBM Plex (SIL Open Font
+  License).
 
 ## Repository
 
-`app/` the service (FastAPI); `web/` the single-page map; `train/` Modal GPU jobs for the weed models; `evals/`
+`app/` the service (FastAPI); `web-app/` the page (React, built into `web/dist`); `train/` Modal GPU jobs for the weed models; `evals/`
 results and answer keys; `scripts/` demo builders and the label eval; `docs/CONTRACTS.md` module contracts.

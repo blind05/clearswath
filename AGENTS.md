@@ -2,7 +2,7 @@
 
 ## What this is
 Pesticide label + field outline -> legal spray zone for a drone or ground sprayer,
-plus the application record. Python 3.12, uv, FastAPI, Leaflet. Meta Global AI
+plus the application record. Python 3.12, uv, FastAPI, React + MapLibre. Meta Global AI
 Developer Hackathon, Oct 26 - Nov 4, 2026. Architecture and contracts: docs/CONTRACTS.md.
 
 ## Hard rules

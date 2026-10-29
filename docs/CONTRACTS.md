@@ -19,7 +19,7 @@ Don't change a contract unless the human asks.
 | `app/exports.py` | `spot_raster(grid)`, `write_spot_tif(grid, path)`, `dji_zip(field, spot_tif, rate)` | the cell grid; rate per ha | GeoTIFF on the cell grid (1 spray, 0 not, 255 outside); zip with `DJI/ShapeFile/boundary.*` and `DJI/Rx/prescription.tif` (layout TODO(verify) on a controller). No model calls |
 | `app/agent.py` | `run(field_path, label_path, month, method, excluded_rules=(), provider=None)` | same | `{run_id, answer, decision, trace, mode, result}`; `result` is what `pipeline.run` returns |
 | `app/records.py` | `transcribe(path)`, `fill_record(text, job)` | audio; transcript and job dict | text; `AppRecord` with `missing` list; drone/aerial jobs add `part137` (14 CFR 137.71 items, own `missing` list) |
-| `app/api.py` | `/api/demo`, `/api/demo/image/{name}`, `/api/label`, `/api/plan`, `/api/agent`, `/api/kml/{id}`, `/api/export/{id}/{dji,geojson}`, `/api/record`, `/api/photo` | form uploads | JSON for `web/index.html` |
+| `app/api.py` | `/api/demo`, `/api/demo/image/{name}`, `/api/label`, `/api/plan`, `/api/agent`, `/api/kml/{id}`, `/api/export/{id}/{dji,geojson}`, `/api/record`, `/api/photo` | form uploads | JSON for the page (`web-app/`) |
 
 Drift rules (engine rule 2) buffer the treated area toward unmanaged land: everything outside the field that
 the user hasn't marked as managed (`hazards["managed"]`), in every direction, or downwind only when a wind
