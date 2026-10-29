@@ -1,4 +1,13 @@
 # ClearSwath web app. Build: docker build -t clearswath .  Run: docker run -p 8000:8000 --env-file .env clearswath
+
+# The page: built here with Node, served by FastAPI from web/dist. Node never runs in the final image.
+FROM node:22.21.0-slim AS page
+WORKDIR /build/web-app
+COPY web-app/package.json web-app/package-lock.json ./
+RUN npm ci --no-audit --no-fund
+COPY web-app ./
+RUN npm run build
+
 FROM python:3.12-slim
 
 # rasterio's bundled GDAL needs libexpat, which slim leaves out
@@ -14,6 +23,7 @@ RUN uv sync --frozen --no-dev --no-install-project
 
 COPY app ./app
 COPY web ./web
+COPY --from=page /build/web/dist ./web/dist
 COPY data/demo ./data/demo
 
 RUN useradd --create-home clearswath && mkdir -p data/runs data/cache data/logs && chown -R clearswath data

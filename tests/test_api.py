@@ -342,14 +342,19 @@ def test_demo_rejects_unknown_field(client):
 
 
 def test_page_pins_its_scripts(client):
-    """Every external script and stylesheet is version-pinned and carries an integrity hash."""
+    """The built page (web/dist) loads nothing from third parties; the plain page pins each script with a hash."""
     import re
 
     page = client.get("/").text
     tags = re.findall(r"<(?:script|link)[^>]+(?:src|href)=\"https://[^\"]+\"[^>]*>", page)
-    assert any("leaflet-draw@1.0.4" in t for t in tags) and len(tags) == 4
-    assert all('integrity="sha256-' in t for t in tags)
-    assert "basemap.nationalmap.gov" in page and "remain responsible" in page
+    if api.WEB.name == "dist":
+        assert tags == []
+        bundle = "".join(client.get(f"/{src}").text for src in re.findall(r'src="/?(assets/[^"]+\.js)"', page))
+        assert "basemap.nationalmap.gov" in bundle and "remain responsible" in bundle
+    else:
+        assert any("leaflet-draw@1.0.4" in t for t in tags) and len(tags) == 4
+        assert all('integrity="sha256-' in t for t in tags)
+        assert "basemap.nationalmap.gov" in page and "remain responsible" in page
 
 
 def test_health(client):

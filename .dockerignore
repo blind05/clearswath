@@ -18,3 +18,5 @@ evals
 scripts
 docs
 src
+web-app/node_modules
+web/dist

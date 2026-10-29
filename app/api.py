@@ -538,4 +538,6 @@ def export(run_id: str, fmt: str, rate: float | None = None):
 
 
 app.add_middleware(Guard)
-app.mount("/", StaticFiles(directory=ROOT / "web", html=True, check_dir=False), name="web")
+# The React build (web-app/, `npm run build`) when present, else the plain page.
+WEB = ROOT / "web" / "dist" if (ROOT / "web" / "dist" / "index.html").exists() else ROOT / "web"
+app.mount("/", StaticFiles(directory=WEB, html=True, check_dir=False), name="web")
