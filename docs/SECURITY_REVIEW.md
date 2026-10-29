@@ -65,7 +65,7 @@ can upload files and trigger paid Meta Model API / Baseten calls during judging 
 | Supply chain | Known vulnerabilities | `uvx pip-audit -r <uv export --frozen --no-dev>` (87 pinned packages): "No known vulnerabilities found"; dev deps: same. |
 | Supply chain | Pinning and sources | `uv.lock`: 92 packages, all from `https://pypi.org/simple`, none from git/URL/path. The page loads no third-party scripts or stylesheets (`tests/test_api.py::test_page_loads_no_third_party_scripts`); npm packages are pinned to exact versions in `web-app/package.json` and `package-lock.json`, fonts self-hosted. |
 | Supply chain | Dockerfile | `python:3.12-slim`, `uv sync --frozen --no-dev`, runs as user `clearswath` (`docker exec ... id -un` -> `clearswath`). |
-| Repo | Agent config | No `.mcp.json`, no `.claude/settings.local.json`, no `bypassPermissions`; `git add`, `commit`, `push`, `reset`, `rebase` and `--amend` are `ask` (since 2026-10-29: history changes only on request, AGENTS.md); `Read(./.env)` is `ask` (see M6, L5). |
+| Repo | Agent config | No `.mcp.json`, no `.claude/settings.local.json`, no `bypassPermissions`; `git add`, `commit`, `push`, `reset`, `rebase` and `--amend` are `ask` (since 2026-10-29: history changes only on request, AGENTS.md); `Read(./.env)` stays denied (see M6, L5). |
 | Repo | Git hooks | `core.hooksPath = .githooks`; `pre-commit` (blocks `.env`, keys, failing tests) and `commit-msg` are executable; `git grep no-verify` -> none. |
 | Repo | GitHub secret scanning | `secret_scanning: enabled`, `push_protection: enabled`. |
 
