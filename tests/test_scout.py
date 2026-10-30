@@ -4,7 +4,7 @@ import geopandas as gpd
 import pytest
 from PIL import Image
 
-from app import scout
+from app import scout, segment
 
 UTM = 32615
 X, Y = 500_000, 4_650_000
@@ -29,16 +29,20 @@ def tile(tmp_path):
 
 @pytest.fixture
 def models(monkeypatch):
-    """Scripted Wonder answers (find, then review) and SAM answers, in call order; records what was asked."""
-    seen = {"wonder": [], "sam": []}
+    """Scripted Wonder answers (find, then review) and SAM box answers, in call order; SAM's text prompts answer
+    by phrase (they run alongside Wonder, so their order isn't fixed). Records what was asked."""
+    seen = {"wonder": [], "sam": [], "text": []}
 
-    def setup(wonder, sam):
+    def setup(wonder, sam, text=None):
         def chat_json(messages, schema, name, *, purpose, model, provider, reasoning_effort):
             seen["wonder"].append((name, model, provider, messages[0]["content"][0]["text"]))
             assert reasoning_effort == "low"
             return wonder.pop(0)
 
         def sam_raw(png, prompt, *, purpose):
+            if purpose.startswith("segment:"):
+                seen["text"].append(prompt)
+                return (text or {}).get(prompt, "")
             seen["sam"].append(prompt)
             return sam.pop(0)
 
@@ -48,7 +52,7 @@ def models(monkeypatch):
     return setup
 
 
-def hazard(kind, box):
+def tree(box, kind="tree line"):
     return {"kind": kind, "box": box, "note": ""}
 
 
@@ -57,62 +61,58 @@ def area(polys):
     return gpd.GeoSeries(polys, crs=4326).to_crs(UTM).area.sum() if polys else 0
 
 
-def test_boxes_become_hazards_by_kind(tile, models):
-    seen = models([{"hazards": [hazard("tree line", [10, 20, 14, 24]), hazard("building", [40, 40, 44, 44])]},
-                   {"keep": [1, 2], "add": []}],
-                  [sam_text((1, 10, 20), (2, 40, 40))])
+def test_wonder_boxes_become_tree_lines_and_text_prompts_the_rest(tile, models):
+    seen = models([{"hazards": [tree([10, 20, 14, 24]), tree([40, 40, 44, 44], "woods")]}],
+                  [sam_text((1, 10, 20), (2, 40, 40))],
+                  {"building": sam_text((0, 20, 50)), "pond": sam_text((0, 50, 10))})
     out = scout.scout(tile)
-    assert out["water"] == [] and area(out["building"]) == pytest.approx(1000, abs=1)
-    assert area(out["habitat"]) == pytest.approx(1000, abs=1)  # the mask, not the 25-pixel box
-    assert [s[:3] for s in seen["wonder"]] == [("find", "muse-wonder-1.0", "meta"), ("review", "muse-wonder-1.0", "meta")]
-    assert "64 x 64\npixels" in seen["wonder"][0][3] and "10.0 m per pixel" in seen["wonder"][0][3] and "1: tree line" in seen["wonder"][1][3]
+    assert area(out["habitat"]) == pytest.approx(2000, abs=2)  # two masks, not two 25-pixel boxes
+    assert area(out["building"]) == pytest.approx(1000, abs=1) and area(out["water"]) == pytest.approx(1000, abs=1)
+    assert [w[:3] for w in seen["wonder"]] == [("find", "muse-wonder-1.0", "meta")]  # no review in the app
+    assert "64 x 64 pixels" in seen["wonder"][0][3] and "10.0 m per pixel" in seen["wonder"][0][3]
     assert "box;x1=10;y1=20" in seen["sam"][0] and "box;x1=40;y1=40" in seen["sam"][0]
+    assert sorted(seen["text"]) == sorted(segment.PHRASES["building"] + segment.PHRASES["water"])
+    assert out["trace"] == ["Muse Wonder marked 2 tree lines and woods; SAM 3.1 outlined 2 of them",
+                            "SAM 3.1 found 4 building and 4 possible water areas from text prompts"]  # the test mask is 4 pieces
+    assert "draft" not in out
 
 
-def test_review_drops_and_adds(tile, models):
-    seen = models([{"hazards": [hazard("water", [10, 20, 14, 24]), hazard("tree line", [40, 40, 44, 44])]},
-                   {"keep": [2], "add": [hazard("building", [20, 50, 24, 54])]}],
+def test_review_drops_and_adds_and_keeps_the_draft(tile, models):
+    seen = models([{"hazards": [tree([10, 20, 14, 24]), tree([40, 40, 44, 44])]},
+                   {"keep": [2], "add": [tree([20, 50, 24, 54], "woods")]}],
                   [sam_text((1, 10, 20), (2, 40, 40)), sam_text((3, 20, 50))])
-    out = scout.scout(tile)
-    assert out["water"] == [] and area(out["habitat"]) == pytest.approx(1000, abs=1)
-    assert area(out["building"]) == pytest.approx(1000, abs=1)
+    out = scout.scout(tile, review=True)
+    assert area(out["habitat"]) == pytest.approx(2000, abs=2)  # 2 kept from the first round, 3 added
+    assert area(out["draft"]["habitat"]) == pytest.approx(2000, abs=2)  # 1 and 2, before the review
     assert "3<|box;x1=20;y1=50" in seen["sam"][1]
-    assert area(out["draft"]["water"]) == pytest.approx(1000, abs=1)  # the draft still has what the review dropped
-    assert out["draft"]["building"] == []
-    assert out["trace"] == ["Muse Wonder marked 2 features; SAM 3.1 outlined 2 of them",
-                            "Muse Wonder checked the outlines: kept 1, dropped 1",
-                            "Muse Wonder marked 1 features it had missed; SAM 3.1 outlined 1"]
+    assert out["trace"][2:] == ["Muse Wonder checked the outlines: kept 1, dropped 1",
+                                "Muse Wonder marked 1 features it had missed; SAM 3.1 outlined 1"]
 
 
 def test_review_cannot_keep_what_sam_never_outlined(tile, models):
-    models([{"hazards": [hazard("woods", [10, 20, 14, 24])]}, {"keep": [1, 7], "add": []}],
-           [sam_text((1, 10, 20))])
-    assert area(scout.scout(tile)["habitat"]) == pytest.approx(1000, abs=1)
+    models([{"hazards": [tree([10, 20, 14, 24])]}, {"keep": [1, 7], "add": []}], [sam_text((1, 10, 20))])
+    assert area(scout.scout(tile, review=True)["habitat"]) == pytest.approx(1000, abs=1)
 
 
 def test_boxes_are_clamped_and_empty_ones_skipped(tile, models):
-    seen = models([{"hazards": [hazard("woods", [50, 50, 90, 99]), hazard("water", [30, 30, 30, 40])]},
-                   {"keep": [1], "add": []}],
-                  [sam_text((1, 50, 50))])
+    seen = models([{"hazards": [tree([50, 50, 90, 99]), tree([30, 30, 30, 40])]}], [sam_text((1, 50, 50))])
     scout.scout(tile)
     assert "1<|box;x1=50;y1=50;x2=63;y2=63" in seen["sam"][0] and "2<|box" not in seen["sam"][0]
 
 
 def test_low_confidence_masks_are_dropped(tile, models):
     weak = sam_text((1, 10, 20)).replace("|><|mask", ";c=0.2|><|mask").replace("8?|>", "8?;c=0.2|>")
-    seen = models([{"hazards": [hazard("building", [10, 20, 14, 24])]}], [weak])
-    out = scout.scout(tile)
-    assert out["building"] == [] and len(seen["wonder"]) == 1  # nothing outlined, so nothing to review
+    models([{"hazards": [tree([10, 20, 14, 24])]}], [weak])
+    assert scout.scout(tile)["habitat"] == []
 
 
-def test_nothing_found_makes_no_sam_call(tile, models):
+def test_no_trees_makes_no_box_call(tile, models):
     seen = models([{"hazards": []}], [])
     out = scout.scout(tile)
     assert seen["sam"] == [] and out["habitat"] == [] and out["trace"][0].startswith("Muse Wonder marked 0")
 
 
 def test_more_than_16_boxes_go_in_batches(tile, models):
-    boxes = [hazard("woods", [2 * i, 0, 2 * i + 1, 1]) for i in range(18)]
-    seen = models([{"hazards": boxes}], [sam_text(), sam_text()])
+    seen = models([{"hazards": [tree([2 * i, 0, 2 * i + 1, 1]) for i in range(18)]}], [sam_text(), sam_text()])
     scout.scout(tile)
     assert len(seen["sam"]) == 2 and seen["sam"][0].count("<|box") == 16 and seen["sam"][1].count("<|box") == 2

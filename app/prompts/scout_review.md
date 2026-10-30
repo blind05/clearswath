@@ -5,9 +5,9 @@ magenta outline carries the number of your box. The list below gives each number
 
 Check each outline against the photo:
 - keep it if it covers the feature you meant (a rough edge is fine);
-- drop it if it covers something else: crop, grass, a road, shadow, or nothing.
+- drop it if it covers something else: crop, grass, a road, a building, water, shadow, or nothing.
 
-Then look for features you missed: tree lines, woods, buildings or water with no outline. Give each a new tight box,
-in the same format as before.
+Then look for tree lines and woods you missed: any with no outline. Give each a new tight box, in the same
+format as before.
 
 Answer only with the JSON the schema asks for.

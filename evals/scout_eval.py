@@ -4,8 +4,8 @@ uv run python evals/scout_eval.py [--tiles 20]
 
 Live and paid (cached per tile after the first run): the Meta API (Muse Wonder, SAM 3.1), the Planetary Computer
 (NAIP, ESA WorldCover) and Microsoft's building footprints.
-Methods: SAM 3.1 with the fixed text prompts (segment.PHRASES); Muse Wonder + SAM 3.1 boxes before Wonder's review
-("draft"); and after it (what the app uses).
+Methods: SAM 3.1 with the fixed text prompts (segment.PHRASES); the app's scout (Muse Wonder boxes tree lines and woods
+for SAM 3.1, SAM's text prompts find buildings and water); and the same with Wonder's second look at its outlines.
 Truth: trees, shrubs and water from ESA WorldCover 2021 v200 (10 m, CC BY 4.0); buildings from Microsoft Global ML Building
 Footprints (ODbL). Both are coarser or older than the 2022-2023 NAIP the models see; see the results file.
 """
@@ -44,6 +44,7 @@ FIELD_M = 400  # each sample is a 400 m square "field"; fetch_tile adds its marg
 LINKS = "https://minedbuildings.z5.web.core.windows.net/global-buildings/dataset-links.csv"
 PC = "https://planetarycomputer.microsoft.com/api/stac/v1"
 KINDS = ("habitat", "building", "water")
+MIN_TREE_CELLS = 20  # tiles with fewer tree or shrub cells are left out of the per-tile mean
 
 
 def fields(n: int) -> list[Path]:
@@ -80,14 +81,16 @@ def methods(field: Path, png: Path) -> dict:
                 found[kind] += [mapping(p) for p in segment.segment_tile(png, phrase)]
         return found
 
-    def scouted():
-        out = scout.scout(png)
-        as_json = lambda d: {k: [mapping(p) for p in d[k]] for k in KINDS}  # noqa: E731
-        return {"draft": as_json(out["draft"]), "reviewed": as_json(out), "trace": out["trace"]}
+    def scouted():  # one Wonder answer gives both: the app's trees are the draft, before the review
+        out = scout.scout(png, review=True)
+        rest = {k: [mapping(p) for p in out[k]] for k in ("building", "water")}
+        return {"app": {"habitat": [mapping(p) for p in out["draft"]["habitat"]], **rest},
+                "reviewed": {"habitat": [mapping(p) for p in out["habitat"]], **rest}, "trace": out["trace"]}
 
-    s = _cached(png.with_name("scout_eval.json"), scouted)
+    s = _cached(png.with_name("scout_split.json"), scouted)
     return {"SAM 3.1, text prompts": _cached(png.with_name("baseline.json"), baseline),
-            "Wonder + SAM, before review": s["draft"], "Wonder + SAM, after review": s["reviewed"]}
+            "The app: Wonder boxes for trees, SAM text for the rest": s["app"],
+            "The app plus Wonder's review of its tree outlines": s["reviewed"]}
 
 
 def grid(meta: dict) -> tuple[Affine, int, int]:
@@ -178,20 +181,35 @@ def report(rows: list[dict], failed: list[str]) -> str:
              "WorldCover 2021 v200 (10 m cells, CC BY 4.0); "
              "buildings from Microsoft Global ML Building Footprints (ODbL), 40 m2 and up. A building counts as found "
              "if an outline touches it (3 m tolerance).", "",
-             "| Method | Trees and shrubs: precision / recall | Water: precision / recall | Buildings found | Building outlines on a building |",
-             "|---|---|---|---|---|"]
+             "| Method | Trees and shrubs, mean per tile: recall / precision | Trees and shrubs, all cells pooled: "
+             "recall / precision | Water: precision / recall | Buildings found | Building outlines on a building |",
+             "|---|---|---|---|---|---|"]
+    wooded = [r for r in rows if r["tree_cells"] >= MIN_TREE_CELLS]
     for name in names:
         tp, fp, fn = (sum(r[(name, "habitat")][i] for r in rows) for i in range(3))
         wtp, wfp, wfn = (sum(r[(name, "water")][i] for r in rows) for i in range(3))
         hit, total, right, outlines = (sum(r[(name, "building")][i] for r in rows) for i in range(4))
-        lines.append(f"| {name} | {pct(tp, tp + fp)} / {pct(tp, tp + fn)} | {pct(wtp, wtp + wfp)} / "
+        per = [r[(name, "habitat")] for r in wooded]
+        recall = np.mean([t / (t + n) for t, f, n in per])
+        precision = np.mean([t / (t + f) for t, f, n in per if t + f])
+        lines.append(f"| {name} | {recall:.0%} / {precision:.0%} | {pct(tp, tp + fn)} / {pct(tp, tp + fp)} | "
+                     f"{pct(wtp, wtp + wfp)} / "
                      f"{pct(wtp, wtp + wfn)} | {hit} of {total} ({pct(hit, total)}) | {right} of {outlines} |")
+    lines += ["", f"Mean per tile is over the {len(wooded)} tiles with at least {MIN_TREE_CELLS} tree or shrub cells; it "
+              "is the fairer number, because one wooded Montana tile holds a third of all tree cells and dominates the "
+              "pooled figure. One Wonder run per tile: on single tiles Wonder varies a lot between runs (in two runs "
+              "the same day, field_00 went from 0% to 91% recall and field_16 from 100% to 49%)."]
     lines += ["", "Per tile (trees and shrubs: true positive / false positive / missed 10 m cells, after review):", "",
               "| Tile | NAIP date | Tree and shrub cells | Water cells | Buildings | After review |", "|---|---|---|---|---|---|"]
     for r in rows:
         lines.append(f"| {r['tile']} | {r['date']} | {r['tree_cells']} | {r['water_cells']} | {r['buildings']} | "
                      f"{' / '.join(map(str, r[(names[-1], 'habitat')]))} |")
-    lines += ["", "Limits: WorldCover is 10 m and from 2021, so a 15 m shelterbelt may fill only part of a cell, and "
+    lines += ["", "Why the split: in the first run (same tiles, same day) Wonder also boxed buildings and water. It found "
+              "the same 27 of 35 buildings as SAM's text prompts but only 29 of its 44 building outlines were on a "
+              "building (text prompts: 30 of 39), and its water was 14% precise (28% after its review) against 95% "
+              "for text prompts. On trees that first prompt scored the same as the trees-only one (mean per tile 62% "
+              "recall, 64% precision), and its review left trees unchanged.",
+              "", "Limits: WorldCover is 10 m and from 2021, so a 15 m shelterbelt may fill only part of a cell, and "
               "trees planted or cut since then count against the models. Footprints miss some farm buildings and "
               "include some that are gone. Water here is the scout's possible water, which the app never cuts out."]
     return "\n".join(lines) + "\n"

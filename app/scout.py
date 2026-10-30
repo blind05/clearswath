@@ -1,11 +1,14 @@
-"""Muse Wonder points out hazards on the aerial tile, SAM 3.1 outlines them, and Wonder checks the outlines once.
+"""Hazards on the aerial tile: Muse Wonder boxes tree lines and woods for SAM 3.1; SAM's text prompts find the rest.
 
-SAM 3.1 returns no masks for "tree line", "creek" or "building" on NAIP tiles, but outlines a feature closely when
-given a box around it, so Wonder supplies the boxes. The models only propose shapes; buffers.plan decides.
+On 20 NAIP tiles (evals/results_scout.md) SAM 3.1 from text prompts finds 8% of trees and shrubs, but 77% of
+buildings and open water at 95% precision; from Wonder's boxes it finds 82% of trees and shrubs. So each does what
+it measurably does best. Wonder's second look at the outlines (review=True) left trees unchanged, so the app skips
+it. The models only propose shapes; buffers.plan decides, and their water is only possible water.
 """
 
 import json
 import math
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 import numpy as np
@@ -15,8 +18,9 @@ from PIL import Image, ImageDraw
 
 from app import llm, segment
 
-# Wonder's words -> the hazard lists buffers.plan reads
-KINDS = {"tree line": "habitat", "woods": "habitat", "building": "building", "water": "water"}
+# Wonder's words -> the hazard list buffers.plan reads; buildings and water come from SAM's text prompts
+KINDS = {"tree line": "habitat", "woods": "habitat"}
+TEXT = ("building", "water")  # kinds SAM finds from segment.PHRASES alone
 MIN_CONFIDENCE = 0.5  # SAM masks below this are dropped
 # "low": ~25 s and every hazard kind on the SD tile; default effort took 1-3 min, "minimal" missed buildings
 REASONING = "low"
@@ -75,22 +79,30 @@ def _overlay(png: Path, masks: dict, out: Path) -> Path:
     return out
 
 
-def scout(png: str | Path) -> dict:
-    """Aerial tile (with its imagery.fetch_tile sidecar) -> hazard polygons in lon/lat, plus a trace of each step."""
+def scout(png: str | Path, review: bool = False) -> dict:
+    """Aerial tile (with its imagery.fetch_tile sidecar) -> {habitat, building, water: lon/lat polygons, trace}.
+
+    review=True adds Wonder's second look at its outlines, and "draft": the tree outlines before it (for the eval).
+    """
     png = Path(png)
     meta = json.loads(png.with_suffix(".json").read_text())
     width, height = meta["width"], meta["height"]
     gsd = round(math.hypot(meta["transform"][0], meta["transform"][1]), 2)
 
-    found = _ask(png, llm.load_prompt("scout_find").format(width=width, height=height, gsd=gsd), FIND, "find")
-    items = {n: h for n, h in enumerate(found["hazards"], 1)}
-    boxes = {n: b for n, h in items.items() if (b := _clip(h["box"], width, height))}
-    masks = _masks(png, boxes, width, height)
-    trace = [f"Muse Wonder marked {len(items)} features; SAM 3.1 outlined {len(masks)} of them"]
+    with ThreadPoolExecutor(4) as pool:  # SAM's text prompts run while Wonder looks at the tile
+        text = {kind: [pool.submit(segment.segment_tile, png, p) for p in segment.PHRASES[kind]] for kind in TEXT}
+        found = _ask(png, llm.load_prompt("scout_find").format(width=width, height=height, gsd=gsd), FIND, "find")
+        items = {n: h for n, h in enumerate(found["hazards"], 1)}
+        boxes = {n: b for n, h in items.items() if (b := _clip(h["box"], width, height))}
+        masks = _masks(png, boxes, width, height)
+        by_text = {kind: [p for f in futures for p in f.result()] for kind, futures in text.items()}
+    trace = [f"Muse Wonder marked {len(items)} tree lines and woods; SAM 3.1 outlined {len(masks)} of them",
+             f"SAM 3.1 found {len(by_text['building'])} building and {len(by_text['water'])} possible water areas "
+             "from text prompts"]
 
-    draft = _shapes(items, masks, set(masks), meta)  # before the review, for evals/scout_eval.py
+    draft = _shapes(items, masks, set(masks), meta)
     kept, added = set(masks), {}
-    if masks:
+    if review and masks:
         listing = "\n".join(f"{n}: {items[n]['kind']} ({items[n]['note']})" for n in sorted(masks))
         review = _ask(_overlay(png, masks, png.with_name("scout_review.png")),
                       llm.load_prompt("scout_review").format(width=width, height=height, items=listing), REVIEW,
@@ -104,12 +116,13 @@ def scout(png: str | Path) -> dict:
             trace.append(f"Muse Wonder marked {len(added)} features it had missed; SAM 3.1 outlined {len(new)}")
         items, masks, kept = items | added, masks | new, kept | set(new)
 
-    return _shapes(items, masks, kept, meta) | {"trace": trace, "draft": draft}
+    return {"habitat": _shapes(items, masks, kept, meta)["habitat"], **by_text, "trace": trace} | (
+        {"draft": draft} if review else {})
 
 
 def _shapes(items: dict, masks: dict, keep: set, meta: dict) -> dict:
     """Masks of the kept boxes -> {water, building, habitat: lon/lat polygons}."""
-    out = {kind: [] for kind in set(KINDS.values())}
+    out = {"habitat": []}
     for n in sorted(keep):
         out[KINDS[items[n]["kind"]]] += segment.record_polygons(masks[n], meta["width"], meta["height"],
                                                                 meta["transform"], meta["crs"])

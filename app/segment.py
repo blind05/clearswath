@@ -17,8 +17,9 @@ from app import geo, imagery, llm, scout
 USGS_LAYERS = {"waterbody_hr": "pond and lake", "flowline_hr": "stream"}
 CACHE = Path(__file__).resolve().parent.parent / "data" / "cache"
 log = logging.getLogger(__name__)
-# SAM text prompts, one noun phrase per request. On NAIP tiles none of these returns a mask (2026-10-29), so
-# find_hazards uses scout.py's boxes instead; these stay as the fixed-prompt baseline in evals/scout_eval.py.
+# SAM text prompts, one noun phrase per request. scout.py uses the building and water ones (77% of buildings, open
+# water at 95% precision on 20 NAIP tiles); "tree line" finds 8% of trees, so Wonder's boxes do that job and it
+# stays only as the eval's baseline (evals/results_scout.md).
 PHRASES = {
     "water": ["pond", "creek", "river"],
     "building": ["building"],
