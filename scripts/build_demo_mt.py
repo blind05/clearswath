@@ -149,7 +149,7 @@ if __name__ == "__main__":
     ap.add_argument("--backbone")
     ap.add_argument("--view", choices=["full", "zoom"])
     ap.add_argument("--window", type=float)
-    ap.add_argument("--provider", default="meta")
+    ap.add_argument("--provider", default="meta", help="label reader; the demos use Muse Spark 1.3 (see build_demo.py)")
     ap.add_argument("--catch", type=float, default=0.95, help="share of spurge plots the map must catch")
     a = ap.parse_args()
     if a.overlay_only:

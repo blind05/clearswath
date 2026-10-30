@@ -11,6 +11,14 @@ PAGES = ["Acme Weed-B-Gone  EPA Reg. No. 123-45\nRead the label.",
 
 
 @pytest.fixture(autouse=True)
+def no_dotenv(monkeypatch):
+    """Provider choice comes from these tests, never from the developer's .env."""
+    monkeypatch.setattr(llm, "load_dotenv", lambda *a, **kw: None)
+    for var in ("LLM_PROVIDER", "LABEL_PROVIDER", "LABEL_FALLBACK_PROVIDER"):
+        monkeypatch.delenv(var, raising=False)
+
+
+@pytest.fixture(autouse=True)
 def cache(tmp_path, monkeypatch):
     monkeypatch.setattr(label_reader, "CACHE", tmp_path / "label_cache")
     return tmp_path / "label_cache"
@@ -171,7 +179,39 @@ def test_provider_has_its_own_cache_entry(monkeypatch, pdf, cache):
     label_reader.read_label(pdf)
     label_reader.read_label(pdf, provider="baseten")
     label_reader.read_label(pdf, provider="baseten")
-    assert seen == [None, "baseten"] and len(list(cache.iterdir())) == 2
+    assert seen == ["meta", "baseten"] and len(list(cache.iterdir())) == 2
+
+
+def test_labels_default_to_label_provider_then_fall_back(monkeypatch, pdf, cache):
+    monkeypatch.setenv("LABEL_PROVIDER", "baseten")
+    monkeypatch.setenv("LABEL_FALLBACK_PROVIDER", "meta")
+    seen = []
+
+    def chat_json(messages, schema, name, *, provider, **kw):
+        seen.append(provider)
+        if provider == "baseten":
+            raise TimeoutError("Baseten timed out")
+        return {"product_name": "Acme", "epa_reg_no": "123-45", "rules": [rule()]}
+
+    monkeypatch.setattr(llm, "chat_json", chat_json)
+    assert [r.kind for r in label_reader.read_label(pdf).rules] == ["buffer"]
+    assert seen == ["baseten", "meta"]
+    label_reader.read_label(pdf)
+    assert seen == ["baseten", "meta"]  # the fallback's read is cached and found next time
+
+
+def test_an_explicit_provider_has_no_fallback(monkeypatch, pdf):
+    monkeypatch.setenv("LABEL_FALLBACK_PROVIDER", "meta")
+    seen = []
+
+    def chat_json(messages, schema, name, *, provider, **kw):
+        seen.append(provider)
+        raise TimeoutError("down")
+
+    monkeypatch.setattr(llm, "chat_json", chat_json)
+    with pytest.raises(TimeoutError):
+        label_reader.read_label(pdf, provider="baseten")
+    assert seen == ["baseten"]  # an eval of one provider must not quietly score another
 
 
 def test_photo_transcription_stays_on_meta(monkeypatch, tmp_path):

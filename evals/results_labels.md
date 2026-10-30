@@ -18,4 +18,7 @@ read that match the key (rules the key lists as also valid count as right).
   all; that run is not in the table. The app now asks again and never caches an empty read.
 - Spark 1.3 twice read Warrior II's 150 ft aerial buffer as applying only to non-ULV aerial spraying, where the key
   says it always applies. The label may support Spark's reading; the key needs a review there.
+- Spark Open on Baseten read Warrior II's 450 ft buffer, which the label limits to ULV aerial spraying, as always
+  applying, in 3 of 3 runs. That errs strict (it never loosens a plan) but leaves nothing for the applicator to
+  untick, so the demos keep Muse Spark 1.3's reads; live runs read with Baseten first.
 - Conditions (whether a rule only applies in some cases) are the weakest part for every model: 25-88% right.

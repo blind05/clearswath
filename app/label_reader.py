@@ -2,6 +2,8 @@
 
 import hashlib
 import json
+import logging
+import os
 from pathlib import Path
 from typing import Literal
 
@@ -9,6 +11,8 @@ import pymupdf
 from pydantic import BaseModel, ValidationError
 
 from app import llm
+
+log = logging.getLogger(__name__)
 
 CACHE = Path(__file__).resolve().parent.parent / "data" / "cache" / "labels"
 MAX_PAGES = 80  # real labels run 20-70 pages; more would be a very large paid prompt
@@ -118,18 +122,42 @@ def _check(rule: dict, pages: list[str]) -> str | None:
     return None
 
 
+def label_providers() -> list[str]:
+    """Who reads labels: LABEL_PROVIDER (else LLM_PROVIDER), then LABEL_FALLBACK_PROVIDER if that one fails."""
+    first = llm.resolve_provider(os.getenv("LABEL_PROVIDER") or None)  # resolve_provider loads .env first
+    fallback = os.getenv("LABEL_FALLBACK_PROVIDER")
+    return [first] + ([llm.resolve_provider(fallback)] if fallback and fallback != first else [])
+
+
 def read_raw(path: str | Path, provider: str | None = None) -> dict:
-    """The model's part: page text (a transcription for photos) and raw rules. Cached on disk per model."""
+    """The model's part: page text (a transcription for photos) and raw rules. Cached on disk per model.
+
+    provider: read with this one only (as the eval does); by default label_providers(), the next one answering if
+    the first fails.
+    """
     path = Path(path)
     prompt = llm.load_prompt("label")
-    key = hashlib.sha256(path.read_bytes() + prompt.encode() + llm.spark_model(provider).encode()
-                         + json.dumps(SCHEMA, sort_keys=True).encode()).hexdigest()[:20]
-    cached = CACHE / f"{key}.json"
-    if cached.exists():
-        return json.loads(cached.read_text())
+    order = [provider] if provider else label_providers()
+
+    def cache_path(name: str) -> Path:
+        key = hashlib.sha256(path.read_bytes() + prompt.encode() + llm.spark_model(name).encode()
+                             + json.dumps(SCHEMA, sort_keys=True).encode()).hexdigest()[:20]
+        return CACHE / f"{key}.json"
+
+    if saved := next((c for c in map(cache_path, order) if c.exists()), None):
+        return json.loads(saved.read_text())
     pages, source = _pages(path)
     text = "\n\n".join(f"=== Page {n} ===\n{t}" for n, t in enumerate(pages, 1))
+    for i, name in enumerate(order):
+        try:
+            return _read(text, pages, source, prompt, name, cache_path(name))
+        except Exception:  # a provider that is down, slow or misconfigured: the next one reads it
+            if i + 1 == len(order):
+                raise
+            log.exception("label read on %s failed; trying %s", name, order[i + 1])
 
+
+def _read(text: str, pages: list[str], source: str, prompt: str, provider: str, cached: Path) -> dict:
     def ask() -> dict:
         return llm.chat_json([{"role": "system", "content": prompt},
                               {"role": "user", "content": text}], SCHEMA, "label_rules", purpose="label",

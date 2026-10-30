@@ -22,6 +22,8 @@ ap.add_argument("--month", default="2026-11")
 month = ap.parse_args().month
 
 label_path = DEMO / "label.pdf"
+# Muse Spark 1.3 reads the demo label. Spark Open on Baseten (live runs' default) read the 450 ft ULV-only buffer as
+# applying always in 3 of 3 reads (evals/results_labels.md): stricter, never looser, but the rule can't be unticked.
 raw = label_reader.read_raw(label_path, provider="meta")
 label = label_reader.verify(raw)
 print(f"label: {label.product_name} ({label.epa_reg_no}), {len(label.rules)} rules, {len(label.dropped)} dropped")

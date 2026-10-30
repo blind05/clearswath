@@ -25,7 +25,8 @@ Press **Try the demo**. The demo replays saved real runs, so it is free and inst
 
 - **Montana rangeland, leafy spurge.** A 24-acre block of a real drone orthomosaic (MPG Ranch, 1.27 cm per
   pixel), sprayed with Tordon 22K. A stream crosses the block; Muse Wonder and SAM 3.1 outline the trees along it.
-  Result: **Adjust**; 23.6 of 24.1 acres may be sprayed, and the weed map sprays 9.7 of them. Tick "Ask Muse Spark to
+  Result: **Adjust**; 23.6 of 24.1 acres may be sprayed, and the weed map sprays 9.7 of them. Both demos' labels
+  were read by Muse Spark 1.3; live runs read labels with Muse Spark Open on Baseten, falling back to Spark 1.3. Tick "Ask Muse Spark to
   explain the plan" to see Muse Spark 1.3's saved answer, with each tool it called.
 - **South Dakota cropland**, linked from the Montana result. A field drawn up to a creek, sprayed with Warrior II.
   The 150 ft aerial buffer takes a strip along the creek (Adjust), and the corrected outline is clear (No conflicts in

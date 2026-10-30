@@ -26,7 +26,11 @@ services:
         value: "5"
       - key: DAILY_RUN_CAP
         value: "200"
-      - key: LLM_PROVIDER  # meta once the Meta Model API key has access
-        value: fireworks
+      - key: LLM_PROVIDER  # Muse Spark 1.3: the agent's explanation and the application record
+        value: meta
       - key: AGENT_FALLBACK_PROVIDER  # answers for the agent if LLM_PROVIDER is down
         value: baseten
+      - key: LABEL_PROVIDER  # Muse Spark Open on Baseten reads labels: the open-weight path Baseten verifies
+        value: baseten
+      - key: LABEL_FALLBACK_PROVIDER  # reads the label if Baseten is down or slow
+        value: meta
