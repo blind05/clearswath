@@ -4,7 +4,7 @@ import geopandas as gpd
 import pytest
 from shapely.geometry import box
 
-from app import imagery, segment
+from app import imagery, scout, segment
 
 UTM = 32615
 X, Y = 500_000, 4_650_000
@@ -80,11 +80,11 @@ def test_find_hazards_merges_and_caches(tmp_path, monkeypatch):
         png.write_bytes(b"png")
         png.with_suffix(".json").write_text(json.dumps(META))
 
-    sam_pond = box(-93.0005, 42.0, -93.0, 42.0005)
+    scouted_pond, shelterbelt = box(-93.0005, 42.0, -93.0, 42.0005), box(-93.002, 42.0, -93.001, 42.0002)
 
-    def segment_tile(png, phrase):
-        calls.append(phrase)
-        return [sam_pond] if phrase == "pond" else []
+    def scout_tile(png):
+        calls.append("scout")
+        return {"water": [scouted_pond], "building": [], "habitat": [shelterbelt], "trace": ["Muse Wonder marked 2"]}
 
     pond = box(-93.0, 42.0, -92.999, 42.001)
 
@@ -94,19 +94,49 @@ def test_find_hazards_merges_and_caches(tmp_path, monkeypatch):
 
     monkeypatch.setattr(imagery, "fetch_tile", fetch_tile)
     monkeypatch.setattr(imagery, "usgs_water", usgs)
-    monkeypatch.setattr(segment, "segment_tile", segment_tile)
+    monkeypatch.setattr(scout, "scout", scout_tile)
 
     out = segment.find_hazards(field)
-    assert out["water_source"] == "usgs+sam" and out["imagery_date"] == "2023-07-09"
-    assert out["water"][0].equals(pond) and out["water"][1].equals(sam_pond)
-    assert out["building"] == [] and out["habitat"] == [] and out["water_warnings"] == []
-    phrases = [p for ps in segment.PHRASES.values() for p in ps]
-    assert calls == ["tile", *phrases, "usgs"]
+    assert out["water_source"] == "usgs" and out["imagery_date"] == "2023-07-09"
+    assert len(out["water"]) == 1 and out["water"][0].equals(pond)  # the scout's pond is only possible water
+    assert out["possible_water"][0].equals(scouted_pond)
+    assert out["habitat"][0].equals(shelterbelt) and out["building"] == [] and out["water_warnings"] == []
+    assert out["scout_trace"] == ["Muse Wonder marked 2"] and out["imagery_warnings"] == []
+    assert calls == ["tile", "scout", "usgs"]
 
     calls.clear()
     again = segment.find_hazards(field)
-    assert calls == [] and again["water_source"] == "usgs+sam"
-    assert len(again["water"]) == 2
+    assert calls == [] and again["water_source"] == "usgs"
+    assert again["possible_water"][0].equals(scouted_pond) and again["habitat"][0].equals(shelterbelt)
+
+
+def test_failed_scout_warns_and_is_not_cached(tmp_path, monkeypatch):
+    field = tmp_path / "field.geojson"
+    field.write_text(json.dumps({"type": "Polygon", "coordinates": [[[-93, 42], [-93, 42.01],
+                                                                      [-92.99, 42.01], [-93, 42]]]}))
+    monkeypatch.setattr(segment, "CACHE", tmp_path / "cache")
+
+    def fetch_tile(fp, png):
+        png.parent.mkdir(parents=True, exist_ok=True)
+        png.write_bytes(b"png")
+        png.with_suffix(".json").write_text(json.dumps(META))
+
+    calls = []
+
+    def broken(png):
+        calls.append("scout")
+        raise TimeoutError("Wonder timed out")
+
+    monkeypatch.setattr(imagery, "fetch_tile", fetch_tile)
+    monkeypatch.setattr(imagery, "usgs_water", lambda fp, failed: [])
+    monkeypatch.setattr(scout, "scout", broken)
+    out = segment.find_hazards(field)
+    assert out["habitat"] == out["building"] == out["water"] == out["possible_water"] == []
+    assert out["water_source"] == "none"
+    (w,) = out["imagery_warnings"]
+    assert "couldn't check the aerial imagery" in w and "Check the field" in w
+    segment.find_hazards(field)
+    assert calls == ["scout", "scout"]  # retried, not cached as "nothing found"
 
 
 def test_partial_usgs_warns_and_is_not_cached(tmp_path, monkeypatch):
@@ -121,7 +151,7 @@ def test_partial_usgs_warns_and_is_not_cached(tmp_path, monkeypatch):
         png.with_suffix(".json").write_text(json.dumps(META))
 
     monkeypatch.setattr(imagery, "fetch_tile", fetch_tile)
-    monkeypatch.setattr(segment, "segment_tile", lambda png, phrase: [])
+    monkeypatch.setattr(scout, "scout", lambda png: {"water": [], "building": [], "habitat": [], "trace": []})
     calls = []
 
     def usgs(fp, failed):
@@ -148,7 +178,7 @@ def test_imagery_gap_becomes_a_warning(tmp_path, monkeypatch):
         png.with_suffix(".json").write_text(json.dumps(META | {"empty_fraction": 0.37}))
 
     monkeypatch.setattr(imagery, "fetch_tile", fetch_tile)
-    monkeypatch.setattr(segment, "segment_tile", lambda png, phrase: [])
+    monkeypatch.setattr(scout, "scout", lambda png: {"water": [], "building": [], "habitat": [], "trace": []})
     monkeypatch.setattr(imagery, "usgs_water", lambda fp, failed: [])
     (w,) = segment.find_hazards(field)["imagery_warnings"]
     assert "missing for 37%" in w

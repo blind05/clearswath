@@ -55,8 +55,9 @@ const LAYERS: LayerSpec[] = [
   { key: "buffered_cells", name: "Weeds held back by a buffer", fill: "#37474F", fillOpacity: 0.6, delay: 700 },
   { key: "spray_cells", name: "Spot spray: weeds found", fill: "#C4127A", fillOpacity: 0.45, delay: 900 },
   { key: "water", name: "Water", fill: "#2B83BA", fillOpacity: 0.45, line: "#2B83BA", lineWidth: 2, delay: 350 },
+  { key: "possible_water", name: "Possible water: check", fill: "#2B83BA", fillOpacity: 0.12, line: "#2B83BA", lineWidth: 2, dash: [2, 2], delay: 350 },
   { key: "building", name: "Buildings", fill: "#5B6760", fillOpacity: 0.5, line: "#5B6760", lineWidth: 1, delay: 350 },
-  { key: "habitat", name: "Habitat", fill: "#558B2F", fillOpacity: 0.3, line: "#558B2F", lineWidth: 1, delay: 350 },
+  { key: "habitat", name: "Tree lines and woods", fill: "#558B2F", fillOpacity: 0.3, line: "#558B2F", lineWidth: 1, delay: 350 },
   { key: "field", name: "Field edge", line: "#FFFFFF", lineWidth: 3, delay: 0 },
 ];
 

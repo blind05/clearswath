@@ -133,6 +133,33 @@ def test_runoff_rule_for_ground_rigs_skips_a_drone_job():
     assert plan(FIELD, {}, [RUNOFF | {"applies_to": "ground"}], method="drone")["status"] == "go"
 
 
+# Water only the aerial scout saw: a question for the applicator, never a change to the map.
+INSIDE_M = box(X + 100, Y + 100, X + 140, Y + 130)  # a possible pond inside the field
+FAR_M = box(X + 700, Y + 150, X + 740, Y + 190)  # 300 m east of the field
+INSIDE, FAR = ll(INSIDE_M, FAR_M)
+
+
+def test_possible_water_forces_adjust_without_touching_the_map():
+    clean = plan(FIELD, {}, [rule()])
+    out = plan(FIELD, {"possible_water": [INSIDE]}, [rule()])
+    assert clean["status"] == "go" and out["status"] == "adjust"
+    assert out["spray_acres"] == clean["spray_acres"] and out["excluded_acres"] == 0
+    (r,) = out["reasons"]
+    assert r["source"] == "review" and r["kind"] == "possible_water" and "1 possible water area" in r["summary"]
+
+
+def test_possible_water_far_away_says_nothing():
+    assert plan(FIELD, {"possible_water": [FAR]}, [rule(100, "ft")])["status"] == "go"
+
+
+def test_possible_water_counts_when_its_setback_reaches_the_field():
+    assert plan(FIELD, {"possible_water": [FAR]}, [rule(1000, "ft")])["status"] == "adjust"  # 305 m reaches it
+
+
+def test_possible_water_never_softens_a_no_go():
+    assert plan(FIELD, {"possible_water": [INSIDE]}, [rule()], prohibited=True)["status"] == "no-go"
+
+
 # Drift buffers (engine rule 2): from the treated area toward land the user hasn't marked as managed.
 import random  # noqa: E402
 

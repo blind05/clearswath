@@ -54,8 +54,9 @@ class _Job:
 
     def find_hazards(self):
         self.hazards = self.hazards or segment.find_hazards(self.field_path)
-        out = {k: len(self.hazards.get(k) or []) for k in ("water", "building", "habitat")} | {
-            "imagery_date": self.hazards.get("imagery_date"), "water_source": self.hazards.get("water_source")}
+        out = {k: len(self.hazards.get(k) or []) for k in ("water", "possible_water", "building", "habitat")} | {
+            "imagery_date": self.hazards.get("imagery_date"), "water_source": self.hazards.get("water_source"),
+            "scout": self.hazards.get("scout_trace") or []}
         if self.hazards.get("weeds") is not None:
             out |= {"weed_patches": len(self.hazards["weeds"]), "weed_source": self.hazards.get("weed_source")}
         return out

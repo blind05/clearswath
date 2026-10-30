@@ -7,6 +7,7 @@ import { CheckboxInput } from "@astryxdesign/core/CheckboxInput";
 import { NumberInput } from "@astryxdesign/core/NumberInput";
 import { text } from "@/styles";
 import { color, font } from "@/tokens.stylex";
+import type { FeatureCollection, Geometry } from "geojson";
 import type { Plan, Reason } from "@/types";
 import { RecordForm } from "./RecordForm";
 
@@ -176,6 +177,17 @@ export function PlanView({ plan: p, agentAsked, onUntick, onAskLive, onSwitchDem
         </Section>
       )}
 
+      {p.scout.length > 0 && (
+        <Section title="Hazards on the aerial photo">
+          <ul {...stylex.props(s.list)}>{p.scout.map((line) => <li key={line}>{line}.</li>)}</ul>
+          <p {...stylex.props(text.small, s.rule)}>
+            {count(p.layers.habitat, "tree line or wood", "tree lines and woods")}, {count(p.layers.building, "building", "buildings")} and{" "}
+            {count(p.layers.possible_water, "possible water area", "possible water areas")} on the map. The models only outline
+            them: water comes from the national water map, possible water is for you to check, and the buffers come from the label.
+          </p>
+        </Section>
+      )}
+
       {p.spot && (
         <Section title="Spray map">
           <p {...stylex.props(text.num)}>The weed map sprays {p.spot.treated_acres.toFixed(2)} ac of {p.spot.field_acres.toFixed(1)} ac, in {p.spot.cell_size_m} m cells.</p>
@@ -218,6 +230,11 @@ export function PlanView({ plan: p, agentAsked, onUntick, onAskLive, onSwitchDem
 // StyleX owns className; this adds a plain class the recorder and tests look for.
 function withClass(props: ReturnType<typeof stylex.props>, name: string) {
   return { ...props, className: `${props.className ?? ""} ${name}` };
+}
+
+function count(layer: FeatureCollection | Geometry | undefined, one: string, many: string) {
+  const n = layer && "features" in layer ? layer.features.length : 0;
+  return `${n} ${n === 1 ? one : many}`;
 }
 
 function Figure({ n, label }: { n: number; label: string }) {

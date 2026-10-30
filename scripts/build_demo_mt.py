@@ -18,7 +18,7 @@ from shapely.geometry import box, mapping, shape
 ROOT = Path(__file__).resolve().parent.parent
 sys.path[:0] = [str(ROOT), str(ROOT / "train")]
 
-from app import bulletins, geo, imagery, label_reader, pipeline  # noqa: E402
+from app import bulletins, geo, imagery, label_reader, pipeline, segment  # noqa: E402
 
 OUT = ROOT / "data" / "demo" / "mt"
 TILE_M, X0, Y0 = 52.02, 726737.2 - 16 * 52.02, 5177123.6 + 52.02  # orthomosaic tile grid, EPSG:32611
@@ -124,8 +124,9 @@ def main(backbone: str, view: str, window: float, provider: str, catch: float, r
         missing = float((src.read(1) == 255).mean())
     gaps = [f"Drone imagery is missing for {missing:.0%} of the block, so spurge there is unmapped and those cells "
             "are not sprayed. Scout them before the job."] if missing > 0.005 else []
-    hazards = {"water": water, "building": [], "habitat": [], "water_source": "usgs", "water_warnings": [],
-               "imagery_date": "2023-06-12", "imagery_warnings": gaps, "weeds": weeds,
+    scouted, scout_warnings = segment.scout_field(field_path)  # Muse Wonder + SAM 3.1 on the NAIP tile
+    hazards = {"water": water, "water_source": "usgs", "water_warnings": [], **scouted,
+               "imagery_date": "2023-06-12", "imagery_warnings": gaps + scout_warnings, "weeds": weeds,
                "weed_source": f"{name} model set to catch {catch:.0%} of spurge plots: on held-out plots it found "
                               f"{check['holdout_recall']:.0%} and also flagged {check['holdout_absent_flagged']:.0%} "
                               "of clean ones"}
@@ -148,7 +149,7 @@ if __name__ == "__main__":
     ap.add_argument("--backbone")
     ap.add_argument("--view", choices=["full", "zoom"])
     ap.add_argument("--window", type=float)
-    ap.add_argument("--provider", default="fireworks")
+    ap.add_argument("--provider", default="meta")
     ap.add_argument("--catch", type=float, default=0.95, help="share of spurge plots the map must catch")
     a = ap.parse_args()
     if a.overlay_only:

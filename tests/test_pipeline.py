@@ -88,6 +88,16 @@ def test_to_json_is_serializable(monkeypatch, field_path):
     assert len(out["layers"]["water"]["features"]) == 1
     assert out["layers"]["restricted"]["features"] == []
     assert out["label"]["rules"][0]["page"] == 2
+    assert out["scout"] == []  # no aerial scout ran in this fake
+
+
+def test_scout_trace_reaches_the_page(monkeypatch, field_path):
+    wire(monkeypatch)
+    monkeypatch.setattr(segment, "find_hazards", lambda p: {
+        "water": [POND], "building": [], "habitat": [], "imagery_date": "2023-07-09", "water_source": "usgs",
+        "water_warnings": [], "scout_trace": ["Muse Wonder marked 3 features; SAM 3.1 outlined 3 of them"]})
+    out = pipeline.to_json(pipeline.run(field_path, "label.pdf", "2026-11"))
+    assert out["scout"] == ["Muse Wonder marked 3 features; SAM 3.1 outlined 3 of them"]
 
 
 def test_missing_water_data_is_no_go(monkeypatch, field_path):

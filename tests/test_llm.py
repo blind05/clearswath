@@ -54,6 +54,14 @@ def test_chat_json(fake):
     assert llm.chat_json([], schema, "x") == {"a": 1}
     fmt = fake.chat.completions.create.call_args.kwargs["response_format"]
     assert fmt["type"] == "json_schema" and fmt["json_schema"]["schema"] is schema
+    assert "reasoning_effort" not in fake.chat.completions.create.call_args.kwargs
+
+
+def test_chat_json_passes_reasoning_effort_when_set(fake):
+    fake.chat.completions.create.return_value = reply('{"a": 1}')
+    llm.chat_json([], {"type": "object"}, "x", model=llm.WONDER, reasoning_effort="low")
+    kw = fake.chat.completions.create.call_args.kwargs
+    assert kw["reasoning_effort"] == "low" and kw["model"] == "muse-wonder-1.0"
 
 
 def test_chat_json_needs_object_root(fake):

@@ -18,6 +18,7 @@ TOKEN_PRICES = {
     "muse-spark-1.3": (1.25, 4.25),
     "accounts/fireworks/models/muse-spark-open": (1.25, 4.25),
     "meta-models/muse-spark-open-1026": (1.25, 4.25),
+    "muse-wonder-1.0": (4.0, 20.0),  # TODO(verify): aggregators citing Meta's page (eesel.ai, Yotta Labs, 2026-10)
 }
 # USD per call where no token price is published. TODO(verify): no public price found; set high on purpose.
 CALL_PRICES = {"sam-3.1": 0.01, "muse-voice-transcribe-1.0": 0.02,

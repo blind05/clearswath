@@ -10,7 +10,7 @@ from shapely.geometry import mapping, shape
 from app import buffers, bulletins, cells, exports, geo, label_reader, segment
 
 CELL_M = 1.0  # ponytail: one spot-spray cell size for every sprayer; make it a setting when sprayers differ
-SHAPES = ("water", "building", "habitat", "weeds", "managed")  # managed: land the user marked next to the field
+SHAPES = ("water", "possible_water", "building", "habitat", "weeds", "managed")  # managed: land the user marked next to the field
 
 
 class NotConfirmableError(ValueError):
@@ -183,6 +183,7 @@ def to_json(result: dict) -> dict:
         "imagery_date": result["hazards"].get("imagery_date"),
         "water_source": result["hazards"].get("water_source"),
         "weed_source": result["hazards"].get("weed_source"),
+        "scout": result["hazards"].get("scout_trace") or [],  # what Muse Wonder and SAM 3.1 did on the aerial photo
         "spot": cells.summary(grid) if grid else None,
         "carrier_min": carrier_minimum(result["label"], plan["method"]),
         "layers": {
@@ -190,7 +191,7 @@ def to_json(result: dict) -> dict:
             "spray_zone": _fc([plan["spray_zone"]]),
             "no_spray": _fc([plan["no_spray"]]),
             "restricted": _fc(bulletin["restricted"]),
-            **{h: _fc(result["hazards"].get(h) or []) for h in ("water", "building", "habitat")},
+            **{h: _fc(result["hazards"].get(h) or []) for h in ("water", "possible_water", "building", "habitat")},
             **_cell_layers(grid),
         },
     }

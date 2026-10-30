@@ -39,6 +39,7 @@ export interface Plan {
   imagery_date: string | null;
   water_source: string | null;
   weed_source?: string | null;
+  scout: string[];
   spot?: { field_acres: number; treated_acres: number; clean_acres: number; buffered_acres: number; cell_size_m: number } | null;
   carrier_min?: { l_ha: number; quote: string; page: number } | null;
   layers: Record<string, FeatureCollection | Geometry>;

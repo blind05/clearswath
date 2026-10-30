@@ -21,6 +21,7 @@ from app import spend
 
 BASE_URL = "https://api.meta.ai/v1"
 SPARK = "muse-spark-1.3"
+WONDER = "muse-wonder-1.0"
 SAM = "sam-3.1"
 VOICE = "muse-voice-transcribe-1.0"
 SPARK_OPEN = "meta-models/muse-spark-open-1026"
@@ -130,24 +131,26 @@ def chat(messages: list[dict], tools: list[dict] | None = None, *,
     return _complete(purpose, name, **kwargs).choices[0].message
 
 
-def chat_json(messages: list[dict], schema: dict, name: str, *,
-              purpose: str = "", model: str | None = None, provider: str | None = None) -> dict:
+def chat_json(messages: list[dict], schema: dict, name: str, *, purpose: str = "", model: str | None = None,
+              provider: str | None = None, reasoning_effort: str | None = None) -> dict:
+    """reasoning_effort ("low", ...) is passed on only when set: Wonder at "low" answers a scout in ~25 s, not 1-3 min."""
     if schema.get("type") != "object":
         raise ValueError("chat_json schema must have an object root")
     which = resolve_provider(provider)
     model = model or PROVIDERS[which][2]
+    extra = {"reasoning_effort": reasoning_effort} if reasoning_effort else {}
     if which in NO_STRUCTURED_OUTPUT:
         # No structured outputs here: force one tool call whose parameters are the schema.
         tool = {"type": "function", "function": {"name": name, "description": "Return the result.",
                                                  "parameters": schema}}
         resp = _complete(purpose, which, model=model, messages=messages, tools=[tool],
-                         tool_choice={"type": "function", "function": {"name": name}})
+                         tool_choice={"type": "function", "function": {"name": name}}, **extra)
         calls = resp.choices[0].message.tool_calls or []
         if len(calls) != 1 or calls[0].function.name != name:
             raise RuntimeError(f"Expected one {name} tool call from {model}, got {len(calls)}")
         return json.loads(calls[0].function.arguments)
     fmt = {"type": "json_schema", "json_schema": {"name": name, "schema": schema, "strict": True}}
-    resp = _complete(purpose, which, model=model, messages=messages, response_format=fmt)
+    resp = _complete(purpose, which, model=model, messages=messages, response_format=fmt, **extra)
     return json.loads(resp.choices[0].message.content)
 
 

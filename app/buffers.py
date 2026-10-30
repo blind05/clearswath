@@ -68,6 +68,7 @@ def plan(field: Polygon, hazards: dict, rules: list[dict], restricted=(),
 
     gaps: missing data the plan needs (e.g. USGS water unavailable). Any gap is NO-GO with nothing sprayable:
     a zone that couldn't be checked is never handed to a sprayer.
+    hazards["possible_water"]: water only the aerial scout saw; it never changes the map, at most makes it ADJUST.
     managed: land next to the field the user marked as managed (roads, other fields, farmsteads); a drift rule
     buffers the treated area toward everything else. wind_from_deg: if set, drift buffers run downwind only."""
     utm = gpd.GeoSeries([field], crs=4326).estimate_utm_crs()
@@ -131,6 +132,17 @@ def plan(field: Polygon, hazards: dict, rules: list[dict], restricted=(),
         if reaches(restricted_m):
             reasons.append({"source": "bulletin", "summary": "Bulletin restricted area excluded."})
 
+    # Water only the aerial scout saw (not in the national water map) is a question, not a fact: it never changes
+    # the map, but if it, or the label's water setback around it, reaches the field, the plan can't be a clean GO.
+    setback = max((r["value"] * M_PER_UNIT[r["unit"].lower()] for r in rules if r.get("kind") == "buffer"
+                   and r.get("target") == "water" and _applies(r, method)), default=0)
+    unsure = [s for s in to_utm(hazards.get("possible_water") or []) if s.buffer(setback).intersects(field_m)]
+    if unsure:
+        reasons.append({"source": "review", "kind": "possible_water", "summary": f"{len(unsure)} possible water "
+                        f"area{'s' if len(unsure) > 1 else ''} on the aerial photo {'are' if len(unsure) > 1 else 'is'}"
+                        " not in the national water map. Check before spraying: if it holds water, the label's water"
+                        " setback applies."})
+
     # Runoff mitigation points are worked out in EPA's PALM, not here (out of scope); a label that requires
     # them can't be a clean GO, so it forces ADJUST. It never changes the map.
     runoff = [r for r in rules if r.get("kind") == "runoff" and _applies(r, method)]
@@ -144,7 +156,7 @@ def plan(field: Polygon, hazards: dict, rules: list[dict], restricted=(),
 
     if prohibited or gaps or spray_acres < MIN_ACRES:
         status = "no-go"
-    elif excluded_acres >= MIN_ACRES or runoff:
+    elif excluded_acres >= MIN_ACRES or runoff or unsure:
         status = "adjust"
     else:
         status = "go"
