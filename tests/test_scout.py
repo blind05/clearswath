@@ -77,6 +77,8 @@ def test_review_drops_and_adds(tile, models):
     assert out["water"] == [] and area(out["habitat"]) == pytest.approx(1000, abs=1)
     assert area(out["building"]) == pytest.approx(1000, abs=1)
     assert "3<|box;x1=20;y1=50" in seen["sam"][1]
+    assert area(out["draft"]["water"]) == pytest.approx(1000, abs=1)  # the draft still has what the review dropped
+    assert out["draft"]["building"] == []
     assert out["trace"] == ["Muse Wonder marked 2 features; SAM 3.1 outlined 2 of them",
                             "Muse Wonder checked the outlines: kept 1, dropped 1",
                             "Muse Wonder marked 1 features it had missed; SAM 3.1 outlined 1"]

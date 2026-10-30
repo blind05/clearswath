@@ -88,6 +88,7 @@ def scout(png: str | Path) -> dict:
     masks = _masks(png, boxes, width, height)
     trace = [f"Muse Wonder marked {len(items)} features; SAM 3.1 outlined {len(masks)} of them"]
 
+    draft = _shapes(items, masks, set(masks), meta)  # before the review, for evals/scout_eval.py
     kept, added = set(masks), {}
     if masks:
         listing = "\n".join(f"{n}: {items[n]['kind']} ({items[n]['note']})" for n in sorted(masks))
@@ -103,8 +104,13 @@ def scout(png: str | Path) -> dict:
             trace.append(f"Muse Wonder marked {len(added)} features it had missed; SAM 3.1 outlined {len(new)}")
         items, masks, kept = items | added, masks | new, kept | set(new)
 
+    return _shapes(items, masks, kept, meta) | {"trace": trace, "draft": draft}
+
+
+def _shapes(items: dict, masks: dict, keep: set, meta: dict) -> dict:
+    """Masks of the kept boxes -> {water, building, habitat: lon/lat polygons}."""
     out = {kind: [] for kind in set(KINDS.values())}
-    for n in sorted(kept):
-        out[KINDS[items[n]["kind"]]] += segment.record_polygons(masks[n], width, height, meta["transform"],
-                                                                meta["crs"])
-    return out | {"trace": trace}
+    for n in sorted(keep):
+        out[KINDS[items[n]["kind"]]] += segment.record_polygons(masks[n], meta["width"], meta["height"],
+                                                                meta["transform"], meta["crs"])
+    return out
