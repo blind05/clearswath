@@ -427,6 +427,24 @@ def demo_agent(field: str = Form(""), method: str = Form("drone"), excluded_rule
     return body | {"demo": {"field": field, "cached": True, "month": month, "overlay": _overlay(DEMO_FIELDS[field])}}
 
 
+@app.get("/api/whoami")
+def whoami(request: Request):
+    """For the operator (needs the access code; uses no run): the address the per-IP limit sees and the proxy headers
+    it came from, to check _client_ip behind the host's proxy."""
+    now, ip, code = time.time(), _client_ip(request), os.getenv("ACCESS_CODE") or ""
+    with _lock:
+        if _count(_fails, ip, now) >= MAX_FAILS_PER_HOUR:
+            raise HTTPException(429, "Too many wrong access codes from your address. Try again later.")
+    if len(code) < MIN_CODE_LEN or not hmac.compare_digest(request.headers.get("x-access-code", "").encode(),
+                                                            code.encode()):
+        with _lock:
+            _add(_fails, ip, now)
+        raise HTTPException(401, "Needs the access code.")
+    headers = ("x-forwarded-for", "cf-connecting-ip", "true-client-ip", "x-real-ip")
+    return {"address_used": ip, "peer": request.client.host if request.client else None,
+            **{h: request.headers.get(h) for h in headers}}
+
+
 DEMO_PLANS_MAX = 32  # kept as JSON text: a Montana plan is ~1.5 MB as text, ~25 MB as Python objects
 _demo_plans: OrderedDict = OrderedDict()  # (demo, method, excluded, wind) -> (run_id, plan JSON text, status, month)
 _demo_lock = threading.Lock()  # guards _demo_plans; held only for lookups and stores

@@ -985,3 +985,10 @@ def test_a_normal_photo_still_passes_the_size_check(client, monkeypatch):
     buf = io.BytesIO()
     Image.new("RGB", (4000, 3000), "green").save(buf, "JPEG")  # a 12-megapixel phone photo
     assert client.post("/api/photo", files={"photo": ("p.jpg", buf.getvalue())}).status_code == 200
+
+
+def test_whoami_needs_the_code_and_shows_the_address(client, monkeypatch):
+    monkeypatch.setenv("ACCESS_CODE", "s3cret-code-for-tests")
+    assert client.get("/api/whoami").status_code == 401
+    r = client.get("/api/whoami", headers={"x-access-code": "s3cret-code-for-tests", "x-forwarded-for": "1.2.3.4, 5.6.7.8"})
+    assert r.status_code == 200 and r.json()["address_used"] == "5.6.7.8" and r.json()["x-forwarded-for"] == "1.2.3.4, 5.6.7.8"
