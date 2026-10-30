@@ -1,6 +1,6 @@
 {
  "drone|": {
-  "answer": "Decision is ADJUST.\n\nYou can spray 23.59 acres of the 24.07 acre field by drone, with 0.48 acres excluded because water itself is excluded. The label says \"Do not apply directly to water, to areas where surface water is present or to intertidal areas below the mean high water mark.\" 4 possible water areas seen on the aerial photo are not in the national water map, so check before spraying because if it holds water that water rule applies.\n\nFor spot spray the weed map sprays 9.73 acres. The weed model is set to catch 85 percent of spurge plots and on held-out plots it found 90 percent and also flagged 10 percent of clean ones.\n\nWarnings: 1 label rule could not be verified and was not applied. Check the label yourself. Drone imagery is missing for 1 percent of the block, so spurge there is unmapped and those cells are not sprayed. Scout them before the job.",
+  "answer": "The decision is ADJUST.\n\nYou can spray 23.59 of 24.07 acres by drone, with 0.48 acres excluded as water itself with no extra buffer, because the label says \"Do not apply directly to water, to areas where surface water is present or to intertidal areas below the mean high water mark.\"\n\nA spot spray weed map would spray 9.73 acres, using a model set to catch 85% of spurge plots that found 90% on held-out plots and also flagged 10% of clean ones.\n\nWarnings: 1 label rule could not be verified and was not applied, so check the label yourself. Drone imagery is missing for 1% of the block, so spurge there is unmapped and those cells are not sprayed, so scout them before the job.",
   "decision": "adjust",
   "trace": [
    {
@@ -93,15 +93,14 @@
     "tool": "find_hazards",
     "result": {
      "water": 2,
-     "possible_water": 6,
+     "possible_water": 0,
      "building": 0,
-     "habitat": 8,
+     "habitat": 9,
      "imagery_date": "2023-06-12",
      "water_source": "usgs",
      "scout": [
-      "Muse Wonder marked 11 features; SAM 3.1 outlined 10 of them",
-      "Muse Wonder checked the outlines: kept 9, dropped 1",
-      "Muse Wonder marked 3 features it had missed; SAM 3.1 outlined 2"
+      "Muse Wonder marked 9 tree lines and woods; SAM 3.1 outlined 7 of them",
+      "SAM 3.1 found 0 building and 0 possible water areas from text prompts"
      ],
      "weed_patches": 21408,
      "weed_source": "dinov2-base (2 blocks fine-tuned) model set to catch 85% of spurge plots: on held-out plots it found 90% and also flagged 10% of clean ones"
@@ -130,11 +129,6 @@
       {
        "source": "rule:water",
        "summary": "No label water buffer applies; water itself is excluded."
-      },
-      {
-       "source": "review",
-       "kind": "possible_water",
-       "summary": "4 possible water areas on the aerial photo are not in the national water map. Check before spraying: if it holds water, the label's water setback applies."
       }
      ],
      "warnings": [
@@ -148,7 +142,7 @@
       "cell_size_m": 1.0
      }
     },
-    "seconds": 3.9
+    "seconds": 3.75
    }
   ],
   "model": "muse-spark-1.3",
