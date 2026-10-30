@@ -429,27 +429,39 @@ def demo_agent(field: str = Form(""), method: str = Form("drone"), excluded_rule
 
 DEMO_PLANS_MAX = 32  # kept as JSON text: a Montana plan is ~1.5 MB as text, ~25 MB as Python objects
 _demo_plans: OrderedDict = OrderedDict()  # (demo, method, excluded, wind) -> (run_id, plan JSON text, status, month)
-_demo_lock = threading.Lock()
+_demo_lock = threading.Lock()  # guards _demo_plans; held only for lookups and stores
+_demo_compute = threading.Lock()  # one demo plan computed at a time; cache hits never wait for it
 
 
-def demo_plan(name: str, method: str, excluded: tuple, wind: float | None) -> tuple:
-    """A demo's plan for one set of choices, computed once and then served from memory: Montana's ~98,000 spot cells
-    take ~5 s and ~240 MB, too much per click on a small host. One computation at a time, so two visitors can't
-    double the peak; recomputed if clean_up removed the run folder its exports read."""
-    key = (name, method, excluded, wind)
+def _demo_hit(key: tuple) -> tuple | None:
     with _demo_lock:
         hit = _demo_plans.get(key)
         if hit and (RUNS / hit[0]).exists():
             _demo_plans.move_to_end(key)
             return hit[0], json.loads(hit[1]), *hit[2:]
+    return None
+
+
+def demo_plan(name: str, method: str, excluded: tuple, wind: float | None) -> tuple:
+    """A demo's plan for one set of choices, computed once and then served from memory: Montana's ~98,000 spot cells
+    take ~5 s and ~240 MB, too much per click on a small host. One computation at a time, so two visitors can't
+    double the peak; recomputed if clean_up removed the run folder its exports read. Callers normalise the choices
+    (see demo()), so the number of variants stays small."""
+    key = (name, method, excluded, wind)
+    if hit := _demo_hit(key):
+        return hit
+    with _demo_compute:
+        if hit := _demo_hit(key):  # computed while this request waited
+            return hit
         shape_, label, hazards, bulletin, month = pipeline.load_inputs(DEMO / "cache" / name)
         result = pipeline.assemble(shape_, label, hazards, bulletin, month, method, list(excluded), wind)
         run_id = uuid.uuid4().hex
         pipeline.save_run(result, RUNS / run_id)
         plan_json = pipeline.to_json(result)
-        _demo_plans[key] = (run_id, json.dumps(plan_json, default=str), result["plan"]["status"], month)
-        while len(_demo_plans) > DEMO_PLANS_MAX:
-            _demo_plans.popitem(last=False)
+        with _demo_lock:
+            _demo_plans[key] = (run_id, json.dumps(plan_json, default=str), result["plan"]["status"], month)
+            while len(_demo_plans) > DEMO_PLANS_MAX:
+                _demo_plans.popitem(last=False)
         return run_id, plan_json, result["plan"]["status"], month
 
 
@@ -474,8 +486,10 @@ def demo(request: Request, month: str | None = None, method: str = "drone", excl
         if method not in METHODS:
             raise HTTPException(422, f"method must be one of {sorted(METHODS)}")
         excluded, wind = _rule_ids(excluded_rules), _wind(wind_from)
+        # The page offers 8 wind directions; snapping to them keeps the demo's variants (and computations) few.
+        wind = None if wind is None else round(wind / 45) * 45 % 360
         try:
-            run_id, plan_json, status, cached_month = demo_plan(name, method, tuple(sorted(excluded)), wind)
+            run_id, plan_json, status, cached_month = demo_plan(name, method, tuple(sorted(set(excluded))), wind)
         except Exception as e:
             raise _http_error(e) from e
         body = {"run_id": run_id, **plan_json,

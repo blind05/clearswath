@@ -337,6 +337,15 @@ def test_demo_plan_is_computed_once_per_choice(client, cached_demo, monkeypatch)
     assert calls == ["drone", "ground"] and first == again and ground["run_id"] != first["run_id"]
 
 
+def test_demo_choices_are_normalised_so_variants_stay_few(client, cached_demo, monkeypatch):
+    calls = []
+    real = pipeline.assemble
+    monkeypatch.setattr(pipeline, "assemble", lambda *a, **kw: calls.append(a[7]) or real(*a, **kw))
+    for wind in ("268", "270", "271.5", "290"):  # all snap to west, the nearest of the page's 8 directions
+        client.get(f"/api/demo?field=corrected&wind_from={wind}")
+    assert calls == [270]
+
+
 def test_demo_plan_is_recomputed_when_its_run_folder_is_gone(client, cached_demo, monkeypatch, tmp_path):
     import shutil
 
