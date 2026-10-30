@@ -226,8 +226,7 @@ def transcribe(audio_path: str | Path, *, purpose: str = "", mode: str = "ENDPOI
 
 
 def data_url(path: str | Path) -> str:
-    """Image file -> data: URL for an image_url content part."""
-    # TODO(verify): api.meta.ai accepts data: URLs in image_url parts
+    """Image file -> data: URL for an image_url content part (api.meta.ai takes these: checked 2026-10-29)."""
     mime = mimetypes.guess_type(str(path))[0] or "application/octet-stream"
     b64 = base64.b64encode(Path(path).read_bytes()).decode()
     return f"data:{mime};base64,{b64}"
