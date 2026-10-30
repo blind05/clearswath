@@ -129,12 +129,21 @@ def read_raw(path: str | Path, provider: str | None = None) -> dict:
         return json.loads(cached.read_text())
     pages, source = _pages(path)
     text = "\n\n".join(f"=== Page {n} ===\n{t}" for n, t in enumerate(pages, 1))
-    out = llm.chat_json([{"role": "system", "content": prompt},
-                         {"role": "user", "content": text}], SCHEMA, "label_rules", purpose="label",
-                        provider=provider)
+
+    def ask() -> dict:
+        return llm.chat_json([{"role": "system", "content": prompt},
+                              {"role": "user", "content": text}], SCHEMA, "label_rules", purpose="label",
+                             provider=provider)
+
+    # Every real label has rules, so an empty read is a failed read (Spark Open on Baseten returned one in 3 reads
+    # of Tordon 22K): ask once more, and never cache an empty answer, so the next run asks again.
+    out = ask()
+    if not out.get("rules"):
+        out = ask()
     raw = {"pages": pages, "source": source, "out": out}
-    CACHE.mkdir(parents=True, exist_ok=True)
-    cached.write_text(json.dumps(raw))
+    if out.get("rules"):
+        CACHE.mkdir(parents=True, exist_ok=True)
+        cached.write_text(json.dumps(raw))
     return raw
 
 

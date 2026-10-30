@@ -112,6 +112,29 @@ def test_model_output_is_cached(monkeypatch, pdf, cache):
     assert len(calls) == 1 and first == second and len(list(cache.iterdir())) == 1
 
 
+def test_an_empty_read_is_asked_again(monkeypatch, pdf, cache):
+    answers = [[], [rule()]]
+    calls = []
+
+    def chat_json(messages, schema, name, **kw):
+        calls.append(1)
+        return {"product_name": "Acme Weed-B-Gone", "epa_reg_no": "123-45", "rules": answers.pop(0)}
+
+    monkeypatch.setattr(llm, "chat_json", chat_json)
+    out = label_reader.read_label(pdf)
+    assert len(calls) == 2 and [r.kind for r in out.rules] == ["buffer"] and len(list(cache.iterdir())) == 1
+
+
+def test_an_empty_read_is_never_cached(monkeypatch, pdf, cache):
+    calls = []
+    monkeypatch.setattr(llm, "chat_json", lambda *a, **kw: calls.append(1) or
+                        {"product_name": "Acme", "epa_reg_no": "123-45", "rules": []})
+    assert label_reader.read_label(pdf).rules == []
+    assert len(calls) == 2 and not cache.exists()
+    label_reader.read_label(pdf)
+    assert len(calls) == 4  # asked again next time, not served "no rules" from the cache
+
+
 def test_cache_still_checks_quotes(monkeypatch, pdf, cache):
     fake_model(monkeypatch, [rule()])
     label_reader.read_label(pdf)
