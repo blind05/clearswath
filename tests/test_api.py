@@ -26,6 +26,7 @@ def client(tmp_path, monkeypatch):
     monkeypatch.setattr(api, "RUNS", tmp_path / "runs")
     monkeypatch.setenv("RUNS_PER_IP_PER_DAY", "100")  # tests post many runs from one address
     monkeypatch.setattr(api, "DEMO", tmp_path / "demo")
+    api._demo_plans.clear()  # demo plans are kept in memory between requests, never between tests
     seen = {}
 
     def run(field_path, label_path, month, method, excluded_rules=(), managed=(), wind_from_deg=None):
@@ -324,6 +325,25 @@ def test_cached_demo_is_offline_and_recomputed(client, cached_demo):
                                                      "overlay": None}
     assert body["status"] == "adjust" and body["reasons"][0]["distance_ft"] == 100
     assert client.get(f"/api/kml/{body['run_id']}").status_code == 200
+
+
+def test_demo_plan_is_computed_once_per_choice(client, cached_demo, monkeypatch):
+    calls = []
+    real = pipeline.assemble
+    monkeypatch.setattr(pipeline, "assemble", lambda *a, **kw: calls.append(a[5]) or real(*a, **kw))
+    first = client.get("/api/demo?field=corrected").json()
+    again = client.get("/api/demo?field=corrected").json()
+    ground = client.get("/api/demo?field=corrected&method=ground").json()
+    assert calls == ["drone", "ground"] and first == again and ground["run_id"] != first["run_id"]
+
+
+def test_demo_plan_is_recomputed_when_its_run_folder_is_gone(client, cached_demo, monkeypatch, tmp_path):
+    import shutil
+
+    first = client.get("/api/demo?field=corrected").json()
+    shutil.rmtree(tmp_path / "runs" / first["run_id"])  # what clean_up does after 24 h
+    again = client.get("/api/demo?field=corrected").json()
+    assert again["run_id"] != first["run_id"] and client.get(f"/api/kml/{again['run_id']}").status_code == 200
 
 
 def test_demo_with_drone_image(client, cached_demo, tmp_path):

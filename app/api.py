@@ -427,6 +427,40 @@ def demo_agent(field: str = Form(""), method: str = Form("drone"), excluded_rule
     return body | {"demo": {"field": field, "cached": True, "month": month, "overlay": _overlay(DEMO_FIELDS[field])}}
 
 
+DEMO_PLANS_MAX = 32  # kept as JSON text: a Montana plan is ~1.5 MB as text, ~25 MB as Python objects
+_demo_plans: OrderedDict = OrderedDict()  # (demo, method, excluded, wind) -> (run_id, plan JSON text, status, month)
+_demo_lock = threading.Lock()
+
+
+def demo_plan(name: str, method: str, excluded: tuple, wind: float | None) -> tuple:
+    """A demo's plan for one set of choices, computed once and then served from memory: Montana's ~98,000 spot cells
+    take ~5 s and ~240 MB, too much per click on a small host. One computation at a time, so two visitors can't
+    double the peak; recomputed if clean_up removed the run folder its exports read."""
+    key = (name, method, excluded, wind)
+    with _demo_lock:
+        hit = _demo_plans.get(key)
+        if hit and (RUNS / hit[0]).exists():
+            _demo_plans.move_to_end(key)
+            return hit[0], json.loads(hit[1]), *hit[2:]
+        shape_, label, hazards, bulletin, month = pipeline.load_inputs(DEMO / "cache" / name)
+        result = pipeline.assemble(shape_, label, hazards, bulletin, month, method, list(excluded), wind)
+        run_id = uuid.uuid4().hex
+        pipeline.save_run(result, RUNS / run_id)
+        plan_json = pipeline.to_json(result)
+        _demo_plans[key] = (run_id, json.dumps(plan_json, default=str), result["plan"]["status"], month)
+        while len(_demo_plans) > DEMO_PLANS_MAX:
+            _demo_plans.popitem(last=False)
+        return run_id, plan_json, result["plan"]["status"], month
+
+
+@app.on_event("startup")
+def _warm_demo() -> None:
+    """WARM_DEMO=1 (set in render.yaml): compute the default Montana demo in the background at startup, so the first
+    visitor after a restart doesn't wait for it."""
+    if os.getenv("WARM_DEMO") == "1" and pipeline.cache_file(DEMO / "cache" / DEMO_FIELDS["mt"]):
+        threading.Thread(target=demo_plan, args=(DEMO_FIELDS["mt"], "drone", (), None), daemon=True).start()
+
+
 @app.get("/api/demo")
 def demo(request: Request, month: str | None = None, method: str = "drone", excluded_rules: str = "",
          field: str = "", agent_answer: bool = False, wind_from: str = ""):
@@ -441,17 +475,14 @@ def demo(request: Request, month: str | None = None, method: str = "drone", excl
             raise HTTPException(422, f"method must be one of {sorted(METHODS)}")
         excluded, wind = _rule_ids(excluded_rules), _wind(wind_from)
         try:
-            shape_, label, hazards, bulletin, cached_month = pipeline.load_inputs(cache)
-            result = pipeline.assemble(shape_, label, hazards, bulletin, cached_month, method, excluded, wind)
+            run_id, plan_json, status, cached_month = demo_plan(name, method, tuple(sorted(excluded)), wind)
         except Exception as e:
             raise _http_error(e) from e
-        run_id = uuid.uuid4().hex
-        pipeline.save_run(result, RUNS / run_id)
-        body = {"run_id": run_id, **pipeline.to_json(result),
+        body = {"run_id": run_id, **plan_json,
                 "demo": {"field": field, "cached": True, "month": cached_month, "overlay": _overlay(name)}}
         saved = json.loads((cache / "agent.json").read_text()) if agent_answer and (cache / "agent.json").exists() else {}
         replay = saved.get(_replay_key(method, excluded))
-        if replay and replay["decision"] == result["plan"]["status"]:  # never replay an answer the plan has outgrown
+        if replay and replay["decision"] == status:  # never replay an answer the plan has outgrown
             body |= {"answer": replay["answer"], "trace": replay["trace"], "decision": replay["decision"],
                      "mode": "replay", "replay": {"model": replay["model"], "date": replay["date"]}}
         return body
