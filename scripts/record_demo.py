@@ -6,6 +6,7 @@ Starts the app itself; the agent's answer is the saved replay, so no model is ca
 """
 
 import argparse
+import json
 import subprocess
 import sys
 import time
@@ -40,13 +41,16 @@ def main(port: int, slow: float) -> None:
             browser = pw.chromium.launch()
             context = browser.new_context(viewport=SIZE, record_video_dir=str(OUT), record_video_size=SIZE)
             page = context.new_page()
-            beat = 0
+            beat, start, beats = 0, time.time(), []
 
             def shot(name: str, hold: float = 2.5) -> None:
+                """Holds, then screenshots; beats.json gets each beat's start and end in the video, for the edit."""
                 nonlocal beat
                 beat += 1
+                began = time.time() - start
                 page.wait_for_timeout(int(hold * 1000 * slow))
                 page.screenshot(path=str(OUT / f"{beat:02d}-{name}.png"))
+                beats.append({"beat": beat, "name": name, "start": round(began, 2), "end": round(time.time() - start, 2)})
 
             page.goto(f"http://127.0.0.1:{port}/")
             shot("landing", 3)
@@ -81,6 +85,7 @@ def main(port: int, slow: float) -> None:
             page.wait_for_selector("#status.go", timeout=60_000)
             shot("dakota-corrected-go", 4)
             video = page.video.path() if page.video else None
+            (OUT / "beats.json").write_text(json.dumps(beats, indent=1))
             context.close()
             browser.close()
         if video:
