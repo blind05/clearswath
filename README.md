@@ -2,6 +2,9 @@
 
 **Find the weeds. Read the label. Spray only where both say yes.**
 
+**Try it: [clearswath.onrender.com](https://clearswath.onrender.com)** (free hosting: the first visit after a quiet spell
+can take a minute to wake up).
+
 A pesticide label is a legal document of 20 to 70 pages: setbacks from water, wind limits, rates, endangered-species
 bulletins. A drone can now spray single patches of weeds, but nothing reads the label for it. ClearSwath does. Give it
 a field, the label PDF and a drone weed map. It returns:

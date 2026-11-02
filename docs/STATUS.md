@@ -1,4 +1,4 @@
-# What's real (audit, 2026-10-29; updated the same evening)
+# What's real (audit, 2026-10-29; updated 2026-11-02)
 
 Classified from what runs today, not from older plans. "Live" means the code path calls the model or service when a
 user acts; "replay" means the demo serves a saved real run.
@@ -14,16 +14,16 @@ user acts; "replay" means the demo serves a saved real run.
 | Spot-spray grid from a weed map | Working | Montana map from a DINOv2-B model fine-tuned on Modal: 90% of held-out spurge plots found, 40% of the block sprayed |
 | Photo mode (DINOv3 head) | Working, live on Modal | Endpoint deployed; held-out CoFly 94.3% hit / 30.7% sprayed |
 | Agent explanation (four tools) | Working live; demo is a replay | Saved Montana answer: `muse-spark-1.3`, 2026-10-29 ($0.017) |
-| Baseten Spark Open | Working for chat and agent fallback; fails on long labels | Returns zero rules on long label reads |
+| Baseten Spark Open | Reads labels on live runs (Spark 1.3 as fallback); the agent's fallback | Empty reads are asked again and never cached; 3 runs per label: Tordon recall 100%, Warrior 83-100% (`evals/results_labels.md`). Reads Warrior's ULV-only 450 ft buffer as always applying, so the demos keep Spark 1.3's reads |
 | Muse Spark 1.3 (Meta API) | Reads both demo labels; writes the saved agent answer | Smoke test passes (2026-10-29) |
 | Muse Voice Transcribe -> application record | Working in code; WAV only | Smoke test passes on a silent clip; not yet run on real speech |
 | Muse Image 1.0 | Available on the key, not used | No honest job for it |
 | Exports: KML, GeoJSON | Working | Tests |
 | Export: DJI prescription | Built, not flight-tested | Folder layout TODO(verify) |
-| Access code, per-IP limit, daily budget | Working | Tests; X-Forwarded-For behind Render's proxy not yet checked |
+| Access code, per-IP limit, daily budget | Working | Tests; which X-Forwarded-For entry is the visitor on Render: check with `/api/whoami` |
 | React page (Astryx, MapLibre, Terra Draw) | Working | Recorder's 8 beats; QA at 1440/1280/390 |
-| Live URL | Not deployed | `render.yaml` ready |
-| README, video | README drafted, no screenshots; no video | |
+| Live URL | https://clearswath.onrender.com (Render free plan) | Demo plans computed once (peak 395 MB of 512); sleeps after 15 idle minutes |
+| README, video | README with screenshots, diagram and results; video scripted (`docs/video/SCRIPT.md`) | |
 
 ## Meta calls, from user action to screen
 
@@ -37,6 +37,5 @@ user acts; "replay" means the demo serves a saved real run.
 
 ## Biggest obstacle
 
-No live URL. (Fixed the same evening: the demo a judge sees now uses Muse Wonder, SAM 3.1 and Muse Spark 1.3; before,
-water came only from NHD and the saved explanation was from Spark Open on Fireworks.) Next: the scout has no
-measured accuracy yet, and Baseten's Spark Open drops rules on long labels.
+The video. The app is live, the scout is measured, and Baseten reads labels; what judges watch in the final round
+doesn't exist yet.
