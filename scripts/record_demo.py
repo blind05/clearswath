@@ -6,6 +6,7 @@ Starts the app itself; the agent's answer is the saved replay, so no model is ca
 """
 
 import argparse
+import json
 import subprocess
 import sys
 import time
@@ -41,12 +42,20 @@ def main(port: int, slow: float) -> None:
             context = browser.new_context(viewport=SIZE, record_video_dir=str(OUT), record_video_size=SIZE)
             page = context.new_page()
             beat = 0
+            timeline_start = time.monotonic()
+            takes: list[dict[str, float | str]] = []
 
             def shot(name: str, hold: float = 2.5) -> None:
                 nonlocal beat
                 beat += 1
+                start = time.monotonic() - timeline_start
                 page.wait_for_timeout(int(hold * 1000 * slow))
                 page.screenshot(path=str(OUT / f"{beat:02d}-{name}.png"))
+                end = time.monotonic() - timeline_start
+                takes.append({
+                    "name": name, "screenshot": f"{beat:02d}-{name}.png",
+                    "start_seconds": round(start, 2), "end_seconds": round(end, 2),
+                })
 
             page.goto(f"http://127.0.0.1:{port}/")
             shot("landing", 3)
@@ -87,7 +96,13 @@ def main(port: int, slow: float) -> None:
             final = OUT / "demo.webm"
             Path(video).replace(final)
             print(f"video: {final}")
-        print(f"{beat} screenshots in {OUT}")
+        (OUT / "takes.json").write_text(json.dumps({
+            "source": "Playwright continuous capture, cached real model outputs",
+            "video": "demo.webm", "viewport": SIZE,
+            "note": "Approximate capture timestamps; confirm frame boundaries before final edit.",
+            "takes": takes,
+        }, indent=2), encoding="utf-8")
+        print(f"{beat} screenshots and cut-index timestamps in {OUT}")
     finally:
         server.terminate()
 
