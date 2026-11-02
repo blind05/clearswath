@@ -31,6 +31,11 @@ const s = stylex.create({
     borderRightWidth: { default: 1, [media.mobile]: 0 }, borderRightStyle: "solid", borderRightColor: color.rule,
   },
   map: { minHeight: 0, height: { default: null, [media.mobile]: "55vh" }, flex: { default: null, [media.mobile]: "none" } },
+  welcome: { paddingTop: 32, paddingBottom: 26, borderBottomWidth: 1, borderBottomStyle: "solid", borderBottomColor: color.rule },
+  welcomeEyebrow: { color: color.muted, fontSize: 13, fontWeight: 500, marginBottom: 12 },
+  welcomeTitle: { fontSize: { default: 30, [media.mobile]: 26 }, lineHeight: 1.16, fontWeight: 600, letterSpacing: "-0.035em", maxWidth: 330 },
+  welcomeBody: { color: color.muted, fontSize: 15, lineHeight: 1.55, marginTop: 12, maxWidth: 345 },
+  welcomeAction: { font: "inherit", fontSize: 14, fontWeight: 600, color: "#FFFFFF", backgroundColor: { default: color.ink, ":hover": "#34493B" }, cursor: "pointer", border: 0, borderRadius: 4, paddingInline: 16, paddingBlock: 11, marginTop: 20 },
 });
 
 type Rerun = (excluded: number[]) => Promise<Plan>;
@@ -115,6 +120,19 @@ export function App() {
         <aside id={`panel-${tab}`} role="tabpanel" aria-label={tab === "plan" ? "Plan a spray" : "Check a photo"} {...stylex.props(s.aside)}>
           {tab === "plan" ? (
             <>
+              {!plan && (
+                <section {...stylex.props(s.welcome)} aria-label="ClearSwath introduction">
+                  <p {...stylex.props(s.welcomeEyebrow)}>A field-first application planner</p>
+                  <h2 {...stylex.props(s.welcomeTitle)}>Find the weeds. Respect the label.</h2>
+                  <p {...stylex.props(s.welcomeBody)}>
+                    See how one Montana field becomes a selective spray plan, with mapped setbacks and source-linked reasons.
+                  </p>
+                  <button type="button" {...stylex.props(s.welcomeAction)} disabled={busy}
+                          onClick={() => { demoField.current = "mt"; run(demo); }}>
+                    Explore the Montana example
+                  </button>
+                </section>
+              )}
               <SetupForm setup={setup} onChange={setSetup} open={formOpen} onOpenChange={setFormOpen}
                          fieldDrawn={!!drawing.field} managedCount={drawing.managed.length} busy={busy}
                          onPlan={planLive} onDemo={() => { demoField.current = "mt"; run(demo); }} />
