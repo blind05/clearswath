@@ -77,6 +77,19 @@ def main(port: int, slow: float) -> None:
             page.click("#demo-switch")
             page.wait_for_selector("text=Show the corrected field", timeout=60_000)
             shot("dakota-creek-buffer", 4)
+            # click inside the creek strip: the map says which label sentences hold that spot back
+            strip = page.evaluate("""() => {
+                const f = window.__clearswathMap.querySourceFeatures('reasons');
+                const ring = f[f.length - 1].geometry.coordinates.flat(Infinity);
+                const xs = ring.filter((_, i) => i % 2 === 0), ys = ring.filter((_, i) => i % 2 === 1);
+                return [xs.reduce((a, b) => a + b) / xs.length, ys.reduce((a, b) => a + b) / ys.length];
+            }""")
+            box = page.locator(".maplibregl-canvas").bounding_box()
+            p = page.evaluate("ll => window.__clearswathMap.project(ll)", strip)
+            page.mouse.click(box["x"] + p["x"], box["y"] + p["y"])
+            page.wait_for_selector("[data-why]", timeout=10_000)
+            shot("dakota-why-here", 5)
+            page.keyboard.press("Escape")
             ulv = page.locator("[data-rule-row]", has_text="ULV").get_by_role("checkbox")
             if ulv.count():
                 ulv.first.click()

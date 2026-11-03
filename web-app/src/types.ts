@@ -11,6 +11,7 @@ export interface Reason {
   page?: number;
   target?: string;
   distance_ft?: number;
+  condition?: string | null;  // a rule the label limits to some cases; applied until the user unticks it
 }
 
 export interface LabelRule {
@@ -32,7 +33,7 @@ export interface Plan {
   acres: { field_acres: number; spray_acres: number; excluded_acres: number };
   reasons: Reason[];
   warnings: string[];
-  label: { product_name: string | null; epa_reg_no: string | null; rules: LabelRule[]; dropped: unknown[]; source: "pdf" | "image" };
+  label: { product_name: string | null; epa_reg_no: string | null; rules: LabelRule[]; dropped: { reason: string; quote?: string; page?: number; kind?: string; summary?: string }[]; source: "pdf" | "image" };
   confirm: ConfirmRule[];
   excluded_rules: number[];
   bulletin: { in_pula: boolean; prohibited: boolean; citation: string; checked: boolean };

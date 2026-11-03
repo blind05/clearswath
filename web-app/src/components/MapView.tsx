@@ -2,16 +2,24 @@
 import type { Feature, FeatureCollection, Geometry, Polygon } from "geojson";
 import type { StyleSpecification } from "maplibre-gl";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import MapGL, { Layer, NavigationControl, Source, type MapRef } from "react-map-gl/maplibre";
+import MapGL, { Layer, NavigationControl, Source, type MapLayerMouseEvent, type MapRef } from "react-map-gl/maplibre";
 import { TerraDraw, TerraDrawPolygonMode, TerraDrawRectangleMode, TerraDrawSelectMode } from "terra-draw";
 import { TerraDrawMapLibreGLAdapter } from "terra-draw-maplibre-gl-adapter";
 import * as stylex from "@stylexjs/stylex";
-import { color } from "@/tokens.stylex";
-import type { Overlay, Plan } from "@/types";
+import { color, font } from "@/tokens.stylex";
+import type { Overlay, Plan, Reason } from "@/types";
 
 // The map's own controls sit over imagery, so they are the one place with a shadow (DESIGN.md).
 const s = stylex.create({
   wrap: { position: "relative", width: "100%", height: "100%" },
+  why: { position: "absolute", width: 320, maxWidth: "calc(100% - 24px)", padding: 14, fontSize: 13, lineHeight: 1.45,
+         borderRadius: 4, backgroundColor: color.panel, boxShadow: "0 1px 4px rgba(30,43,36,.25)", zIndex: 2 },
+  whyHead: { display: "flex", justifyContent: "space-between", gap: 12, fontWeight: 600, fontSize: 15, marginBottom: 6 },
+  whyClose: { font: "inherit", border: 0, padding: 0, background: "none", cursor: "pointer", color: color.muted },
+  whyItem: { marginTop: 10 },
+  whyQuote: { marginTop: 4, paddingLeft: 10, borderLeftWidth: 1, borderLeftStyle: "solid", borderLeftColor: color.ink,
+              fontFamily: font.condensed, fontSize: 14 },
+  whyCite: { marginTop: 3, paddingLeft: 11, color: color.muted },
   card: { position: "absolute", borderRadius: 4, backgroundColor: color.panel, boxShadow: "0 1px 4px rgba(30,43,36,.25)" },
   tools: { left: 12, top: 12, display: "flex", flexDirection: "column", gap: 4, padding: 4 },
   tool: {
@@ -98,6 +106,17 @@ export function MapView({ plan, onDrawing, clearDrawing }: Props) {
   const [revealed, setRevealed] = useState(false);
   const [hidden, setHidden] = useState<Record<string, boolean>>({});
   const [keyOpen, setKeyOpen] = useState(() => window.innerWidth >= 800);
+  // a click inside the field: which checked reasons hold that spot back (empty = none)
+  const [why, setWhy] = useState<{ x: number; y: number; reasons: number[] } | null>(null);
+  useEffect(() => setWhy(null), [plan]);
+
+  const onClick = useCallback((e: MapLayerMouseEvent) => {
+    if (tool || !plan) return setWhy(null);
+    const hits = e.features ?? [];
+    if (!hits.some((f) => f.layer.id === "field-hit")) return setWhy(null);
+    const reasons = [...new Set(hits.filter((f) => f.layer.id === "reasons-hit").map((f) => Number(f.properties?.reason)))].sort();
+    setWhy({ x: e.point.x, y: e.point.y, reasons });
+  }, [tool, plan]);
 
   const present = useMemo(() => LAYERS.filter((l) => {
     const d = plan?.layers[l.key];
@@ -178,7 +197,8 @@ export function MapView({ plan, onDrawing, clearDrawing }: Props) {
 
   return (
     <div {...stylex.props(s.wrap)}>
-      <MapGL ref={mapRef} onLoad={onLoad} mapStyle={BASEMAP} initialViewState={{ longitude: -101, latitude: 43, zoom: 3.6 }}
+      <MapGL ref={mapRef} onLoad={onLoad} onClick={onClick} interactiveLayerIds={plan ? ["field-hit", "reasons-hit"] : []}
+           mapStyle={BASEMAP} initialViewState={{ longitude: -101, latitude: 43, zoom: 3.6 }}
            maxZoom={21} style={{ width: "100%", height: "100%" }}
            attributionControl={{ compact: window.innerWidth < 800, customAttribution: overlay?.credit ?? undefined }}>
         {present.map((l) => {
@@ -204,8 +224,23 @@ export function MapView({ plan, onDrawing, clearDrawing }: Props) {
                    paint={{ "raster-opacity": 1, "raster-fade-duration": 0 }} />
           </Source>
         )}
+        {plan && (
+          <Source key={`${plan.run_id}-hit`} id="hit" type="geojson" data={asFeatures(plan.layers.field)}>
+            <Layer id="field-hit" type="fill" paint={{ "fill-opacity": 0 }} />
+          </Source>
+        )}
+        {plan?.layers.reasons && (
+          <Source key={`${plan.run_id}-reasons`} id="reasons" type="geojson" data={asFeatures(plan.layers.reasons)}>
+            <Layer id="reasons-hit" type="fill" paint={{ "fill-opacity": 0 }} />
+            <Layer id="reasons-picked" type="line" filter={["in", ["get", "reason"], ["literal", why?.reasons ?? []]]}
+                   paint={{ "line-color": "#1E2B24", "line-width": 3 }} />
+          </Source>
+        )}
         <NavigationControl position="top-right" showCompass={false} />
       </MapGL>
+
+      {why && plan && <WhyHere at={why} reasons={why.reasons.map((i) => plan.reasons[i]).filter(Boolean)}
+                               product={plan.label.product_name || "The label"} onClose={() => setWhy(null)} />}
 
       <div {...stylex.props(s.card, s.tools)} role="toolbar" aria-label="Draw on the map">
         <ToolButton active={tool === "polygon" && target === "field"} onClick={() => pick("field", "polygon")}>Draw field</ToolButton>
@@ -255,5 +290,37 @@ function KeyRow({ name, swatch, on, toggle }: { name: string; swatch: React.CSSP
         {name}
       </label>
     </li>
+  );
+}
+
+function WhyHere({ at, reasons, product, onClose }: { at: { x: number; y: number }; reasons: Reason[]; product: string;
+                                                     onClose: () => void }) {
+  useEffect(() => {
+    const esc = (e: KeyboardEvent) => e.key === "Escape" && onClose();
+    window.addEventListener("keydown", esc);
+    return () => window.removeEventListener("keydown", esc);
+  }, [onClose]);
+  const left = Math.max(12, Math.min(at.x + 14, window.innerWidth - 340));
+  return (
+    <div {...stylex.props(s.why)} style={{ left, top: Math.max(12, at.y - 20) }} role="status" aria-live="polite"
+         data-why={reasons.length ? "held" : "clear"}>
+      <div {...stylex.props(s.whyHead)}>
+        {reasons.length ? "Held back here" : "Nothing checked holds this spot back"}
+        <button type="button" {...stylex.props(s.whyClose)} onClick={onClose} aria-label="Close">Close</button>
+      </div>
+      {!reasons.length && <p>The plan's other limits still apply here, and so do the checks it doesn't make.</p>}
+      {reasons.map((r, i) => (
+        <div key={i} {...stylex.props(s.whyItem)}>
+          {r.source === "label" && r.quote ? (
+            <>
+              <div>{r.kind === "drift" ? `Drift setback, ${r.distance_ft} ft` : `${r.distance_ft} ft from ${r.target}`}</div>
+              <blockquote {...stylex.props(s.whyQuote)}>{r.quote}</blockquote>
+              <div {...stylex.props(s.whyCite)}>{product}, page {r.page}
+                {r.condition ? `. The label limits it to: ${r.condition}. Applied unless you untick it.` : ""}</div>
+            </>
+          ) : <div>{r.summary}</div>}
+        </div>
+      ))}
+    </div>
   );
 }

@@ -193,5 +193,9 @@ def to_json(result: dict) -> dict:
             "restricted": _fc(bulletin["restricted"]),
             **{h: _fc(result["hazards"].get(h) or []) for h in ("water", "possible_water", "building", "habitat")},
             **_cell_layers(grid),
+            # where in the field each reason applies, so a click on the map can say why a spot is held back
+            "reasons": {"type": "FeatureCollection", "features": [
+                {"type": "Feature", "geometry": mapping(z), "properties": {"reason": i}}
+                for i, z in plan.get("reason_zones", [])]},
         },
     }

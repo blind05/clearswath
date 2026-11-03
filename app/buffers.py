@@ -78,17 +78,25 @@ def plan(field: Polygon, hazards: dict, rules: list[dict], restricted=(),
 
     field_m = to_utm([field])[0]
     hazards_m = {k: to_utm(hazards.get(k) or []) for k in HAZARD_KINDS}
-    zones, reasons = [], []
+    zones, reasons, reason_zones = [], [], []  # reason_zones: (reason index, its zone inside the field)
+
+    def because(reason: dict, shapes) -> None:
+        """Lists a reason; with shapes, also where in the field it applies, so the map can say why a spot is held."""
+        reasons.append(reason)
+        if shapes:
+            inside = field_m.intersection(union_all(list(shapes)))
+            if not inside.is_empty:
+                reason_zones.append((len(reasons) - 1, inside))
 
     def reaches(shapes) -> bool:
         """A reason is only listed if its zone takes area out of this field (same threshold as the status)."""
         return field_m.intersection(union_all(shapes)).area >= MIN_ACRES * SQM_PER_ACRE
 
     if prohibited:
-        reasons.append({"source": "bulletin", "summary": "Bulletin prohibits this product here."})
+        because({"source": "bulletin", "summary": "Bulletin prohibits this product here."}, [field_m])
         zones.append(field_m)
     for gap in gaps:
-        reasons.append({"source": "data", "summary": gap})
+        because({"source": "data", "summary": gap}, [field_m])
     if gaps:
         zones.append(field_m)
 
@@ -101,10 +109,9 @@ def plan(field: Polygon, hazards: dict, rules: list[dict], restricted=(),
         zones += rule_zones
         if not reaches(rule_zones):
             continue
-        reasons.append({"source": "label", "target": rule["target"],
-                        "distance_ft": round(meters / FT_TO_M, 1),
-                        "summary": rule.get("summary", ""), "quote": rule["quote"],
-                        "page": rule.get("page")})
+        because({"source": "label", "target": rule["target"], "distance_ft": round(meters / FT_TO_M, 1),
+                 "summary": rule.get("summary", ""), "quote": rule["quote"], "page": rule.get("page"),
+                 "condition": rule.get("condition")}, rule_zones)
 
     managed_m = to_utm(managed)
     for rule in rules:
@@ -114,23 +121,23 @@ def plan(field: Polygon, hazards: dict, rules: list[dict], restricted=(),
         zone = drift_zone(field_m, managed_m, meters, wind_from_deg)
         zones.append(zone)
         if reaches([zone]):
-            reasons.append({"source": "label", "kind": "drift", "target": "unmanaged land",
-                            "distance_ft": round(meters / FT_TO_M, 1), "summary": rule.get("summary", ""),
-                            "quote": rule["quote"], "page": rule.get("page")})
+            because({"source": "label", "kind": "drift", "target": "unmanaged land",
+                     "distance_ft": round(meters / FT_TO_M, 1), "summary": rule.get("summary", ""),
+                     "quote": rule["quote"], "page": rule.get("page")}, [zone])
 
     water_rule = any(r.get("kind") == "buffer" and r.get("target") == "water" and _applies(r, method) for r in rules)
     if hazards_m["water"] and not water_rule:
         # No label buffer for water: still never spray the water itself.
         zones += hazards_m["water"]
         if reaches(hazards_m["water"]):
-            reasons.append({"source": "rule:water",
-                            "summary": "No label water buffer applies; water itself is excluded."})
+            because({"source": "rule:water",
+                     "summary": "No label water buffer applies; water itself is excluded."}, hazards_m["water"])
 
     if restricted:
         restricted_m = to_utm(restricted)
         zones += restricted_m
         if reaches(restricted_m):
-            reasons.append({"source": "bulletin", "summary": "Bulletin restricted area excluded."})
+            because({"source": "bulletin", "summary": "Bulletin restricted area excluded."}, restricted_m)
 
     # Water only the aerial scout saw (not in the national water map) is a question, not a fact: it never changes
     # the map, but if it, or the label's water setback around it, reaches the field, the plan can't be a clean GO.
@@ -138,10 +145,10 @@ def plan(field: Polygon, hazards: dict, rules: list[dict], restricted=(),
                    and r.get("target") == "water" and _applies(r, method)), default=0)
     unsure = [s for s in to_utm(hazards.get("possible_water") or []) if s.buffer(setback).intersects(field_m)]
     if unsure:
-        reasons.append({"source": "review", "kind": "possible_water", "summary": f"{len(unsure)} possible water "
+        because({"source": "review", "kind": "possible_water", "summary": f"{len(unsure)} possible water "
                         f"area{'s' if len(unsure) > 1 else ''} on the aerial photo {'are' if len(unsure) > 1 else 'is'}"
                         " not in the national water map. Check before spraying: if it holds water, the label's water"
-                        " setback applies."})
+                        " setback applies."}, [s.buffer(setback) for s in unsure])
 
     # Runoff mitigation points are worked out in EPA's PALM, not here (out of scope); a label that requires
     # them can't be a clean GO, so it forces ADJUST. It never changes the map.
@@ -162,6 +169,7 @@ def plan(field: Polygon, hazards: dict, rules: list[dict], restricted=(),
         status = "go"
 
     back = list(gpd.GeoSeries([spray, no_spray], crs=utm).to_crs(4326))
-    return {"status": status, "method": method, "field_acres": round(_acres(field_m), 2),
+    zones_ll = list(gpd.GeoSeries([z for _, z in reason_zones], crs=utm).to_crs(4326)) if reason_zones else []
+    return {"reason_zones": [(i, z) for (i, _), z in zip(reason_zones, zones_ll)],"status": status, "method": method, "field_acres": round(_acres(field_m), 2),
             "spray_acres": round(spray_acres, 2), "excluded_acres": round(excluded_acres, 2),
             "spray_zone": back[0], "no_spray": back[1], "reasons": reasons}

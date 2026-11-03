@@ -233,3 +233,28 @@ def test_drift_properties_on_random_fields(seed):
     assert plan(field, {}, [rule], managed=more, wind_from_deg=wind)["spray_acres"] >= out["spray_acres"] - 0.01
     # 4. the drift zone is always inside the field
     assert drift_zone(field_m, managed_m, meters, wind).difference(field_m).area <= 1e-6
+
+
+# Evidence on the map: each reason carries where in the field it applies.
+from shapely.geometry import Point as _Pt  # noqa: E402
+
+
+def test_a_buffer_reason_covers_exactly_its_held_back_strip():
+    out = plan(FIELD, {"water": [POND]}, [rule(100, "ft")])
+    ((i, zone),) = out["reason_zones"]
+    assert out["reasons"][i]["source"] == "label"
+    zone_m, held_m = m(zone, out["no_spray"])
+    assert zone_m.symmetric_difference(held_m).area < 1  # m2: the same strip
+    inside, clean = ll(_Pt(X + 395, Y + 200), _Pt(X + 100, Y + 200))  # 15 m from the field edge, and 300 m away
+    assert zone.contains(inside) and not zone.contains(clean)
+
+
+def test_a_clean_field_has_no_reason_zones():
+    assert plan(FIELD, {}, [rule()])["reason_zones"] == []
+
+
+def test_possible_water_points_at_its_area_but_changes_nothing():
+    out = plan(FIELD, {"possible_water": [INSIDE]}, [rule()])
+    ((i, zone),) = out["reason_zones"]
+    assert out["reasons"][i]["kind"] == "possible_water" and out["excluded_acres"] == 0
+    assert m(zone)[0].contains(INSIDE_M.centroid)
