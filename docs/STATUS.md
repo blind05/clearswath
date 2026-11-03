@@ -20,7 +20,7 @@ user acts; "replay" means the demo serves a saved real run.
 | Muse Image 1.0 | Available on the key, not used | No honest job for it |
 | Exports: KML, GeoJSON | Working | Tests |
 | Export: DJI prescription | Built, not flight-tested | Folder layout TODO(verify) |
-| Access code, per-IP limit, daily budget | Working | Tests; which X-Forwarded-For entry is the visitor on Render: check with `/api/whoami` |
+| Access code, per-IP limit, daily budget | Working | Tests; checked on Render with `/api/whoami` (2026-11-03): the visitor is Cloudflare's `CF-Connecting-IP`, not the last X-Forwarded-For hop (Render's internal proxy) |
 | React page (Astryx, MapLibre, Terra Draw) | Working | Recorder's 8 beats; QA at 1440/1280/390 |
 | Live URL | https://clearswath.onrender.com (Render free plan) | Demo plans computed once (peak 395 MB of 512); sleeps after 15 idle minutes |
 | README, video | README with screenshots, diagram and results; video scripted (`docs/video/SCRIPT.md`) | |

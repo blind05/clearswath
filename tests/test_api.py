@@ -462,6 +462,18 @@ def test_forwarded_for_uses_the_last_hop(client, monkeypatch):
     assert client.post("/api/plan", headers=spoof2, data={"month": "2026-11"}, files=files()).status_code == 429
 
 
+def test_cloudflare_address_gives_each_visitor_their_own_budget(client, monkeypatch):
+    # Render's real chain: client, Cloudflare, then the internal proxy everyone shares
+    monkeypatch.setenv("RUNS_PER_IP_PER_DAY", "1")
+    files = lambda: {"field": ("f.geojson", json.dumps(mapping(FIELD))), "label": ("l.pdf", b"%PDF")}  # noqa: E731
+    via = lambda ip, fwd="203.0.113.9, 104.22.62.166, 10.31.76.122": {  # noqa: E731
+        "CF-Connecting-IP": ip, "X-Forwarded-For": fwd}
+    post = lambda h: client.post("/api/plan", headers=h, data={"month": "2026-11"}, files=files()).status_code  # noqa: E731
+    assert post(via("203.0.113.9")) == 200
+    assert post(via("198.51.100.7")) == 200  # a second visitor isn't blocked by the first
+    assert post(via("203.0.113.9", "9.9.9.9, 104.22.62.166, 10.31.76.122")) == 429  # forged hop doesn't reset it
+
+
 @pytest.mark.parametrize("value", ["off", "OFF", "0", "false", "no"])
 def test_kill_switch_stops_paid_endpoints(client, monkeypatch, value):
     monkeypatch.setenv("CLEARSWATH_LIVE_MODE", value)

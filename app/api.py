@@ -148,8 +148,11 @@ def _add(table: OrderedDict, ip: str, now: float) -> None:
 
 
 def _client_ip(request: Request) -> str:
-    # Render's proxy appends the address it saw; the last entry is the one a client can't forge.
-    # TODO(verify): X-Forwarded-For order on Render
+    # Render sits behind Cloudflare, which sets CF-Connecting-IP and overwrites any value a client sends. The last
+    # X-Forwarded-For hop is Render's internal proxy (10.x, seen via /api/whoami on 2026-11-03), shared by everyone,
+    # so it's only the fallback: without Cloudflare all callers share one budget, which fails closed.
+    if cf := request.headers.get("cf-connecting-ip", "").strip():
+        return cf
     fwd = request.headers.get("x-forwarded-for")
     return fwd.split(",")[-1].strip() if fwd else (request.client.host if request.client else "unknown")
 

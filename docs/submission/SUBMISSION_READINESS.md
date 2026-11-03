@@ -43,6 +43,8 @@ by a person.
 1. Hunter listens to the video once; optionally replaces the synthetic narration with his own take.
 2. Upload the final MP4 (YouTube unlisted or similar) and open the link in a private window.
 3. Uptime ping on `/api/health` every 10 minutes through Nov 8, so judges don't hit a sleeping server.
-4. Run the two `/api/whoami` checks; fix the per-address limit if it reads the wrong header.
+4. ~~Run the `/api/whoami` checks~~ Done 2026-11-03: the limit read Render's internal proxy, so every visitor
+   shared one budget and one wrong-code lockout. Now reads `CF-Connecting-IP`; deploy, then re-run whoami
+   (`address_used` should be your own address).
 5. Fill the Cerebral Valley form from `docs/video/SCRIPT.md` (name, one-liner, problem statement, description),
    then tag the release.
