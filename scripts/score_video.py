@@ -147,21 +147,57 @@ def main(vo: Path | None, out: Path) -> None:
             "sam_alone": start["04a"], "wonder": start["04b"], "files": start["06a"], "go": start["07b"],
             "end": start["09"]}
     music, sfx = score(tl["duration"], cues)
+    voice = VID / "voice" / "manifest.json"
+    if vo is None and voice.exists():  # narration from scripts/narrate_video.py: each line at the start of its shot
+        firsts = ["01a", "020", "03a", "04a", "05", "06a", "07a", "08", "09"]
+        track = np.zeros(int(tl["duration"] * SR) + SR)
+        for n, part in enumerate(firsts, 1):
+            with wave.open(str(VID / "voice" / f"shot{n}.wav")) as w:
+                line = np.frombuffer(w.readframes(w.getnframes()), dtype="<i2").astype(float) / 32767
+                rate = w.getframerate()
+            line = np.interp(np.arange(0, len(line), rate / SR), np.arange(len(line)), line)  # to 44.1 kHz
+            add(track, start[part] + 0.4, line)
+        vo = AUDIO / "voice.wav"
+        with wave.open(str(vo), "wb") as w:
+            w.setnchannels(1), w.setsampwidth(2), w.setframerate(SR)
+            w.writeframes((np.clip(track[: int(tl["duration"] * SR)], -1, 1) * 32767).astype("<i2").tobytes())
     dry = write(AUDIO / "music_dry.wav", music)
     write(AUDIO / "sfx.wav", sfx)
     # room and polish in ffmpeg: a gentle low-pass, a short room echo
     ff("-i", dry, "-af", "lowpass=f=7500,aecho=0.8:0.6:70|140:0.22|0.12", AUDIO / "music.wav")
     ff("-i", AUDIO / "music.wav", "-af", "volume=-9dB", AUDIO / "music_under_vo.wav")
     if vo:
-        mix = ("[1:a]loudnorm=I=-16:TP=-2[v];[0:a][v]sidechaincompress=threshold=0.05:ratio=6:attack=20:release=400[m];"
-               "[m][v][2:a]amix=inputs=3:normalize=0,loudnorm=I=-16:TP=-2:LRA=11,aresample=48000[a]")
+        mix = ("[1:a]aformat=channel_layouts=stereo,aresample=44100,loudnorm=I=-16:TP=-2,asplit=2[v1][v2];"
+               "[0:a][v1]sidechaincompress=threshold=0.05:ratio=6:attack=20:release=400[m];"
+               "[m][v2][2:a]amix=inputs=3:normalize=0,loudnorm=I=-16:TP=-2:LRA=11,aresample=48000[a]")
         ff("-i", AUDIO / "music_under_vo.wav", "-i", vo, "-i", AUDIO / "sfx.wav", "-filter_complex", mix,
            "-map", "[a]", AUDIO / "mix.wav")
     else:
         ff("-i", AUDIO / "music.wav", "-i", AUDIO / "sfx.wav", "-filter_complex",
            "[0:a][1:a]amix=inputs=2:normalize=0,loudnorm=I=-16:TP=-2:LRA=11,aresample=48000[a]", "-map", "[a]", AUDIO / "mix.wav")
-    ff("-i", VID / "clearswath.mp4", "-i", AUDIO / "mix.wav", "-map", "0:v", "-map", "1:a", "-c:v", "copy",
-       "-c:a", "aac", "-b:a", "192k", "-ar", "48000", "-shortest", "-movflags", "+faststart", out)
+    subs = []
+    if voice.exists():  # captions: each line split into sentences, timed by word count within its shot's take
+        import re
+        import sys
+        sys.path.insert(0, str(ROOT / "scripts"))
+        from narrate_video import lines
+        seconds = json.loads(voice.read_text())["seconds"]
+        firsts = ["01a", "020", "03a", "04a", "05", "06a", "07a", "08", "09"]
+        cues_ = []
+        for n, (part, text) in enumerate(zip(firsts, lines()), 1):
+            sentences = [x for x in re.split(r"(?<=[.:?!])\s+", text) if x]
+            t, span = start[part] + 0.4 + 0.25, seconds[str(n)] - 0.5
+            total = sum(len(x.split()) for x in sentences)
+            for x in sentences:
+                d = span * len(x.split()) / total
+                cues_.append((t, t + d, x))
+                t += d
+        stamp = lambda v: f"{int(v // 3600):02d}:{int(v % 3600 // 60):02d}:{int(v % 60):02d},{int(v % 1 * 1000):03d}"  # noqa: E731
+        srt = out.with_suffix(".srt")
+        srt.write_text("\n".join(f"{i}\n{stamp(a)} --> {stamp(b)}\n{x}\n" for i, (a, b, x) in enumerate(cues_, 1)))
+        subs = ["-i", srt, "-map", "2:s", "-c:s", "mov_text", "-metadata:s:s:0", "language=eng"]
+    ff("-i", VID / "clearswath.mp4", "-i", AUDIO / "mix.wav", *subs[:2], "-map", "0:v", "-map", "1:a", *subs[2:],
+       "-c:v", "copy", "-c:a", "aac", "-b:a", "192k", "-ar", "48000", "-shortest", "-movflags", "+faststart", out)
     report = ff("-i", out, "-af", "ebur128=peak=true", "-f", "null", "-")
     summary = report[report.rfind("Summary:"):]
     print(out)
