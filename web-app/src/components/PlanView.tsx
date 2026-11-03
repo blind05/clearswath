@@ -188,6 +188,22 @@ export function PlanView({ plan: p, agentAsked, onUntick, onAskLive, onSwitchDem
         </Section>
       )}
 
+      {p.label.dropped.length > 0 && (
+        <Section title="Rules not applied">
+          <p {...stylex.props(text.small)}>
+            Muse Spark read {p.label.dropped.length === 1 ? "this rule" : "these rules"}, but the sentence it quoted isn't on
+            the label page, so the plan doesn't use {p.label.dropped.length === 1 ? "it" : "them"}. Check the label yourself.
+          </p>
+          {/* not an Excerpt: that style is kept for words that are on the label */}
+          {p.label.dropped.map((d, i) => (
+            <p key={i} {...stylex.props(s.rule)}>
+              Muse Spark quoted page {d.page ?? "?"}: “{d.quote || d.summary || d.kind}”
+              <span {...stylex.props(text.small)}> ({d.reason})</span>
+            </p>
+          ))}
+        </Section>
+      )}
+
       {p.spot && (
         <Section title="Spray map">
           <p {...stylex.props(text.num)}>The weed map sprays {p.spot.treated_acres.toFixed(2)} ac of {p.spot.field_acres.toFixed(1)} ac, in {p.spot.cell_size_m} m cells.</p>
