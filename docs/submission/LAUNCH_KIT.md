@@ -34,3 +34,18 @@ still checks weather, licence and the field. Demo and code: (links).
 
 **Don't claim:** that the label said 9.7 acres; that a plan is safe, legal or compliant; that the DJI file was flown;
 label accuracy numbers (keys unreviewed); that the narration is Hunter's voice.
+
+## Posting order (after the form is in; from the promotion team, 2026-11-03)
+
+1. **X, right after submitting:** the square teaser and the X post above; first reply with the live link, repo and
+   full video.
+2. **Show HN, about 4 hours later:** "Show HN: ClearSwath – read the label, map the weeds, spray only where both say
+   yes", linking the live site. First comment: the demos are saved real runs (free, no sign-up); live runs on your own
+   field need an access code.
+3. **LinkedIn, the next morning:** the LinkedIn text above, with the Montana plan screenshot.
+4. **r/PrecisionAg, after asking the moderators:** text first, leading with the South Dakota click: 150 ft from water
+   by air, 450 ft for ULV, page 14. No cross-posting.
+5. **Meta developer Discord / event channel:** the X link and two lines.
+
+Never: say a plan endorses spraying, that the DJI file was flown, a label-accuracy number, that the narration or the
+voice note is a real applicator, or that the label stated the acreage.

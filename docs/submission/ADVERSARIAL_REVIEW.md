@@ -10,6 +10,7 @@ hand before anything changed. Scores are the reviewers' estimates, not organizer
 | 2 | Film fact-checker | 2:48 cut: captions + 14 frames | 33 claims | ~$1.30 |
 | 2 | Product designer, hackathon judge, accessibility | Live site, 7 screenshots (desktop + phone) | judge 6.4 | not logged |
 | 3 | Final judge | Live site after the UI pass, README, film captions | 6.2 | not logged |
+| 4 | Six teams, each 2-3 workers + an opponent + a leader (idea, UI, README, demo, final check, promotion and judging), with Muse Spark Open cross-checks on Baseten (opponent) and Fireworks (judge) | Repo at d542d1f, screenshots, film frames and captions; web research | 6.4 | ~30 Muse runs, see the Meta dashboard |
 
 ## What changed because of a review
 
@@ -24,6 +25,11 @@ hand before anything changed. Scores are the reviewers' estimates, not organizer
 - Found while checking the designer's phone screenshots: phones opened every page scrolled to the bottom, because the
   phone layout was a `column-reverse` scroller (ef52092).
 
+- Round 4: the record survived a switch to the other demo; a spray volume under the label's minimum could still
+  open the DJI link; missing aerial imagery around a field (over 1%) was only a warning on a GO; a recording with no
+  sound failed silently; the film got a visible cursor on the creek click; the README got a decision-support line on
+  top and Muse Spark named in its intro.
+
 ## Rejected, with the reason
 
 - "Buffer touches under 0.01 ac get sprayed": wrong; the map always subtracts the whole zone (`app/buffers.py:161`).
@@ -31,6 +37,10 @@ hand before anything changed. Scores are the reviewers' estimates, not organizer
 - "The label is the law" unsupported: it is EPA's own phrase.
 - Dropping model names from the hazard lines: for judges they are the evidence of Meta model use.
 - Hatched fills for colour-blind readers: worth doing, but it changes the map paint and the film on the last day.
+- Round 4: label page counts "unsupported" (measured: 30 and 61 PDF pages); "a label is a legal document" as
+  clearance language (the don't-claim rule is about calling a plan legal); removing Fireworks as failover (it is one,
+  `app/llm.py`); dropping the fresh-clone line (the check ran); reordering the film the day before the deadline;
+  collapsing the map key on desktop.
 - Remove the photo tab, or the live agent: they work and are labelled; removing them buys nothing by the deadline.
 
 ## Still open (only Hunter can close these)
