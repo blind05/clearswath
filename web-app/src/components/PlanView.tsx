@@ -237,7 +237,7 @@ export function PlanView({ plan: p, agentAsked, onUntick, onAskLive, onSwitchDem
       </Section>
 
       <Section title="Application record">
-        <RecordForm runId={p.run_id} />
+        <RecordForm runId={p.run_id} saved={p.saved_record} />
       </Section>
     </div>
   );

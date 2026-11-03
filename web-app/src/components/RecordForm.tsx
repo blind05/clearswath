@@ -8,7 +8,7 @@ import { FileInput } from "@astryxdesign/core/FileInput";
 import { TextArea } from "@astryxdesign/core/TextArea";
 import { text } from "@/styles";
 import { color } from "@/tokens.stylex";
-import type { AppRecord } from "@/types";
+import type { AppRecord, Plan } from "@/types";
 
 const RECORD_FIELDS: [string, string][] = [
   ["applicator_name", "Applicator"], ["certification_number", "Licence no."], ["operator_name", "Operator"],
@@ -60,7 +60,7 @@ function RecordTable({ fields, rec, missing }: { fields: [string, string][]; rec
   );
 }
 
-export function RecordForm({ runId }: { runId: string }) {
+export function RecordForm({ runId, saved }: { runId: string; saved?: Plan["saved_record"] }) {
   const [notes, setNotes] = useState("");
   const [audio, setAudio] = useState<Blob | null>(null);
   const [noteSecs, setNoteSecs] = useState<number | null>(null);
@@ -143,6 +143,7 @@ export function RecordForm({ runId }: { runId: string }) {
     finally { setBusy(false); }
   }
 
+  const shown = rec ?? saved?.record;  // until you fill your own, the demo shows its saved voice note
   const label = (k: string) => RECORD_FIELDS.find(([f]) => f === k)?.[1] ?? k;
   return (
     <div>
@@ -163,18 +164,19 @@ export function RecordForm({ runId }: { runId: string }) {
         <Button type="submit" variant="secondary" isLoading={busy} label={busy ? "Filling the record…" : "Fill the record"} />
       </form>
       {error && <p role="alert" {...stylex.props(text.error)}>{error}</p>}
-      {rec && (
+      {shown && (
         <div>
-          {rec.missing.length > 0 && <p role="alert" {...stylex.props(s.missing, s.gap)}>Still needed: {rec.missing.map(label).join(", ")}.</p>}
-          <RecordTable fields={RECORD_FIELDS} rec={rec} missing={rec.missing} />
-          {rec.part137 && (
+          {!rec && saved && <p {...stylex.props(text.small, s.gap)}>Saved voice note ({saved.model}, {saved.date}): a real recording, transcribed and filled then.</p>}
+          {shown.missing.length > 0 && <p role="alert" {...stylex.props(s.missing, s.gap)}>Still needed: {shown.missing.map(label).join(", ")}.</p>}
+          <RecordTable fields={RECORD_FIELDS} rec={shown} missing={shown.missing} />
+          {shown.part137 && (
             <>
               <h3 {...stylex.props(s.h3)}>FAA Part 137 record</h3>
               <p {...stylex.props(text.small)}>14 CFR 137.71, for commercial agricultural aircraft operators: keep at your home base for at least 12 months.</p>
-              <RecordTable fields={PART137_FIELDS} rec={rec.part137} missing={rec.part137.missing} />
+              <RecordTable fields={PART137_FIELDS} rec={shown.part137} missing={shown.part137.missing} />
             </>
           )}
-          <p {...stylex.props(text.small, s.gap)}>Heard: “{rec.transcript}”</p>
+          <p {...stylex.props(text.small, s.gap)}>Heard: “{shown.transcript}”</p>
         </div>
       )}
     </div>
