@@ -5,8 +5,13 @@
 **Try it: [clearswath.onrender.com](https://clearswath.onrender.com)** (free hosting: the first visit after a quiet spell
 can take a minute to wake up).
 
+Decision support, not clearance to spray: it checks the rules it lists, and the applicator decides. Both demos replay
+saved real runs; the DJI file is a planning file, not flight-tested; the video's narration is a disclosed synthetic
+voice.
+
 **Two minutes, no sign-up:**
-1. Press **Explore the Montana example**: a saved real run opens on the drone image, with the cells to spot spray.
+1. Press **Explore the Montana example**: a saved real run opens on the drone image: **Adjust**, 9.7 of 24.1 acres
+   to spot spray.
 2. Click a spot on the map: a card quotes the label sentence that holds it back, with its page, or says nothing
    checked does.
 3. Scroll to **Application record**: a saved voice note filled it. Then follow **Show the South Dakota cropland
@@ -14,8 +19,8 @@ can take a minute to wake up).
 
 A pesticide label is a legal document, often dozens of pages (the two here run 30 and 61): setbacks from water, wind
 limits, rates, endangered-species bulletins. A drone can now spray single patches of weeds, but it doesn't read the
-label. ClearSwath does. Give it
-a field, the label PDF and a drone weed map. It returns:
+label. ClearSwath does: Muse Spark reads the label into rules, and code keeps only the rules whose sentence is on the
+page. Give it a field, the label PDF and a drone weed map. It returns:
 
 - **a decision** (No conflicts in checked rules, Adjust, or Do not spray), each reason with the label sentence it
   comes from, quoted word for word and checked against the PDF;
@@ -54,15 +59,18 @@ Press **Explore the Montana example**. The demos replay saved real runs, so they
 
 Live runs on your own field and label need an access code: 3 per address per day, within a $5 daily model budget.
 
-Run it yourself (Python 3.12, [uv](https://docs.astral.sh/uv/), Node 22):
+Run it yourself (Python 3.12, [uv](https://docs.astral.sh/uv/), Node 22). The demos need no keys:
 
 ```sh
 uv sync
-cd web-app && npm ci && npm run build && cd ..   # the page, built into web/dist
-cp .env.example .env        # add MODEL_API_KEY (Meta Model API); BASETEN_API_KEY for Muse Spark Open
-uv run uvicorn app.api:app  # then open http://localhost:8000
-uv run pytest               # no test calls the network or a model
+(cd web-app && npm ci && npm run build)   # the page, built into web/dist
+uv run pytest                             # offline: no test calls a network or a model
+uv run uvicorn app.api:app                # then open http://localhost:8000
 ```
+
+Live runs on your own field call the Meta Model API: copy `.env.example` to `.env`, add `MODEL_API_KEY` (and
+`BASETEN_API_KEY` for Muse Spark Open), and set `ACCESS_CODE` (16 characters or more). Checked on a fresh clone,
+2026-11-03.
 
 ## How it decides
 
@@ -124,6 +132,7 @@ shrubs and water; Microsoft building footprints). Full tables in `evals/results_
 | Water: precision | 95% | (text prompts kept for water) |
 
 SAM 3.1 can't find a shelterbelt from the air by name, but outlines one closely from a box. Wonder supplies the boxes.
+On the same 20 tiles, Wonder + SAM's mean precision is 57% (`docs/STATUS.md`).
 Wonder's results vary between runs on a single tile, and the truth is 10 m data from 2021, so these are rough numbers.
 
 ## Weed results
@@ -144,9 +153,12 @@ On the Montana block the spurge model is tuned to catch 85% of the spurge plots 
 the four clusters inside the block, which it never saw, it found 90% of spurge plots and flagged 10% of clean ones,
 and it sprays 40% of the block (1 m cells). Catching more costs more: tuned to 90%, it finds 94% and sprays 68%.
 The app states the catch rate next to the map. Frozen DINOv2 features alone sprayed 68% to find 81%.
+The PhenoBench range needs the 50 labelled tiles from the date sprayed: on the seedling date, a head tuned on later
+dates misses 43% of weed pixels (`evals/results_phenobench.md`).
 
 Muse Spark Open was also tried as a reviewer of the photo mode's weed patches. On CoFly it called real weeds bare
 soil and agreed with the ground truth only 52% of the time, so it is not in the app (`evals/results_patch_review.md`).
+As a label reader it treats Warrior II's ULV-only 450 ft buffer as always on, so the demos keep Muse Spark 1.3's reads.
 
 ## Limits
 
@@ -166,7 +178,7 @@ Third-party parts are the datasets, models and libraries credited below. Hunter 
 (Anthropic) as the coding agent. The weed models were trained on Modal; the demo video is cut, scored and mixed by
 `scripts/cut_video.py` and `scripts/score_video.py` from the app's own recorded takes, with original generated music.
 The narration is a synthetic voice (Kokoro-82M, Apache-2.0, `scripts/narrate_video.py`), not Hunter's; its
-intelligibility was checked by transcribing the final mix with Muse Voice Transcribe (97% of script words heard).
+intelligibility was checked by transcribing the final mix with Muse Voice Transcribe.
 
 ## Data and credits
 
@@ -178,20 +190,6 @@ intelligibility was checked by transcribing the final mix with Muse Voice Transc
 - ESA WorldCover 2021 (CC BY 4.0) and Microsoft Global ML Building Footprints (ODbL), for the hazard eval only.
 - The page is built on Meta's Astryx design system with StyleX. MapLibre GL JS (BSD-3-Clause); React, react-map-gl,
   Terra Draw, Astryx and StyleX (MIT); IBM Plex (SIL Open Font License).
-
-## Run it locally
-
-Needs Python 3.12 with [uv](https://docs.astral.sh/uv/) and Node 22 (as in the Dockerfile). The demos need no keys.
-
-```sh
-uv sync
-(cd web-app && npm ci && npm run build)
-uv run pytest                       # offline: no test calls a network or a model
-uv run uvicorn app.api:app          # http://127.0.0.1:8000
-```
-
-Live runs on your own field call the Meta Model API: copy `.env.example` to `.env`, add `MODEL_API_KEY`, and set
-`ACCESS_CODE` (16 characters or more) to open them. Checked on a fresh clone, 2026-11-03.
 
 ## Repository
 
