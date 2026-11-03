@@ -34,7 +34,7 @@ Conditions: one listen by Hunter, the video uploaded to a public link, and the s
 
 ## Video
 
-See `VIDEO_QA.md`. 2:31, 1920x1080 H.264, AAC 48 kHz, -16.3 LUFS, subtitles embedded and as SRT. Narration is a
+See `VIDEO_QA.md`. 2:48, 1920x1080 H.264, AAC 48 kHz, -16.3 LUFS, subtitles embedded and as SRT. Narration is a
 disclosed synthetic voice (Kokoro-82M); 97% of script words heard back by Muse Voice Transcribe. Not yet listened to
 by a person.
 
@@ -60,7 +60,7 @@ participant guide.
 | Impact | 7/10 | A real operator task (label -> lines on a field) with a usable output; framed as decision support, not approval | No user beyond the builder has tried it |
 | Meta tooling | 7/10 | Spark 1.3 reads the label with quotes checked in code; Wonder + SAM 3.1 scout (measured over 3 runs); Spark agent replayed. DINOv2 is Meta open weights | Voice Transcribe not run on real speech; Spark Open reads a conditional buffer as unconditional |
 | Technical | 8/10 | UTM buffering, quote verification, fail-closed warnings, 447 offline tests, spend cap, per-visitor limit now correct behind Cloudflare | Label accuracy unclaimed: answer keys unreviewed |
-| Demo | 7/10 | Opens on the real map with 9.7 of 24.1 acres; click-for-reason; 2:31 | Synthetic narration; nobody has listened to it yet |
+| Demo | 7/10 | Opens on the real map with 9.7 of 24.1 acres; click-for-reason; a spoken note fills the record; 2:48 | Synthetic narration; nobody has listened to it yet |
 
 Weighted: about 7.2. Estimates from one reviewer who knows the code, so expect them to be generous.
 
