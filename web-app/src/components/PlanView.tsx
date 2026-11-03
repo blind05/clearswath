@@ -6,7 +6,7 @@ import { Button } from "@astryxdesign/core/Button";
 import { CheckboxInput } from "@astryxdesign/core/CheckboxInput";
 import { NumberInput } from "@astryxdesign/core/NumberInput";
 import { text } from "@/styles";
-import { color, font } from "@/tokens.stylex";
+import { color, font, media } from "@/tokens.stylex";
 import type { FeatureCollection, Geometry } from "geojson";
 import type { Plan, Reason } from "@/types";
 import { RecordForm } from "./RecordForm";
@@ -20,7 +20,12 @@ const s = stylex.create({
     borderTopWidth: { default: 1, ":first-child": 0 }, borderTopStyle: "solid", borderTopColor: color.rule,
     paddingBlock: 18,
   },
-  lead: { paddingTop: 22, animationName: fade, animationDuration: "200ms" },
+  lead: {
+    position: { default: "sticky", [media.mobile]: "static" },
+    top: 0, zIndex: 3, backgroundColor: color.panel, paddingBottom: 12,
+    borderBottomWidth: 1, borderBottomStyle: "solid", borderBottomColor: color.rule,
+    paddingTop: 22, animationName: fade, animationDuration: "200ms",
+  },
   link: { textDecoration: "underline", color: "inherit", background: "none", border: 0, padding: 0, font: "inherit", cursor: "pointer" },
   verdict: {
     display: "flex", alignItems: "flex-start", gap: 12, marginTop: 12,
@@ -33,11 +38,11 @@ const s = stylex.create({
   headline: { marginTop: 10, fontSize: 18 },
   cond: { marginTop: 12, fontSize: 15, fontWeight: 600 },
   figures: { display: "flex", flexWrap: "wrap", columnGap: 20, rowGap: 4, marginTop: 12 },
-  figure: { marginRight: 4, fontSize: 15, fontWeight: 600, color: color.ink },
+  figure: { marginRight: 4, fontSize: { default: 15, [media.mobile]: 17 }, fontWeight: 600, color: color.ink },
   gap: { marginTop: 12 },
-  warn: { borderLeftWidth: 3, borderLeftStyle: "solid", borderLeftColor: color.adjust, paddingBlock: 2, paddingLeft: 14 },
+  warn: { borderLeftWidth: 3, borderLeftStyle: "solid", borderLeftColor: color.adjust, backgroundColor: color.page, paddingBlock: 10, paddingLeft: 14, paddingRight: 12 },
   list: { listStyle: "disc", paddingLeft: 18, display: "grid", gap: 4 },
-  quote: { borderLeftWidth: 1, borderLeftStyle: "solid", borderLeftColor: color.ink, paddingLeft: 12, fontFamily: font.condensed, fontSize: 15, lineHeight: 1.4 },
+  quote: { borderLeftWidth: 2, borderLeftStyle: "solid", borderLeftColor: color.ink, backgroundColor: color.page, paddingBlock: 8, paddingLeft: 12, paddingRight: 10, fontFamily: font.condensed, fontSize: 15, lineHeight: 1.4 },
   caption: { marginTop: 4, paddingLeft: 13 },
   bullet: { display: "flex", gap: 8, marginTop: 10 },
   dot: { width: 8, height: 8, flex: "none", marginTop: 7, backgroundColor: color.muted },

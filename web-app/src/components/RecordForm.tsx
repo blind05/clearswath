@@ -7,7 +7,7 @@ import { Button } from "@astryxdesign/core/Button";
 import { FileInput } from "@astryxdesign/core/FileInput";
 import { TextArea } from "@astryxdesign/core/TextArea";
 import { text } from "@/styles";
-import { color } from "@/tokens.stylex";
+import { color, media } from "@/tokens.stylex";
 import type { AppRecord, Plan } from "@/types";
 
 const RECORD_FIELDS: [string, string][] = [
@@ -28,7 +28,7 @@ const PART137_FIELDS: [string, string][] = [
 ];
 
 const s = stylex.create({
-  table: { marginTop: 10, width: "100%", borderCollapse: "collapse", fontSize: 13 },
+  table: { marginTop: 10, width: "100%", borderCollapse: "collapse", fontSize: { default: 13, [media.mobile]: 14 } },
   missing: { color: color.stop },
   th: { whiteSpace: "nowrap", paddingBlock: 4, paddingRight: 10, textAlign: "left", verticalAlign: "top", fontWeight: 400, color: color.muted },
   td: { borderBottomWidth: 1, borderBottomStyle: "solid", borderBottomColor: color.rule, paddingBlock: 4 },

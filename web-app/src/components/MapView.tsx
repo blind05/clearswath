@@ -15,11 +15,12 @@ const s = stylex.create({
   why: { position: "absolute", width: 320, maxWidth: "calc(100% - 24px)", padding: 14, fontSize: 13, lineHeight: 1.45,
          borderRadius: 4, backgroundColor: color.panel, boxShadow: "0 1px 4px rgba(30,43,36,.25)", zIndex: 2 },
   whyHead: { display: "flex", justifyContent: "space-between", gap: 12, fontWeight: 600, fontSize: 15, marginBottom: 6 },
-  whyClose: { font: "inherit", border: 0, padding: 0, background: "none", cursor: "pointer", color: color.muted },
+  whyClose: { font: "inherit", border: 0, padding: 0, background: "none", cursor: "pointer", color: color.muted,
+              minHeight: { default: null, [media.mobile]: 44 }, minWidth: { default: null, [media.mobile]: 44 } },
   whyItem: { marginTop: 10 },
-  whyQuote: { marginTop: 4, paddingLeft: 10, borderLeftWidth: 1, borderLeftStyle: "solid", borderLeftColor: color.ink,
-              fontFamily: font.condensed, fontSize: 14 },
-  whyCite: { marginTop: 3, paddingLeft: 11, color: color.muted },
+  whyQuote: { marginTop: 4, paddingLeft: 10, borderLeftWidth: 4, borderLeftStyle: "solid", borderLeftColor: color.adjust,
+              fontFamily: font.condensed, fontSize: 16 },
+  whyCite: { marginTop: 3, paddingLeft: 11, color: color.ink },
   card: { position: "absolute", borderRadius: 4, backgroundColor: color.panel, boxShadow: "0 1px 4px rgba(30,43,36,.25)" },
   tools: { left: 12, top: 12, display: "flex", flexDirection: "column", gap: 4, padding: 4 },
   tool: {
@@ -32,13 +33,14 @@ const s = stylex.create({
   keyToggle: {
     display: "flex", width: "100%", justifyContent: "space-between", gap: 12, fontWeight: 600,
     font: "inherit", border: 0, padding: 0, background: "none", cursor: "pointer", color: color.ink,
+    minHeight: { default: null, [media.mobile]: 44 }, minWidth: { default: null, [media.mobile]: 44 },
   },
   hint: { fontWeight: 400, color: color.muted },
-  keyList: { marginTop: 6, display: "grid", gap: 4, listStyle: "none", padding: 0 },
+  keyList: { marginTop: 6, display: "grid", gap: 4, listStyle: "none", padding: 0, maxHeight: 220, overflowY: "auto" },
   keyRow: { display: "flex", alignItems: "center", gap: 8, cursor: "pointer",
             minHeight: { default: null, [media.mobile]: 44 } },  // phone tap targets
   tick: { accentColor: color.ink },
-  swatch: { display: "inline-block", width: 14, height: 10, flex: "none" },
+  swatch: { display: "inline-block", width: 16, height: 12, flex: "none" },
 });
 
 // USGS The National Map imagery: public domain; native tiles stop at zoom 16, MapLibre enlarges them beyond.
@@ -63,7 +65,7 @@ const LAYERS: LayerSpec[] = [
   { key: "no_spray", name: "No spray", fill: "#B42318", fillOpacity: 0.25, line: "#B42318", lineWidth: 1, delay: 350 },
   { key: "restricted", name: "Bulletin area", fill: "#6A1B9A", fillOpacity: 0.2, line: "#6A1B9A", lineWidth: 2, dash: [2, 2], delay: 350 },
   { key: "buffered_cells", name: "Weeds held back by a buffer", fill: "#37474F", fillOpacity: 0.6, delay: 700 },
-  { key: "spray_cells", name: "Spot spray: weeds found", fill: "#C4127A", fillOpacity: 0.45, delay: 900 },
+  { key: "spray_cells", name: "Spot spray: weeds found", fill: "#C4127A", fillOpacity: 0.38, delay: 900 },
   { key: "water", name: "Water", fill: "#2B83BA", fillOpacity: 0.45, line: "#2B83BA", lineWidth: 2, delay: 350 },
   { key: "possible_water", name: "Possible water: check", fill: "#2B83BA", fillOpacity: 0.12, line: "#2B83BA", lineWidth: 2, dash: [2, 2], delay: 350 },
   { key: "building", name: "Buildings", fill: "#5B6760", fillOpacity: 0.5, line: "#5B6760", lineWidth: 1, delay: 350 },
@@ -136,7 +138,7 @@ export function MapView({ plan, onDrawing, clearDrawing }: Props) {
     const b = bbox(field);
     const narrow = window.innerWidth < 800;
     if (b) map.fitBounds([[b[0], b[1]], [b[2], b[3]]], {
-      padding: narrow ? 20 : { top: 40, left: 150, bottom: 40, right: 260 }, duration: reducedMotion() ? 0 : 800,
+      padding: narrow ? 32 : { top: 40, left: 150, bottom: 40, right: 260 }, duration: reducedMotion() ? 0 : 800,
     });
     setRevealed(false);
     const t = window.setTimeout(() => setRevealed(true), reducedMotion() ? 0 : 850);
@@ -213,6 +215,9 @@ export function MapView({ plan, onDrawing, clearDrawing }: Props) {
             <Source key={`${plan!.run_id}-${l.key}`} id={l.key} type="geojson" data={data}>
               {l.fill && <Layer id={`${l.key}-fill`} type="fill" layout={{ visibility }}
                 paint={{ "fill-color": l.fill, "fill-opacity": revealed ? l.fillOpacity! : 0, "fill-opacity-transition": t }} />}
+              {/* dark edge under the white field line, so it reads over pale ground */}
+              {l.key === "field" && <Layer id="field-line-under" type="line" layout={{ visibility }}
+                paint={{ "line-color": "#1E2B24", "line-width": 5 }} />}
               {l.line && <Layer id={`${l.key}-line`} type="line" layout={{ visibility }}
                 paint={{ "line-color": l.line, "line-width": l.lineWidth!, "line-opacity": revealed || l.key === "field" ? 1 : 0,
                          "line-opacity-transition": t, ...(l.dash ? { "line-dasharray": l.dash } : {}) }} />}
@@ -273,7 +278,7 @@ export function MapView({ plan, onDrawing, clearDrawing }: Props) {
               {present.map((l) => (
                 <KeyRow key={l.key} name={l.name} on={!hidden[l.key]} toggle={() => setHidden((h) => ({ ...h, [l.key]: !h[l.key] }))}
                         swatch={l.fill ? { background: l.fill, opacity: Math.min(1, (l.fillOpacity ?? 0.4) + 0.4) }
-                                       : { borderTop: `3px solid ${l.line}`, background: "#6b7d4f", height: 8 }} />
+                                       : { borderTop: `3px solid ${l.line}`, background: "#6b7d4f", height: 12 }} />
               ))}
             </ul>
           )}
