@@ -179,6 +179,20 @@ intelligibility was checked by transcribing the final mix with Muse Voice Transc
 - The page is built on Meta's Astryx design system with StyleX. MapLibre GL JS (BSD-3-Clause); React, react-map-gl,
   Terra Draw, Astryx and StyleX (MIT); IBM Plex (SIL Open Font License).
 
+## Run it locally
+
+Needs Python 3.12 with [uv](https://docs.astral.sh/uv/) and Node 22 (as in the Dockerfile). The demos need no keys.
+
+```sh
+uv sync
+(cd web-app && npm ci && npm run build)
+uv run pytest                       # offline: no test calls a network or a model
+uv run uvicorn app.api:app          # http://127.0.0.1:8000
+```
+
+Live runs on your own field call the Meta Model API: copy `.env.example` to `.env`, add `MODEL_API_KEY`, and set
+`ACCESS_CODE` (16 characters or more) to open them. Checked on a fresh clone, 2026-11-03.
+
 ## Repository
 
 `app/` the service (FastAPI); `web-app/` the page (React, built into `web/dist`); `train/` Modal GPU jobs for the weed models; `evals/`
