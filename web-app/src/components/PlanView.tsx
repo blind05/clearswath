@@ -31,6 +31,7 @@ const s = stylex.create({
   "no-go": { color: color.stop },
   square: { width: 16, height: 16, flex: "none", marginTop: 9, backgroundColor: "currentColor" },
   headline: { marginTop: 10, fontSize: 18 },
+  cond: { marginTop: 12, fontSize: 15, fontWeight: 600 },
   figures: { display: "flex", flexWrap: "wrap", columnGap: 20, rowGap: 4, marginTop: 12 },
   figure: { marginRight: 4, fontSize: 15, fontWeight: 600, color: color.ink },
   gap: { marginTop: 12 },
@@ -77,7 +78,15 @@ function headline(p: Plan): string {
 function ReasonView({ r, product }: { r: Reason; product: string }) {
   if (r.source === "label" && r.quote) {
     const what = r.kind === "runoff" ? "runoff mitigation points required" : `${r.distance_ft} ft from ${r.target}`;
-    return <Excerpt quote={r.quote} caption={`${product}, page ${r.page}. Applied as ${what}.`} />;
+    const excerpt = <Excerpt quote={r.quote} caption={`${product}, page ${r.page}. Applied as ${what}.`} />;
+    if (!r.condition) return excerpt;
+    // a conditional rule names its case above the label's own words
+    return (
+      <>
+        <p {...stylex.props(s.cond, text.num)}>{r.distance_ft} ft from {r.target}: {r.condition}</p>
+        {excerpt}
+      </>
+    );
   }
   return <p {...stylex.props(s.bullet)}><span aria-hidden {...stylex.props(s.dot)} />{r.summary}</p>;
 }
@@ -97,6 +106,10 @@ export function PlanView({ plan: p, agentAsked, onUntick, onAskLive, onSwitchDem
   const [rate, setRate] = useState<number | null>(null);
   const rateOk = rate != null && rate > 0 && rate <= 1000;
   const excluded = p.confirm.filter((c) => !c.applied).map((c) => c.id);
+  // with a weed map the spot sentence leads; the zone sentence drops to a smaller line
+  const spotHead = p.spot && p.spot.treated_acres > 0 && p.status !== "no-go"
+    ? `${p.spot.treated_acres.toFixed(1)} acres to spot spray, where the weed map found weeds and no rule holds it back.`
+    : null;
 
   return (
     <div aria-live="polite">
@@ -116,7 +129,14 @@ export function PlanView({ plan: p, agentAsked, onUntick, onAskLive, onSwitchDem
           <span aria-hidden {...stylex.props(s.square)} />
           {VERDICT[p.status]}
         </p>
-        <p {...stylex.props(s.headline)}>{headline(p)}</p>
+        {spotHead ? (
+          <>
+            <p {...stylex.props(s.headline)}>{spotHead}</p>
+            <p {...stylex.props(text.small, s.gap)}>{headline(p)}</p>
+          </>
+        ) : (
+          <p {...stylex.props(s.headline)}>{headline(p)}</p>
+        )}
         <div {...stylex.props(text.small, text.num, s.figures)}>
           <Figure n={a.field_acres} label="ac field" />
           <Figure n={a.spray_acres} label="ac sprayable" />

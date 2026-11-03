@@ -33,6 +33,7 @@ const s = stylex.create({
   th: { whiteSpace: "nowrap", paddingBlock: 4, paddingRight: 10, textAlign: "left", verticalAlign: "top", fontWeight: 400, color: color.muted },
   td: { borderBottomWidth: 1, borderBottomStyle: "solid", borderBottomColor: color.rule, paddingBlock: 4 },
   gap: { marginTop: 10 },
+  saved: { fontSize: 14 },
   h3: { marginTop: 16, fontSize: 15, fontWeight: 600 },
   remove: {
     padding: 0, borderStyle: "none", backgroundColor: "transparent", cursor: "pointer",
@@ -52,7 +53,7 @@ function RecordTable({ fields, rec, missing }: { fields: [string, string][]; rec
         {fields.map(([k, name]) => (
           <tr key={k} {...stylex.props(missing.includes(k) && s.missing)}>
             <th {...stylex.props(s.th)}>{name}</th>
-            <td {...stylex.props(s.td)}>{rec[k] != null ? String(rec[k]) : missing.includes(k) ? "Missing" : "—"}</td>
+            <td {...stylex.props(s.td)} title={rec[k] == null && missing.includes(k) ? "Missing: required" : undefined}>{rec[k] != null ? String(rec[k]) : missing.includes(k) ? "Missing" : "—"}</td>
           </tr>
         ))}
       </tbody>
@@ -171,12 +172,12 @@ export function RecordForm({ runId, saved }: { runId: string; saved?: Plan["save
         )}
         <TextArea id="notes" label="Or type your notes" rows={3} value={notes} onChange={setNotes}
                   placeholder="Sam Ortiz, licence MT-12345, 12 gallons on rangeland, leafy spurge, wind 6 mph NW, 64 degrees" />
-        <Button type="submit" variant="secondary" isLoading={busy} label={busy ? "Filling the record…" : "Fill the record"} />
+        <Button type="submit" variant="primary" isLoading={busy} label={busy ? "Filling the record…" : "Fill the record"} />
       </form>
       {error && <p role="alert" {...stylex.props(text.error)}>{error}</p>}
       {shown && (
         <div>
-          {!rec && saved && <p {...stylex.props(text.small, s.gap)}>Saved voice note: a {saved.voice}, transcribed by {saved.model} and filled on {saved.date}.</p>}
+          {!rec && saved && <p {...stylex.props(text.small, s.gap, s.saved)}>Saved voice note: a {saved.voice}, transcribed by {saved.model} and filled on {saved.date}.</p>}
           {shown.missing.length > 0 && <p role="alert" {...stylex.props(s.missing, s.gap)}>Still needed: {shown.missing.map(label).join(", ")}.</p>}
           <RecordTable fields={RECORD_FIELDS} rec={shown} missing={shown.missing} />
           {shown.part137 && (
@@ -186,7 +187,7 @@ export function RecordForm({ runId, saved }: { runId: string; saved?: Plan["save
               <RecordTable fields={PART137_FIELDS} rec={shown.part137} missing={shown.part137.missing} />
             </>
           )}
-          <p {...stylex.props(text.small, s.gap)}>Heard: “{shown.transcript}”</p>
+          <p {...stylex.props(text.small, s.gap, s.saved)}>Heard: “{shown.transcript}”</p>
         </div>
       )}
     </div>
