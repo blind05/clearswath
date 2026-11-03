@@ -6,7 +6,7 @@ Rebuild: `uv run python scripts/record_demo.py`, `uv run --with kokoro --with so
 
 | Check | Result |
 |---|---|
-| Duration | 2:48 (168.4 s), under 3:00; re-cut 2026-11-03 with the voice-record beat (previous 2:31 cut in `data/video/backup_2m31/`) |
+| Duration | 2:49 (169.2 s), under 3:00; re-cut 2026-11-03 with the voice-record beat (previous 2:31 cut in `data/video/backup_2m31/`) |
 | Video | 1920x1080, H.264, 30 fps, fast start |
 | Audio | AAC 48 kHz stereo 192 kb/s; -16.3 LUFS integrated, -1.7 dBFS peak; no silent gaps |
 | Subtitles | English mov_text track in the MP4 plus sidecar SRT, from the narration script with real spellings |
