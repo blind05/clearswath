@@ -118,8 +118,8 @@ def test_unverified_buffer_rule_is_no_go(monkeypatch, field_path):
                                          {"kind": "wind", "reason": "quote not found in label text"}]))
     result = pipeline.run(field_path, "label.pdf", "2026-11")
     assert result["plan"]["status"] == "no-go"
-    assert any(r["source"] == "data" and r["summary"].startswith("1 buffer rule(s)") for r in result["plan"]["reasons"])
-    assert result["warnings"] == ["1 label rule(s) could not be verified and were not applied. Check the label yourself."]
+    assert any(r["source"] == "data" and r["summary"].startswith("1 buffer rule on") for r in result["plan"]["reasons"])
+    assert result["warnings"] == ["1 label rule could not be verified and was not applied. Check the label yourself."]
 
 
 def test_a_label_read_with_no_rules_is_no_go(monkeypatch, field_path):

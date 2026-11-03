@@ -53,7 +53,8 @@ def assemble(field, label, hazards: dict, bulletin: dict, month: str, method: st
                     "Try again or use another provider.")
     dropped_buffers = [d for d in label.dropped if d.get("kind") in ("buffer", "drift")]
     if dropped_buffers:
-        gaps.append(f"{len(dropped_buffers)} buffer rule(s) on the label could not be verified, so a required "
+        n = len(dropped_buffers)
+        gaps.append(f"{n} buffer rule{'s' if n > 1 else ''} on the label could not be verified, so a required "
                     "setback may be missing. Check the label, or try again.")
     # Sources that failed but aren't the water map: never a clean GO (also covers a label with no EPA Reg. No.)
     unchecked = ([] if bulletin["checked"] else [bulletin["citation"]]) + list(hazards.get("scout_warnings") or [])
@@ -68,8 +69,9 @@ def assemble(field, label, hazards: dict, bulletin: dict, month: str, method: st
         warnings.append(f"Bulletin limitation (PULA {x['pula_id']}, code {x['code']}) must be read "
                         f"and followed: {x['limitation']}")
     if other_dropped := len(label.dropped) - len(dropped_buffers):
-        warnings.append(f"{other_dropped} label rule(s) could not be verified and were not "
-                        "applied. Check the label yourself.")
+        rules_were = "label rules could not be verified and were" if other_dropped > 1 else \
+            "label rule could not be verified and was"
+        warnings.append(f"{other_dropped} {rules_were} not applied. Check the label yourself.")
     if label.source == "image":
         warnings.append("Label was read from a photo; quotes were checked against a model transcription.")
     warnings += hazards.get("imagery_warnings") or []  # water gaps are reasons for NO-GO, not warnings
