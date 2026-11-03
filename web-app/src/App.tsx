@@ -24,7 +24,7 @@ const s = stylex.create({
   tagline: { marginLeft: "auto", display: { default: "block", [media.mobile]: "none" } },
   main: {
     display: { default: "grid", [media.mobile]: "flex" }, gridTemplateColumns: "400px 1fr",
-    flexDirection: "column-reverse", flex: 1, minHeight: 0, overflowY: { default: null, [media.mobile]: "auto" },
+    flexDirection: "column", flex: 1, minHeight: 0, overflowY: { default: null, [media.mobile]: "auto" },
   },
   aside: {
     overflowY: { default: "auto", [media.mobile]: "visible" }, backgroundColor: color.panel,
@@ -35,7 +35,9 @@ const s = stylex.create({
   welcomeTitle: { fontSize: { default: 28, [media.mobile]: 24 }, lineHeight: 1.15, fontWeight: 600, letterSpacing: "-0.01em" },
   welcomeBody: { color: color.muted, fontSize: 15, lineHeight: 1.5, marginTop: 10, maxWidth: 340 },
   welcomeAction: { marginTop: 16 },
-  map: { minHeight: 0, height: { default: null, [media.mobile]: "55vh" }, flex: { default: null, [media.mobile]: "none" } },
+  // phone: the map goes first by order, not column-reverse, which starts a scroller at its end (map scrolled away)
+  map: { minHeight: 0, height: { default: null, [media.mobile]: "55vh" }, flex: { default: null, [media.mobile]: "none" },
+         order: { default: null, [media.mobile]: -1 } },
 });
 
 type Rerun = (excluded: number[]) => Promise<Plan>;
