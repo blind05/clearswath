@@ -41,6 +41,14 @@ def main(port: int, slow: float) -> None:
             browser = pw.chromium.launch()
             context = browser.new_context(viewport=SIZE, record_video_dir=str(OUT), record_video_size=SIZE)
             page = context.new_page()
+            # headless Chromium draws no cursor: a ring that follows the mouse, so the film shows the click itself
+            page.add_init_script("""addEventListener('DOMContentLoaded', () => {
+                const c = Object.assign(document.createElement('div'), {style: 'position:fixed;z-index:9999;width:22px;'
+                  + 'height:22px;margin:-11px 0 0 -11px;border:3px solid #fff;border-radius:50%;box-shadow:0 0 0 2px #1E2B24;'
+                  + 'pointer-events:none;left:-40px;top:-40px'});
+                document.body.append(c);
+                addEventListener('mousemove', e => { c.style.left = e.clientX + 'px'; c.style.top = e.clientY + 'px'; });
+            });""")
             beat, start, beats = 0, time.time(), []
 
             def shot(name: str, hold: float = 2.5) -> None:
@@ -89,7 +97,11 @@ def main(port: int, slow: float) -> None:
             }""")
             box = page.locator(".maplibregl-canvas").bounding_box()
             p = page.evaluate("ll => window.__clearswathMap.project(ll)", strip)
-            page.mouse.click(box["x"] + p["x"], box["y"] + p["y"])
+            x, y = box["x"] + p["x"], box["y"] + p["y"]
+            page.mouse.move(x - 160, y + 90)
+            page.mouse.move(x, y, steps=25)  # the cursor glides to the strip, so the click reads on screen
+            page.wait_for_timeout(int(400 * slow))
+            page.mouse.click(x, y)
             page.wait_for_selector("[data-why]", timeout=10_000)
             shot("dakota-why-here", 5)
             page.keyboard.press("Escape")
