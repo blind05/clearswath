@@ -149,7 +149,7 @@ def main(vo: Path | None, out: Path) -> None:
     music, sfx = score(tl["duration"], cues)
     voice = VID / "voice" / "manifest.json"
     if vo is None and voice.exists():  # narration from scripts/narrate_video.py: each line at the start of its shot
-        firsts = ["01a", "020", "03a", "04a", "05", "06a", "07a", "08", "09"]
+        firsts = ["01a", "020", "03a", "04a", "05", "06a", "06v", "07a", "08", "09"]
         track = np.zeros(int(tl["duration"] * SR) + SR)
         for n, part in enumerate(firsts, 1):
             with wave.open(str(VID / "voice" / f"shot{n}.wav")) as w:
@@ -182,7 +182,7 @@ def main(vo: Path | None, out: Path) -> None:
         sys.path.insert(0, str(ROOT / "scripts"))
         from narrate_video import lines
         seconds = json.loads(voice.read_text())["seconds"]
-        firsts = ["01a", "020", "03a", "04a", "05", "06a", "07a", "08", "09"]
+        firsts = ["01a", "020", "03a", "04a", "05", "06a", "06v", "07a", "08", "09"]
         cues_ = []
         for n, (part, text) in enumerate(zip(firsts, lines()), 1):
             sentences = [x for x in re.split(r"(?<=[.:?!])\s+", text) if x]

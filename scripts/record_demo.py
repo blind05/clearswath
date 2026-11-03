@@ -71,6 +71,9 @@ def main(port: int, slow: float) -> None:
             page.locator("#dji-rate").scroll_into_view_if_needed()
             page.fill("#dji-rate", "50")
             shot("montana-dji-export", 3)
+            # the record: the demo's saved voice note, heard by Muse Voice Transcribe and filled by Muse Spark
+            page.get_by_text("Saved voice note").scroll_into_view_if_needed()
+            shot("montana-voice-record", 4)
             # 3. South Dakota cropland: the creek buffer, then the corrected outline
             page.get_by_role("button", name="Field and label").click()  # the form folds away after a plan
             page.get_by_role("checkbox", name="Ask Muse Spark to explain the plan").click()

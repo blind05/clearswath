@@ -147,21 +147,24 @@ def main(out: Path) -> None:
     lead = span(prev["montana-dji-export"], beats["montana-dji-export"]["end"])
     parts += [clip(prev["montana-dji-export"], beats["montana-dji-export"]["end"], tmp / "06a.mp4", c),
               still(shot("montana-dji-export"), fit(6, lead, 11.0), tmp / "06b.mp4", c)]
-    # 7. South Dakota: the creek buffer, the ULV rule, the corrected outline
+    # 7. the record: the demo's saved voice note (a synthetic voice, said in the VO and on the page)
+    parts.append(still(shot("montana-voice-record"), fit(7, 0, 12.0), tmp / "06v.mp4",
+                       cap("A spoken note fills the record", "record"), zoom=1.04))
+    # 8. South Dakota: the creek buffer, the ULV rule, the corrected outline
     c = cap("150 ft from water, page 14", "creek")
     lead = span(prev["dakota-creek-buffer"], beats["dakota-corrected-go"]["end"])
     parts += [clip(prev["dakota-creek-buffer"], beats["dakota-why-here"]["end"], tmp / "07a.mp4", c),
               clip(beats["dakota-why-here"]["end"], beats["dakota-corrected-go"]["end"], tmp / "07c.mp4",
                    cap("Untick the ULV rule, pull the edge back", "fix")),
-              still(shot("dakota-corrected-go"), max(3.0, fit(7, lead, 8.0)), tmp / "07b.mp4",
+              still(shot("dakota-corrected-go"), max(3.0, fit(8, lead, 8.0)), tmp / "07b.mp4",
                     cap("No conflicts in checked rules", "go"))]
-    # 8. how it decided
-    parts.append(still(shot("montana-agent"), fit(8, 0, 15.0), tmp / "08.mp4",
+    # 9. how it decided
+    parts.append(still(shot("montana-agent"), fit(9, 0, 15.0), tmp / "08.mp4",
                        cap("Muse Spark 1.3 · Muse Wonder · SAM 3.1 · DINOv2 · Muse Spark Open", "models")))
-    # 9. end card
+    # 10. end card
     parts.append(still(card([("ClearSwath", 600, 96), ("Models read and see. Tested code plans.", 400, 44), ("The applicator decides.", 400, 44), ("", 400, 30),
                              ("clearswath.onrender.com", 400, 40), ("github.com/blind05/clearswath", 400, 40)],
-                            tmp / "end.png"), max(6.0, fit(9, 0, 10.0)), tmp / "09.mp4", zoom=1.0))
+                            tmp / "end.png"), max(6.0, fit(10, 0, 10.0)), tmp / "09.mp4", zoom=1.0))
 
     timeline, at = [], 0.0  # where each part starts, for scripts/score_video.py
     for p in parts:
