@@ -14,7 +14,8 @@ a field, the label PDF and a drone weed map. It returns:
 - **a spray map**: 1 m cells sprayed only where the weed map found weeds and no label rule, water body or
   endangered-species bulletin says no;
 - **files for the sprayer**: a DJI Agras prescription (boundary shapefile plus a rate GeoTIFF), GeoJSON and KML;
-- **a draft application record**, filled from the applicator's spoken or typed notes.
+- **a draft application record**, filled from the applicator's notes, typed or spoken into the page (checked end to
+  end on a synthetic voice, not yet on a person's).
 
 Built for the Meta Global AI Developer Hackathon (Indie Developer track, "Build for Your World"), October 26 to
 November 4, 2026, by someone from a South Dakota farm family: the problem of turning a label into lines on a field is
@@ -101,7 +102,7 @@ that is not on the label, the answer is replaced with the plan's own summary.
 | SAM 3.1 | Meta Model API, and open weights on Modal | Outlines Wonder's boxes; finds buildings and open water from text; zero-shot weed baseline | Scored against WorldCover and Microsoft building footprints |
 | DINOv3 ViT-S/16 | Open weights, Modal GPU | Features for the crop-vs-weed head (CoFly, PhenoBench) | Cross-validated against pixel masks |
 | DINOv2 ViT-B/14 | Open weights, fine-tuned on Modal | The leafy spurge model behind the Montana map | Scored on survey plots it never trained on |
-| Muse Voice Transcribe 1.0 | Meta Model API | Turns a spoken job note into the record | Plan values always beat what the model heard; gaps listed |
+| Muse Voice Transcribe 1.0 | Meta Model API | Turns a spoken job note into the record; the plan's product name goes in as a hint (it fixed "Tordonorden" to "Tordon") | Plan values always beat what the model heard; gaps listed |
 
 ## Hazard results
 

@@ -16,7 +16,7 @@ user acts; "replay" means the demo serves a saved real run.
 | Agent explanation (four tools) | Working live; demo is a replay | Saved Montana answer: `muse-spark-1.3`, 2026-10-29 ($0.017) |
 | Baseten Spark Open | Reads labels on live runs (Spark 1.3 as fallback); the agent's fallback | Empty reads are asked again and never cached; 3 runs per label: Tordon recall 100%, Warrior 83-100% (`evals/results_labels.md`). Reads Warrior's ULV-only 450 ft buffer as always applying, so the demos keep Spark 1.3's reads |
 | Muse Spark 1.3 (Meta API) | Reads both demo labels; writes the saved agent answer | Smoke test passes (2026-10-29) |
-| Muse Voice Transcribe -> application record | Working in code; WAV only | Smoke test passes on a silent clip; not yet run on real speech |
+| Muse Voice Transcribe -> application record | Working: record in the page or upload any audio; the browser converts it to 16 kHz mono WAV | Checked in Chromium 2026-11-03 with a synthetic (Kokoro) note sent as a 44.1 kHz stereo m4a: transcribed, product name as keyword fixed "Tordon", record filled. Repeats some words ("Tordon Tordon"; only ENDPOINTING mode tried). Not yet a person's speech |
 | Muse Image 1.0 | Available on the key, not used | No honest job for it |
 | Exports: KML, GeoJSON | Working | Tests |
 | Export: DJI prescription | Built, not flight-tested | Folder layout TODO(verify) |
@@ -32,7 +32,7 @@ user acts; "replay" means the demo serves a saved real run.
   possible water on the map; NHD water -> buffers. Weed map -> magenta cells.
 - **Ask Muse Spark to explain:** Spark agent calls read_label, find_hazards, check_bulletin, plan_spray -> the
   answer and "How it decided"; the decision shown is always `buffers.plan`'s.
-- **Fill the record:** WAV -> Voice Transcribe -> Spark fills the record schema -> table with missing fields in red.
+- **Fill the record:** mic or any audio file -> WAV in the browser -> Voice Transcribe -> Spark fills the record schema -> table with missing fields in red.
 - **Check a photo:** photo -> Modal DINOv3 head -> magenta overlay and share flagged.
 
 ## Biggest obstacle

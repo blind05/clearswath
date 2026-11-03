@@ -30,7 +30,7 @@ Conditions: one listen by Hunter, the video uploaded to a public link, and the s
 | Label accuracy | Measured (`evals/results_labels.md`) but not claimed publicly: the answer keys are unreviewed |
 | DJI prescription | A planning file; not flight-tested |
 | Photo mode | Live on Modal; trained on cotton and sugar beet |
-| Voice record | Works in code; not yet run on real speech |
+| Voice record | Record in the page or upload any audio; checked end to end on a synthetic voice, not yet a person's |
 
 ## Video
 
@@ -68,3 +68,13 @@ Weighted: about 7.2. Estimates from one reviewer who knows the code, so expect t
 - **Why another team might win:** a live, unscripted demo, or real users. Here the judge sees saved runs.
 - **What would move it:** a human narration take, reviewed answer keys (then label precision and recall can be
   claimed), and one real voice-note record.
+
+## Meta credits used on 2026-11-03
+
+| What | Where it ran | Cost |
+|---|---|---|
+| App calls (scout spread runs, narration check, voice probes, voice UI check) | `app/llm.py`, logged in `data/logs/spend.json` | $3.90 (local estimate from `spend.py` prices, TODO(verify)) |
+| Muse Code review of the repo (5 roles; found the unchecked-source gap, one claim rejected) | `muse exec`, Muse Spark 1.3 | about $1.02 (794k input tokens, mostly cached; 5.4k output) |
+| Muse Code: browser recorder and WAV converter (adopted after review) | `muse exec`, Muse Spark 1.3 | not in its log; see the Meta Usage dashboard |
+
+Baseten was not used today. The provider dashboards are the source of truth; these are estimates.
