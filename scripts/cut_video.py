@@ -138,7 +138,7 @@ def main(out: Path) -> None:
     parts.append(still(card([("SAM 3.1, asked for \"tree line\"", 600, 52), ("finds 17% of trees on 20 test tiles", 400, 40),
                              ("here: none", 400, 40)], tmp / "scout-a.png", ROOT / "docs/video/scout-sam-text-only.png"),
                        fit(4, 0, 30.0) * 0.4, tmp / "04a.mp4", zoom=1.02))
-    parts.append(still(card([("Muse Wonder boxes each one,", 600, 52), ("SAM 3.1 outlines it", 600, 52),
+    parts.append(still(card([("Muse Wonder boxes", 600, 52), ("the tree lines it sees;", 600, 52), ("SAM 3.1 outlines them", 600, 52),
                              ("62-69% of trees found, 3 runs", 400, 40)], tmp / "scout-b.png", ROOT / "docs/video/scout-wonder-sam.png"),
                        fit(4, 0, 30.0) * 0.6, tmp / "04b.mp4", zoom=1.02))
     # 5. the spray cells, close

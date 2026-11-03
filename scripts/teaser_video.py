@@ -16,8 +16,10 @@ VID = Path(__file__).resolve().parent.parent / "data" / "video"
 def main() -> None:
     start = {p["part"]: p["start"] for p in json.loads((VID / "cut_timeline.json").read_text())["parts"]}
     beats = {b["name"]: b for b in json.loads((VID / "beats.json").read_text())}
-    # 07a starts at the export beat's end in the recording; the card opens at the why-here beat
-    why = start["07a"] + (beats["dakota-why-here"]["start"] - beats["montana-dji-export"]["end"]) - 0.3
+    # 07a starts where the beat before the creek ends in the recording; the card opens at the why-here beat
+    names = list(beats)
+    lead_in = beats[names[names.index("dakota-creek-buffer") - 1]]["end"]
+    why = start["07a"] + (beats["dakota-why-here"]["start"] - lead_in) - 0.3
     # (start, end, crop x on the 1920-wide frame: 440 keeps the captions, which start at x=460; audio: "mix" keeps
     # the voice, "music" doesn't)
     segments = [(0.0, start["020"] - 0.1, 440, "mix"),
