@@ -24,6 +24,9 @@ one I know firsthand.
 
 ## Try it
 
+Click anywhere inside a field on the map: a card says which checked rule holds that spot back, with the label's
+sentence and page, or that nothing checked does. Rules whose quote isn't on the page are listed as not applied.
+
 Press **Try the demo**. The demo replays saved real runs, so it is free and instant.
 
 - **Montana rangeland, leafy spurge.** A 24-acre block of a real drone orthomosaic (MPG Ranch, 1.27 cm per
@@ -105,7 +108,7 @@ shrubs and water; Microsoft building footprints). Full tables in `evals/results_
 
 | What | SAM 3.1 text prompts alone | With Muse Wonder's boxes |
 |---|---|---|
-| Trees and shrubs found, mean per tile | 17% (median tile: 0%) | **62%** |
+| Trees and shrubs found, mean per tile | 17% (median tile: 0%) | **62-69%** over three separate runs |
 | Buildings found | 27 of 35 | (text prompts kept for buildings) |
 | Water: precision | 95% | (text prompts kept for water) |
 
@@ -151,6 +154,8 @@ Everything in this repository was written during the hackathon, starting with th
 Third-party parts are the datasets, models and libraries credited below. Hunter Hagedorn built it with Claude Code
 (Anthropic) as the coding agent. The weed models were trained on Modal; the demo video is cut, scored and mixed by
 `scripts/cut_video.py` and `scripts/score_video.py` from the app's own recorded takes, with original generated music.
+The narration is a synthetic voice (Kokoro-82M, Apache-2.0, `scripts/narrate_video.py`), not Hunter's; its
+intelligibility was checked by transcribing the final mix with Muse Voice Transcribe (97% of script words heard).
 
 ## Data and credits
 

@@ -16,5 +16,8 @@ What changed in the last stretch, with the commits that hold it.
   0.2 s after), demo choices are bounded, and cache hits never wait behind a computation (31b0cfe, fe8a8cd).
 - **Copy:** the weed map, not the label, marks the 9.7 acres; "No conflicts in checked rules", never "safe" or
   "legal"; the DJI file is a planning file, not flight-tested.
+- **Evidence on the map:** click a held-back spot to see the label sentence and page behind it; rules whose quote
+  isn't on the page are listed as not applied (95f0478 and the commit before it).
+- **Scout spread:** three separate Wonder runs per tile give 62-69% of trees found (7b9e176).
 - **Video:** recorded from the real app (`scripts/record_demo.py`), cut to the script (`scripts/cut_video.py`), with
-  original music and a few sound cues (`scripts/score_video.py`). Narration is not yet recorded.
+  original music, sound cues, synthetic narration (Kokoro-82M, disclosed) and subtitles (ec131c7).
