@@ -1,4 +1,4 @@
-# Hazard scout eval (2026-10-29)
+# Hazard scout eval (2026-11-03)
 
 20 NAIP tiles (about 0.6 km across each): the 2 demo fields and 18 squares at fixed random offsets around them, eastern South Dakota and western Montana. Made by `evals/scout_eval.py`.
 
@@ -40,3 +40,13 @@ Per tile (trees and shrubs: true positive / false positive / missed 10 m cells, 
 Why the split: in the first run (same tiles, same day) Wonder also boxed buildings and water. It found the same 27 of 35 buildings as SAM's text prompts but only 29 of its 44 building outlines were on a building (text prompts: 30 of 39), and its water was 14% precise (28% after its review) against 95% for text prompts. On trees that first prompt scored the same as the trees-only one (mean per tile 62% recall, 64% precision), and its review left trees unchanged.
 
 Limits: WorldCover is 10 m and from 2021, so a 15 m shelterbelt may fill only part of a cell, and trees planted or cut since then count against the models. Footprints miss some farm buildings and include some that are gone. Water here is the scout's possible water, which the app never cuts out.
+
+## Run to run (3 separate Wonder calls per tile, the app's method)
+
+| Run | Trees and shrubs, mean per tile: recall / precision |
+|---|---|
+| 1 | 62% / 57% |
+| 2 | 63% / 58% |
+| 3 | 69% / 58% |
+
+Recall ranged 62% to 69% across runs (SAM text prompts alone: 17%).

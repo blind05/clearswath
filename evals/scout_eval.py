@@ -239,7 +239,53 @@ def main(n: int) -> None:
     print(text)
 
 
+def spread(n: int, runs: int) -> str:
+    """The app's tree outlines from `runs` separate Wonder calls per tile: mean-per-tile recall and precision of each,
+    so the run-to-run spread is a number, not a caveat. Run 1 is the cached run above; the rest are fresh, paid."""
+    catalog = pystac_client.Client.open(PC, modifier=planetary_computer.sign_inplace)
+    tiles = fields(n)
+
+    def run_of(field: Path, r: int) -> dict:
+        png = CACHE / field.stem / "tile.png"
+        name = "scout_split.json" if r == 1 else f"scout_split_run{r}.json"
+        def fresh():
+            out = scout.scout(png)
+            return {"app": {"habitat": [mapping(p) for p in out["habitat"]]}}
+        return _cached(png.with_name(name), fresh)["app"]["habitat"]
+
+    truths = {}
+    for f in tiles:
+        meta = json.loads((CACHE / f.stem / "tile.json").read_text())
+        truths[f.stem] = (meta, np.isin(worldcover(meta, catalog), list(HABITAT)))
+    rows = []
+    for r in range(1, runs + 1):
+        with ThreadPoolExecutor(4) as pool:
+            polys = dict(zip([f.stem for f in tiles], pool.map(lambda f: run_of(f, r), tiles)))
+        rec, pre = [], []
+        for stem, (meta, truth) in truths.items():
+            if truth.sum() < MIN_TREE_CELLS:
+                continue
+            pred = burn(polys[stem], meta)
+            tp = int((pred & truth).sum())
+            rec.append(tp / truth.sum())
+            if pred.sum():
+                pre.append(tp / pred.sum())
+        rows.append((r, np.mean(rec), np.mean(pre)))
+    lines = ["", f"## Run to run ({runs} separate Wonder calls per tile, the app's method)", "",
+             "| Run | Trees and shrubs, mean per tile: recall / precision |", "|---|---|"]
+    lines += [f"| {r} | {a:.0%} / {b:.0%} |" for r, a, b in rows]
+    recs = [a for _, a, _ in rows]
+    lines += ["", f"Recall ranged {min(recs):.0%} to {max(recs):.0%} across runs (SAM text prompts alone: 17%)."]
+    return "\n".join(lines) + "\n"
+
+
 if __name__ == "__main__":
     ap = argparse.ArgumentParser()
     ap.add_argument("--tiles", type=int, default=20)
-    main(ap.parse_args().tiles)
+    ap.add_argument("--runs", type=int, default=1, help="repeat the app's scout this many times per tile (paid)")
+    a = ap.parse_args()
+    main(a.tiles)
+    if a.runs > 1:
+        extra = spread(a.tiles, a.runs)
+        OUT.write_text(OUT.read_text() + extra)
+        print(extra)
