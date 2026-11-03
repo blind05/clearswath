@@ -20,6 +20,8 @@ Built for the Meta Global AI Developer Hackathon (Indie Developer track, "Build 
 November 4, 2026, by someone from a South Dakota farm family: the problem of turning a label into lines on a field is
 one I know firsthand.
 
+![The Montana demo zooming into the spot-spray cells over the drone image, with the creek held back](docs/images/hero.gif)
+
 ![Montana demo: the decision, the label's words, and the spot-spray map over the drone image](docs/images/montana-plan.webp)
 
 ## Try it
