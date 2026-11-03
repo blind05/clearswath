@@ -35,7 +35,9 @@ decision (No conflicts in checked rules, Adjust, Do not spray), a 1 m spot-spray
 draft application record. Muse Spark reads the label into rules, each with a quote verified against the PDF. Muse
 Wonder boxes tree lines and woods on the aerial photo for SAM 3.1 to outline (17% to 62% of trees found on 20 test
 tiles); SAM's text prompts find buildings and water. A DINOv2 model fine-tuned on Modal maps leafy spurge (90% of
-held-out plots found, 40% of the block sprayed). Live runs read labels with Muse Spark Open on Baseten. Tested
+held-out plots found, 40% of the block sprayed). Live runs read labels with Muse Spark Open on Baseten. A
+note spoken into the page goes through Muse Voice Transcribe, and Muse Spark fills the application record, leaving
+whatever wasn't said marked missing. Tested
 geometry, not a model, makes every decision; the applicator still decides whether to fly. The demos are saved real
 runs. Built during the event: all of it; third-party parts are listed in the
 README.
