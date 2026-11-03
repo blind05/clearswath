@@ -1,0 +1,13 @@
+# Keeps the free Render instance awake through judging (it sleeps after 15 idle minutes).
+# GitHub may delay scheduled runs; delete this file after judging ends (Nov 8).
+name: keepalive
+on:
+  schedule:
+    - cron: "*/10 * * * *"
+  workflow_dispatch:
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - run: curl -fsS -m 90 https://clearswath.onrender.com/api/health
