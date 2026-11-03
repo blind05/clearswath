@@ -1,10 +1,11 @@
 """Cuts the demo video from the recorder's takes, following docs/video/SCRIPT.md. Video tooling only: ffmpeg + PIL.
 
 uv run python scripts/record_demo.py           # first: fresh takes and beats.json in data/video/
-uv run python scripts/cut_video.py [--vo voiceover.wav] [--out data/video/clearswath.mp4]
+uv run python scripts/cut_video.py [--out data/video/clearswath.mp4]    # picture, plus cut_timeline.json
+uv run python scripts/score_video.py [--vo voiceover.wav]               # music, sound, mix, final MP4
 
 Every shot is the real app (a segment of the recording, or a screenshot held with a slow zoom) or a real saved run;
-the only things added are the script's captions and the end card. --vo lays Hunter's voiceover over the cut.
+the only things added are the script's captions and the end card.
 """
 
 import argparse
@@ -103,7 +104,7 @@ def clip(start: float, end: float, out: Path, caption: Path | None = None) -> Pa
     return out
 
 
-def main(vo: Path | None, out: Path) -> None:
+def main(out: Path) -> None:
     beats = {b["name"]: b for b in json.loads((VID / "beats.json").read_text())}
     prev = {b["name"]: e["end"] for b, e in zip(list(beats.values())[1:], beats.values())}  # each beat's lead-in
     shot = lambda n: VID / f"{beats[n]['beat']:02d}-{n}.png"  # noqa: E731
@@ -112,7 +113,7 @@ def main(vo: Path | None, out: Path) -> None:
     parts = []
 
     # 1. hook: zoom into the spray cells, as recorded, then hold
-    c = cap("9.7 of 24.1 acres", "hook")
+    c = cap("9.7 of 24.1 acres marked to spray", "hook")
     parts += [clip(prev["montana-spot-spray"], beats["montana-spot-spray"]["end"], tmp / "01a.mp4", c),
               still(shot("montana-spot-spray"), 2.0, tmp / "01b.mp4", c)]
     # 2. the label
@@ -134,7 +135,7 @@ def main(vo: Path | None, out: Path) -> None:
     parts.append(still(shot("montana-spot-spray"), 25.0, tmp / "05.mp4",
                        cap("90% of spurge found, 40% of the block sprayed", "weeds"), zoom=1.12))
     # 6. files for the drone
-    c = cap("DJI, GeoJSON and KML files", "files")
+    c = cap("Planning files: DJI, GeoJSON, KML", "files")
     parts += [clip(prev["montana-dji-export"], beats["montana-dji-export"]["end"], tmp / "06a.mp4", c),
               still(shot("montana-dji-export"), 11.0, tmp / "06b.mp4", c)]
     # 7. South Dakota: the creek buffer, the ULV rule, the corrected outline
@@ -145,19 +146,21 @@ def main(vo: Path | None, out: Path) -> None:
     parts.append(still(shot("montana-agent"), 15.0, tmp / "08.mp4",
                        cap("Muse Spark 1.3 · Muse Wonder · SAM 3.1 · DINOv2 · Muse Spark Open", "models")))
     # 9. end card
-    parts.append(still(card([("ClearSwath", 600, 96), ("Models read and see. Tested code decides.", 400, 44), ("", 400, 30),
+    parts.append(still(card([("ClearSwath", 600, 96), ("Models read and see. Tested code plans.", 400, 44), ("The applicator decides.", 400, 44), ("", 400, 30),
                              ("clearswath.onrender.com", 400, 40), ("github.com/blind05/clearswath", 400, 40)],
                             tmp / "end.png"), 10.0, tmp / "09.mp4", zoom=1.0))
 
+    timeline, at = [], 0.0  # where each part starts, for scripts/score_video.py
+    for p in parts:
+        timeline.append({"part": p.stem, "start": round(at, 3)})
+        at += float(subprocess.run(["ffprobe", "-v", "error", "-show_entries", "format=duration", "-of", "csv=p=0", p],
+                                   capture_output=True, text=True).stdout)
+    (VID / "cut_timeline.json").write_text(json.dumps({"duration": round(at, 3), "parts": timeline}, indent=1))
     listing = tmp / "parts.txt"
     listing.write_text("".join(f"file '{p}'\n" for p in parts))
     silent = tmp / "silent.mp4"
     run(["ffmpeg", "-y", "-f", "concat", "-safe", "0", "-i", listing, "-c", "copy", silent])
-    if vo:
-        run(["ffmpeg", "-y", "-i", silent, "-i", vo, "-map", "0:v", "-map", "1:a", "-c:v", "copy", "-c:a", "aac",
-             "-b:a", "192k", out])
-    else:
-        silent.replace(out)
+    silent.replace(out)  # picture only; scripts/score_video.py adds music, sound and the voiceover
     seconds = float(subprocess.run(["ffprobe", "-v", "error", "-show_entries", "format=duration", "-of", "csv=p=0", out],
                                    capture_output=True, text=True).stdout)
     print(f"{out} ({seconds:.0f} s)")
@@ -165,9 +168,8 @@ def main(vo: Path | None, out: Path) -> None:
 
 if __name__ == "__main__":
     ap = argparse.ArgumentParser()
-    ap.add_argument("--vo", type=Path)
     ap.add_argument("--out", type=Path, default=VID / "clearswath.mp4")
     a = ap.parse_args()
     if not (VID / "beats.json").exists():
         sys.exit("run scripts/record_demo.py first")
-    main(a.vo, a.out)
+    main(a.out)
