@@ -9,7 +9,7 @@ Conditions: one listen by Hunter, the video uploaded to a public link, and the s
 ## What was tested
 
 - `main` at the commit that adds this file, pushed to github.com/blind05/clearswath.
-- `uv run pytest`: 446 passed (no test calls a network or a model).
+- `uv run pytest`: 454 passed (no test calls a network or a model).
 - `npm run build` in `web-app/`: TypeScript check and build pass.
 - `scripts/record_demo.py`: all 8 beats on the current build, at 1920x1080 in headless Chromium.
 - Earlier browser QA (React build): 1440, 1280 and 390 px; drawing, errors, access-code dialog, record form,
