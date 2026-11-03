@@ -5,6 +5,13 @@
 **Try it: [clearswath.onrender.com](https://clearswath.onrender.com)** (free hosting: the first visit after a quiet spell
 can take a minute to wake up).
 
+**Two minutes, no sign-up:**
+1. Press **Explore the Montana example**: a saved real run opens on the drone image, with the cells to spot spray.
+2. Click a spot on the map: a card quotes the label sentence that holds it back, with its page, or says nothing
+   checked does.
+3. Scroll to **Application record**: a saved voice note filled it. Then follow **Show the South Dakota cropland
+   demo** for a field drawn up to a creek.
+
 A pesticide label is a legal document, often dozens of pages (the two here run 30 and 61): setbacks from water, wind
 limits, rates, endangered-species bulletins. A drone can now spray single patches of weeds, but it doesn't read the
 label. ClearSwath does. Give it
@@ -31,7 +38,7 @@ one I know firsthand.
 Click anywhere inside a field on the map: a card says which checked rule holds that spot back, with the label's
 sentence and page, or that nothing checked does. Rules whose quote isn't on the page are listed as not applied.
 
-Press **Try the demo**. The demo replays saved real runs, so it is free and instant.
+Press **Explore the Montana example**. The demos replay saved real runs, so they are free and instant.
 
 - **Montana rangeland, leafy spurge.** A 24-acre block of a real drone orthomosaic (MPG Ranch, 1.27 cm per
   pixel), sprayed with Tordon 22K. A stream crosses the block; Muse Wonder and SAM 3.1 outline the trees along it.
