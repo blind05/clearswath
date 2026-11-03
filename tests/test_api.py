@@ -167,6 +167,20 @@ def test_record_from_audio(client, fake_records):
     assert fake_records["audio"].name == "note.wav" and fake_records["heard_job"]["product_name"] == "INTREPID 2F"
 
 
+def test_record_keeps_typed_notes_alongside_the_voice_note(client, fake_records):
+    run_id = post_plan(client).json()["run_id"]
+    client.post("/api/record", data={"run_id": run_id, "text": "licence MT-12345"},
+                files={"audio": ("note.wav", b"RIFF\x24\x00\x00\x00WAVEfmt ")})
+    assert fake_records["text"] == "heard text licence MT-12345"
+
+
+def test_a_voice_note_with_no_words_says_so(client, monkeypatch):
+    monkeypatch.setattr(records, "transcribe", lambda p, job: "  ")
+    run_id = post_plan(client).json()["run_id"]
+    r = client.post("/api/record", data={"run_id": run_id}, files={"audio": ("note.wav", b"RIFF\x24\x00\x00\x00WAVEfmt ")})
+    assert r.status_code == 422 and "heard no words" in r.json()["detail"]
+
+
 @pytest.mark.parametrize("data, files, code", [
     ({"text": "x"}, None, 404),
     ({}, None, 422),

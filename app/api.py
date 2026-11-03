@@ -370,7 +370,11 @@ def record(run_id: str = Form(...), audio: UploadFile | None = File(None), text:
             suffix = Path(audio.filename or "").suffix.lower()
             if suffix not in AUDIO_SUFFIXES:
                 raise HTTPException(422, f"Audio must be one of {sorted(AUDIO_SUFFIXES)}")
-            text = records.transcribe(_save(audio, RUNS / run_id / f"note{suffix}", AUDIO_MAX), job)
+            heard = records.transcribe(_save(audio, RUNS / run_id / f"note{suffix}", AUDIO_MAX), job)
+            if not heard.strip() and not text.strip():
+                raise HTTPException(422, "Muse Voice Transcribe heard no words in that note. Speak closer to the "
+                                         "microphone, or type the notes.")
+            text = " ".join(t for t in (heard, text) if t.strip())  # voice and typed notes both count
         if not text.strip():
             raise HTTPException(422, "Send a voice note or type the notes")
         rec = records.fill_record(text, job)
