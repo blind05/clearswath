@@ -145,6 +145,13 @@ soil and agreed with the ground truth only 52% of the time, so it is not in the 
 - **Drone spraying also needs** an FAA Part 137 certificate and a state aerial applicator licence.
 - The answer keys for the label eval are not yet independently reviewed, so no label-reading accuracy is claimed here.
 
+## How it was built
+
+Everything in this repository was written during the hackathon, starting with the first commit on October 26, 2026.
+Third-party parts are the datasets, models and libraries credited below. Hunter Hagedorn built it with Claude Code
+(Anthropic) as the coding agent. The weed models were trained on Modal; the demo video is cut, scored and mixed by
+`scripts/cut_video.py` and `scripts/score_video.py` from the app's own recorded takes, with original generated music.
+
 ## Data and credits
 
 - Leafy Spurge Dataset, MPG Ranch (Doherty et al.), CC BY 4.0, doi:10.57967/hf/2508: the Montana imagery and survey
