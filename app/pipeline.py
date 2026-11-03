@@ -58,6 +58,9 @@ def assemble(field, label, hazards: dict, bulletin: dict, month: str, method: st
                     "setback may be missing. Check the label, or try again.")
     # Sources that failed but aren't the water map: never a clean GO (also covers a label with no EPA Reg. No.)
     unchecked = ([] if bulletin["checked"] else [bulletin["citation"]]) + list(hazards.get("scout_warnings") or [])
+    if (gap := hazards.get("aerial_gap") or 0) > 0.01:
+        unchecked.append(f"Aerial imagery is missing for {gap:.0%} of the area around the field, so SAM may have missed "
+                         "water, buildings or tree lines there. Check the map.")
     plan = buffers.plan(field, hazards, [r.model_dump() for r in rules], bulletin["restricted"], method,
                         bulletin["prohibited"], gaps, hazards.get("managed") or (), wind_from_deg, unchecked)
 

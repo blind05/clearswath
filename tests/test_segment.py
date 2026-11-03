@@ -180,5 +180,5 @@ def test_imagery_gap_becomes_a_warning(tmp_path, monkeypatch):
     monkeypatch.setattr(imagery, "fetch_tile", fetch_tile)
     monkeypatch.setattr(scout, "scout", lambda png: {"water": [], "building": [], "habitat": [], "trace": []})
     monkeypatch.setattr(imagery, "usgs_water", lambda fp, failed: [])
-    (w,) = segment.find_hazards(field)["imagery_warnings"]
-    assert "missing for 37%" in w
+    out = segment.find_hazards(field)
+    assert out["aerial_gap"] == 0.37 and out["imagery_warnings"] == []

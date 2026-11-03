@@ -197,8 +197,10 @@ def test_imagery_warnings_reach_the_applicator(monkeypatch, field_path):
     wire(monkeypatch)
     monkeypatch.setattr(segment, "find_hazards", lambda p: {
         "water": [POND], "building": [], "habitat": [], "imagery_date": "2023-07-09",
-        "water_source": "usgs", "imagery_warnings": ["Aerial imagery is missing for 37%"]})
-    assert pipeline.run(field_path, "label.pdf", "2026-11")["warnings"] == ["Aerial imagery is missing for 37%"]
+        "water_source": "usgs", "imagery_warnings": ["Drone imagery is missing for 1%"], "aerial_gap": 0.37})
+    result = pipeline.run(field_path, "label.pdf", "2026-11")
+    assert result["warnings"] == ["Drone imagery is missing for 1%"]  # the weed map's gap stays a warning
+    assert any(r.get("kind") == "unchecked" and "missing for 37%" in r["summary"] for r in result["plan"]["reasons"])
 
 
 def test_a_failed_scout_keeps_a_clear_field_from_go(monkeypatch, field_path):

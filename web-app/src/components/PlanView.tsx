@@ -109,7 +109,7 @@ export function PlanView({ plan: p, agentAsked, onUntick, onAskLive, onSwitchDem
   const a = p.acres;
   const pct = p.spot ? Math.round((100 * p.spot.treated_acres) / p.spot.field_acres) : null;
   const [rate, setRate] = useState<number | null>(null);
-  const rateOk = rate != null && rate > 0 && rate <= 1000;
+  const rateOk = rate != null && rate >= (p.carrier_min?.l_ha ?? 0.1) && rate <= 1000;  // the label's minimum, as the server checks
   const excluded = p.confirm.filter((c) => !c.applied).map((c) => c.id);
   // with a weed map the spot sentence leads; the zone sentence drops to a smaller line
   const spotHead = p.spot && p.spot.treated_acres > 0 && p.status !== "no-go"
@@ -262,7 +262,8 @@ export function PlanView({ plan: p, agentAsked, onUntick, onAskLive, onSwitchDem
       </Section>
 
       <Section title="Application record">
-        <RecordForm runId={p.run_id} saved={p.saved_record} />
+        {/* a new plan starts a new record */}
+        <RecordForm key={p.run_id} runId={p.run_id} saved={p.saved_record} />
       </Section>
     </div>
   );

@@ -119,7 +119,7 @@ export function RecordForm({ runId, saved }: { runId: string; saved?: Plan["save
         for (const c of chunks) { buf.copyToChannel(c, 0, at); at += c.length; }
         try { setAudio(await encodeWav16k(buf)); setNoteSecs(Math.round(buf.duration)); }
         catch (err) { setError((err as Error).message); }
-      }
+      } else setError("No sound reached the page. Check the microphone and record again.");
       void ctx.close();
     };
     startRef.current = Date.now();

@@ -90,8 +90,8 @@ def find_hazards(field_path) -> dict:
     meta = json.loads(png.with_suffix(".json").read_text()) if png.with_suffix(".json").exists() else {}
     out["imagery_date"] = meta.get("date")
     empty = meta.get("empty_fraction", 0)
-    out["imagery_warnings"] = [f"Aerial imagery is missing for {empty:.0%} of the area around the field, so SAM "
-                               "may have missed water, buildings or tree lines there. Check the map."] if empty > 0.01 else []
+    out["imagery_warnings"] = []
+    out["aerial_gap"] = empty  # over 1% caps the plan at ADJUST (pipeline -> buffers.plan): the scout saw less
     out["scout_warnings"] = scout_warnings  # a failed scout caps the plan at ADJUST (pipeline -> buffers.plan)
     return out
 
