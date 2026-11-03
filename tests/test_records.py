@@ -65,8 +65,11 @@ def test_transcribe_uses_voice_model(monkeypatch, tmp_path):
     audio = tmp_path / "note.m4a"
     audio.write_bytes(b"audio")
     seen = {}
-    monkeypatch.setattr(llm, "transcribe", lambda p, purpose: seen.update(p=p, purpose=purpose) or "hello")
-    assert records.transcribe(audio) == "hello" and seen == {"p": audio, "purpose": "record"}
+    monkeypatch.setattr(llm, "transcribe", lambda p, purpose, keywords: seen.update(p=p, purpose=purpose, kw=keywords)
+                        or "hello")
+    assert records.transcribe(audio) == "hello" and seen == {"p": audio, "purpose": "record", "kw": None}
+    records.transcribe(audio, JOB)
+    assert seen["kw"] == [JOB["product_name"]]  # the plan's product name goes in as a keyword
 
 
 def test_drone_job_gets_a_part137_row(monkeypatch):

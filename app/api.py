@@ -364,15 +364,18 @@ def record(run_id: str = Form(...), audio: UploadFile | None = File(None), text:
     job_path = RUNS / run_id / "job.json"
     if not RUN_ID.match(run_id) or not job_path.exists():
         raise HTTPException(404, "No such run")
+    job = json.loads(job_path.read_text())
     try:
         if audio is not None:
             suffix = Path(audio.filename or "").suffix.lower()
             if suffix not in AUDIO_SUFFIXES:
                 raise HTTPException(422, f"Audio must be one of {sorted(AUDIO_SUFFIXES)}")
-            text = records.transcribe(_save(audio, RUNS / run_id / f"note{suffix}", AUDIO_MAX))
+            text = records.transcribe(_save(audio, RUNS / run_id / f"note{suffix}", AUDIO_MAX), job)
         if not text.strip():
             raise HTTPException(422, "Send a voice note or type the notes")
-        return records.fill_record(text, json.loads(job_path.read_text())).model_dump()
+        rec = records.fill_record(text, job)
+        (RUNS / run_id / "record.json").write_text(rec.model_dump_json())  # a demo's saved voice note comes from here
+        return rec.model_dump()
     except HTTPException:
         raise
     except Exception as e:  # bad audio, missing key, model failure
@@ -520,6 +523,10 @@ def demo(request: Request, month: str | None = None, method: str = "drone", excl
         if replay and replay["decision"] == status:  # never replay an answer the plan has outgrown
             body |= {"answer": replay["answer"], "trace": replay["trace"], "decision": replay["decision"],
                      "mode": "replay", "replay": {"model": replay["model"], "date": replay["date"]}}
+        # A real voice note recorded on this demo's default plan (record.json: record, model, date); only shown on
+        # that plan, since its acres and method come from it
+        if (cache / "record.json").exists() and method == "drone" and not excluded and wind is None:
+            body["saved_record"] = json.loads((cache / "record.json").read_text())
         return body
     labels = [p for p in DEMO.glob("label.*") if p.suffix.lower() in LABEL_SUFFIXES]
     path = DEMO / f"{name}.geojson"

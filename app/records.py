@@ -82,8 +82,10 @@ class AppRecord(BaseModel):
     part137: Part137 | None = None  # drone and aerial jobs only
 
 
-def transcribe(path: str | Path) -> str:
-    return llm.transcribe(path, purpose="record")
+def transcribe(path: str | Path, job: dict | None = None) -> str:
+    # The product name as a keyword turned "Tordonorden 22k" into "Tordon 22K" (live probe, 2026-11-03)
+    product = (job or {}).get("product_name")
+    return llm.transcribe(path, purpose="record", keywords=[product] if product else None)
 
 
 def fill_record(text: str, job: dict, today: date | None = None) -> AppRecord:

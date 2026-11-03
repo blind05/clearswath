@@ -143,7 +143,7 @@ def test_plan_saves_job(client, tmp_path):
 @pytest.fixture
 def fake_records(monkeypatch):
     seen = {}
-    monkeypatch.setattr(records, "transcribe", lambda p: seen.update(audio=p) or "heard text")
+    monkeypatch.setattr(records, "transcribe", lambda p, job: seen.update(audio=p, heard_job=job) or "heard text")
 
     def fill(text, job):
         seen.update(text=text, job=job)
@@ -164,7 +164,7 @@ def test_record_from_audio(client, fake_records):
     run_id = post_plan(client).json()["run_id"]
     r = client.post("/api/record", data={"run_id": run_id}, files={"audio": ("note.wav", b"RIFF\x24\x00\x00\x00WAVEfmt ")})
     assert r.status_code == 200 and fake_records["text"] == "heard text"
-    assert fake_records["audio"].name == "note.wav"
+    assert fake_records["audio"].name == "note.wav" and fake_records["heard_job"]["product_name"] == "INTREPID 2F"
 
 
 @pytest.mark.parametrize("data, files, code", [
@@ -219,7 +219,7 @@ def test_agent_endpoint_maps_errors(client, monkeypatch):
 
 
 def test_record_bad_audio_is_explained(client, monkeypatch):
-    def bad(p):
+    def bad(p, job):
         raise llm.BadAudioError("Voice note must be mono 16-bit WAV at 16 or 24 kHz.")
 
     monkeypatch.setattr(records, "transcribe", bad)
@@ -840,6 +840,23 @@ def test_demo_agent_saves_an_answer_the_demo_replays(client, cached_demo, monkey
     assert replay["mode"] == "replay" and replay["answer"] == "ADJUST: keep 100 ft from the pond."
     assert "answer" not in client.get("/api/demo?field=corrected").json()  # only when asked for
     assert "answer" not in client.get("/api/demo?field=corrected&method=ground&agent_answer=1").json()  # other key
+
+
+def test_demo_shows_its_saved_voice_note_only_on_the_default_plan(client, cached_demo, tmp_path):
+    saved = {"record": {"transcript": "Sam Ortiz, wind six from the northwest"}, "model": "muse-voice-transcribe-1.0",
+             "date": "2026-11-03"}
+    assert "saved_record" not in client.get("/api/demo?field=corrected").json()  # none saved yet
+    (tmp_path / "demo" / "cache" / "field_corrected" / "record.json").write_text(json.dumps(saved))
+    assert client.get("/api/demo?field=corrected").json()["saved_record"] == saved
+    assert "saved_record" not in client.get("/api/demo?field=corrected&method=ground").json()
+    assert "saved_record" not in client.get("/api/demo?field=corrected&wind_from=270").json()
+
+
+def test_record_is_kept_with_its_run(client, fake_records, tmp_path):
+    run_id = post_plan(client).json()["run_id"]
+    client.post("/api/record", data={"run_id": run_id, "text": "Sam, 12 gal"})
+    kept = json.loads(next(tmp_path.rglob(f"{run_id}/record.json")).read_text())
+    assert kept["transcript"] == "Sam, 12 gal"
 
 
 def test_stale_replay_is_never_shown(client, cached_demo, tmp_path):
