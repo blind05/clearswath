@@ -2,7 +2,7 @@
 import { useEffect, useRef, useState } from "react";
 import * as stylex from "@stylexjs/stylex";
 import { post } from "@/api";
-import { toWav16k } from "@/wav";
+import { encodeWav16k, toWav16k } from "@/wav";
 import { Button } from "@astryxdesign/core/Button";
 import { FileInput } from "@astryxdesign/core/FileInput";
 import { TextArea } from "@astryxdesign/core/TextArea";
@@ -69,9 +69,8 @@ export function RecordForm({ runId, saved }: { runId: string; saved?: Plan["save
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [rec, setRec] = useState<AppRecord | null>(null);
-  const recRef = useRef<MediaRecorder | null>(null);
+  const stopRef = useRef<(() => Promise<void>) | null>(null);  // ends the recording in progress
   const streamRef = useRef<MediaStream | null>(null);
-  const chunksRef = useRef<Blob[]>([]);
   const timerRef = useRef<number | null>(null);
   const startRef = useRef(0);
 
@@ -87,7 +86,7 @@ export function RecordForm({ runId, saved }: { runId: string; saved?: Plan["save
   }
 
   async function toggleRecord() {
-    if (recording) { recRef.current?.stop(); return; }
+    if (recording) { void stopRef.current?.(); return; }
     setError("");
     let stream: MediaStream;
     try {
@@ -97,25 +96,35 @@ export function RecordForm({ runId, saved }: { runId: string; saved?: Plan["save
       return;
     }
     streamRef.current = stream;
-    chunksRef.current = [];
-    const mr = new MediaRecorder(stream);
-    recRef.current = mr;
+    // Keep the mic's raw samples instead of a MediaRecorder file: Safari can't always decode its own recordings
+    // ("Couldn't read that audio file", 2026-11-03), and raw samples never need decoding.
+    const ctx = new AudioContext();
+    const source = ctx.createMediaStreamSource(stream);
+    const node = ctx.createScriptProcessor(4096, 1, 1);  // deprecated, but in every browser; no worklet file needed
+    const chunks: Float32Array<ArrayBuffer>[] = [];
+    node.onaudioprocess = (e) => chunks.push(new Float32Array(e.inputBuffer.getChannelData(0)));
+    source.connect(node);
+    node.connect(ctx.destination);  // outputs silence; without it onaudioprocess never fires
+    stopRef.current = async () => {
+      if (timerRef.current != null) window.clearInterval(timerRef.current);
+      source.disconnect();
+      node.disconnect();
+      stopTracks();
+      setRecording(false);
+      const length = chunks.reduce((n, c) => n + c.length, 0);
+      if (length > 0) {
+        const buf = ctx.createBuffer(1, length, ctx.sampleRate);
+        let at = 0;
+        for (const c of chunks) { buf.copyToChannel(c, 0, at); at += c.length; }
+        try { setAudio(await encodeWav16k(buf)); setNoteSecs(Math.round(buf.duration)); }
+        catch (err) { setError((err as Error).message); }
+      }
+      void ctx.close();
+    };
     startRef.current = Date.now();
     setElapsed(0);
     setAudio(null);
     setNoteSecs(null);
-    mr.ondataavailable = (e) => { if (e.data.size > 0) chunksRef.current.push(e.data); };
-    mr.onstop = () => {
-      if (timerRef.current != null) window.clearInterval(timerRef.current);
-      stopTracks();
-      setRecording(false);
-      const blob = new Blob(chunksRef.current, { type: mr.mimeType });
-      if (blob.size > 0) {
-        setAudio(blob);
-        setNoteSecs(Math.round((Date.now() - startRef.current) / 1000));
-      }
-    };
-    mr.start();
     setRecording(true);
     timerRef.current = window.setInterval(
       () => setElapsed(Math.floor((Date.now() - startRef.current) / 1000)), 1000);
@@ -133,7 +142,8 @@ export function RecordForm({ runId, saved }: { runId: string; saved?: Plan["save
     body.append("run_id", runId);
     if (audio) {
       try {
-        body.append("audio", await toWav16k(audio), "note.wav");
+        // a recording is already the right WAV; an uploaded file is decoded and converted
+        body.append("audio", audio instanceof File ? await toWav16k(audio) : audio, "note.wav");
       } catch (err) { setError((err as Error).message); return; }
     }
     body.append("text", notes);

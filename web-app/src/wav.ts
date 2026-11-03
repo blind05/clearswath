@@ -1,14 +1,22 @@
-// Convert any browser-decodable audio into mono 16-bit PCM WAV at 16000 Hz.
+// Audio -> mono 16-bit PCM WAV at 16000 Hz, the only format Muse Voice Transcribe takes here.
+
+// An uploaded file: decode it first (WAV, M4A, MP3, whatever this browser reads).
 export async function toWav16k(audio: Blob): Promise<Blob> {
   const ctx = new AudioContext();
   let decoded: AudioBuffer;
   try {
     decoded = await ctx.decodeAudioData(await audio.arrayBuffer());
-  } catch {
+  } catch (e) {
+    console.error("decodeAudioData failed", audio.type, e);
     throw new Error("Couldn't read that audio file. Try a WAV, M4A or MP3.");
   } finally {
     void ctx.close();
   }
+  return encodeWav16k(decoded);
+}
+
+// Samples already in hand (the mic recorder keeps raw samples, so nothing has to be decoded).
+export async function encodeWav16k(decoded: AudioBuffer): Promise<Blob> {
   if (decoded.duration > 600) throw new Error("Voice note must be 10 minutes or less.");
   const off = new OfflineAudioContext(1, Math.ceil(decoded.duration * 16000), 16000);
   const src = off.createBufferSource();
