@@ -55,6 +55,7 @@ def main(port: int, slow: float) -> None:
             page.goto(f"http://127.0.0.1:{port}/")
             shot("landing", 3)
             # 1. Montana: the label, the stream, the spurge map and Muse Spark's saved answer
+            page.get_by_role("button", name="Field and label").click()  # the form starts folded under the welcome
             page.get_by_role("checkbox", name="Ask Muse Spark to explain the plan").click()
             page.click("#demo")
             page.wait_for_selector("text=Saved Muse Spark answer", timeout=120_000)

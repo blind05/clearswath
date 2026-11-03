@@ -1,5 +1,6 @@
 import { useCallback, useRef, useState } from "react";
 import * as stylex from "@stylexjs/stylex";
+import { Button } from "@astryxdesign/core/Button";
 import { Tab, TabList } from "@astryxdesign/core/TabList";
 import { json, post } from "@/api";
 import { AccessCode } from "@/components/AccessCode";
@@ -30,6 +31,10 @@ const s = stylex.create({
     paddingInline: { default: 24, [media.mobile]: 16 }, paddingBottom: 40,
     borderRightWidth: { default: 1, [media.mobile]: 0 }, borderRightStyle: "solid", borderRightColor: color.rule,
   },
+  welcome: { paddingTop: 28, paddingBottom: 22, borderBottomWidth: 1, borderBottomStyle: "solid", borderBottomColor: color.rule },
+  welcomeTitle: { fontSize: { default: 28, [media.mobile]: 24 }, lineHeight: 1.15, fontWeight: 600, letterSpacing: "-0.01em" },
+  welcomeBody: { color: color.muted, fontSize: 15, lineHeight: 1.5, marginTop: 10, maxWidth: 340 },
+  welcomeAction: { marginTop: 16 },
   map: { minHeight: 0, height: { default: null, [media.mobile]: "55vh" }, flex: { default: null, [media.mobile]: "none" } },
 });
 
@@ -43,7 +48,7 @@ export function App() {
   const [plan, setPlan] = useState<Plan | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
-  const [formOpen, setFormOpen] = useState(true);
+  const [formOpen, setFormOpen] = useState(false);  // the welcome leads; the form opens from its heading
   const [tab, setTab] = useState("plan");
   const rerun = useRef<Rerun | null>(null);
   const demoField = useRef("mt");
@@ -115,6 +120,19 @@ export function App() {
         <aside id={`panel-${tab}`} role="tabpanel" aria-label={tab === "plan" ? "Plan a spray" : "Check a photo"} {...stylex.props(s.aside)}>
           {tab === "plan" ? (
             <>
+              {!plan && (
+                <section {...stylex.props(s.welcome)} aria-labelledby="welcome-title">
+                  <h2 id="welcome-title" {...stylex.props(s.welcomeTitle)}>Spray the weeds, not the creek.</h2>
+                  <p {...stylex.props(s.welcomeBody)}>
+                    A 24-acre Montana block: leafy spurge mapped from a drone, the Tordon 22K label read page by page,
+                    and the spray cells that are left. A saved run, so it opens in seconds.
+                  </p>
+                  <div {...stylex.props(s.welcomeAction)}>
+                    <Button id="explore" variant="primary" label="Explore the Montana example" isDisabled={busy}
+                            onClick={() => { demoField.current = "mt"; run(demo); }} />
+                  </div>
+                </section>
+              )}
               <SetupForm setup={setup} onChange={setSetup} open={formOpen} onOpenChange={setFormOpen}
                          fieldDrawn={!!drawing.field} managedCount={drawing.managed.length} busy={busy}
                          onPlan={planLive} onDemo={() => { demoField.current = "mt"; run(demo); }} />
