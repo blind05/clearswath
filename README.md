@@ -15,7 +15,7 @@ a field, the label PDF and a drone weed map. It returns:
   endangered-species bulletin says no;
 - **files for the sprayer**: a DJI Agras prescription (boundary shapefile plus a rate GeoTIFF), GeoJSON and KML;
 - **a draft application record**, filled from the applicator's notes, typed or spoken into the page (checked end to
-  end on a synthetic voice, not yet on a person's).
+  end on a person's speech in the browser).
 
 Built for the Meta Global AI Developer Hackathon (Indie Developer track, "Build for Your World"), October 26 to
 November 4, 2026, by someone from a South Dakota farm family: the problem of turning a label into lines on a field is

@@ -12,5 +12,5 @@
 | Label accuracy | Measured (`evals/results_labels.md`), not claimed: answer keys unreviewed | Spark 1.3, Spark Open (Baseten, Fireworks) |
 | DJI prescription | Planning file, not flight-tested | none |
 | Photo mode | Live on Modal; trained on cotton and sugar beet | DINOv3 ViT-S/16 + head |
-| Voice record | Live behind the access code: mic or any audio file, converted in the browser; checked on a synthetic voice, not yet a person's | Muse Voice Transcribe, Muse Spark |
+| Voice record | Live behind the access code: mic or any audio file, converted in the browser; checked on a person's speech | Muse Voice Transcribe, Muse Spark |
 | Video narration | Synthetic voice, Kokoro-82M (Apache-2.0); not Hunter's voice | none (Muse Voice Transcribe used only to check intelligibility) |

@@ -30,7 +30,7 @@ Conditions: one listen by Hunter, the video uploaded to a public link, and the s
 | Label accuracy | Measured (`evals/results_labels.md`) but not claimed publicly: the answer keys are unreviewed |
 | DJI prescription | A planning file; not flight-tested |
 | Photo mode | Live on Modal; trained on cotton and sugar beet |
-| Voice record | Record in the page or upload any audio; checked end to end on a synthetic voice, not yet a person's |
+| Voice record | Record in the page or upload any audio; checked end to end on a person's speech |
 
 ## Video
 
