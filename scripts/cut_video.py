@@ -32,7 +32,9 @@ def caption_png(text: str, path: Path) -> Path:
     """A lower-left caption: ink on a white bar, the app's own type."""
     img = Image.new("RGBA", (W, H), (0, 0, 0, 0))
     d = ImageDraw.Draw(img)
-    f = font(600, 44)
+    f, room = font(600, 44), W - 460 - 96
+    if d.textlength(text, font=f) > room:  # a long line (the model roster) shrinks to fit rather than run off
+        f = font(600, int(44 * room / d.textlength(text, font=f)))
     w, x = d.textlength(text, font=f), 460  # over the map, clear of the app's 400 px side panel
     d.rectangle([x, H - 170, x + w + 56, H - 80], fill=(255, 255, 255, 235))
     d.rectangle([x, H - 170, x + 6, H - 80], fill=SPRAY + (255,))
@@ -160,7 +162,7 @@ def main(out: Path) -> None:
                     cap("No conflicts in checked rules", "go"))]
     # 9. how it decided
     parts.append(still(shot("montana-agent"), fit(9, 0, 15.0), tmp / "08.mp4",
-                       cap("Muse Spark 1.3 · Muse Wonder · SAM 3.1 · DINOv2 · Muse Spark Open", "models")))
+                       cap("Muse Spark 1.3 · Muse Wonder · SAM 3.1 · Muse Voice Transcribe · DINOv2 · Muse Spark Open", "models")))
     # 10. end card
     parts.append(still(card([("ClearSwath", 600, 96), ("Models read and see. Tested code plans.", 400, 44), ("The applicator decides.", 400, 44), ("", 400, 30),
                              ("clearswath.onrender.com", 400, 40), ("github.com/blind05/clearswath", 400, 40)],
