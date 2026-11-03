@@ -63,11 +63,14 @@ def _sweep(shape, dx: float, dy: float):
 
 
 def plan(field: Polygon, hazards: dict, rules: list[dict], restricted=(),
-         method: str = "drone", prohibited: bool = False, gaps=(), managed=(), wind_from_deg=None) -> dict:
+         method: str = "drone", prohibited: bool = False, gaps=(), managed=(), wind_from_deg=None,
+         unchecked=()) -> dict:
     """restricted: bulletin shapes to exclude. prohibited: bulletin bans the product here.
 
     gaps: missing data the plan needs (e.g. USGS water unavailable). Any gap is NO-GO with nothing sprayable:
     a zone that couldn't be checked is never handed to a sprayer.
+    unchecked: hazard sources that failed but aren't the water map (bulletin lookup, aerial scout): the map is
+    unchanged, but the plan is at best ADJUST, never a clean GO.
     hazards["possible_water"]: water only the aerial scout saw; it never changes the map, at most makes it ADJUST.
     managed: land next to the field the user marked as managed (roads, other fields, farmsteads); a drift rule
     buffers the treated area toward everything else. wind_from_deg: if set, drift buffers run downwind only."""
@@ -156,6 +159,8 @@ def plan(field: Polygon, hazards: dict, rules: list[dict], restricted=(),
     for r in runoff:
         reasons.append({"source": "label", "kind": "runoff", "summary": "Runoff mitigation points required: "
                         "complete them in EPA's PALM before spraying.", "quote": r["quote"], "page": r.get("page")})
+    for u in unchecked:
+        reasons.append({"source": "review", "kind": "unchecked", "summary": u})
 
     blocked = union_all(zones) if zones else Polygon()
     no_spray, spray = field_m.intersection(blocked), field_m.difference(blocked)
@@ -163,7 +168,7 @@ def plan(field: Polygon, hazards: dict, rules: list[dict], restricted=(),
 
     if prohibited or gaps or spray_acres < MIN_ACRES:
         status = "no-go"
-    elif excluded_acres >= MIN_ACRES or runoff or unsure:
+    elif excluded_acres >= MIN_ACRES or runoff or unsure or unchecked:
         status = "adjust"
     else:
         status = "go"

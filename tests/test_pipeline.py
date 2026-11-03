@@ -75,9 +75,10 @@ def test_warnings(monkeypatch, field_path):
          blt=bulletin(checked=False, citation="Could not check BLT.",
                       limitations=[{"pula_id": 15, "code": "T1", "event_name": "Y",
                                     "limitation": "See link for limitations."}]))
-    w = pipeline.run(field_path, "label.png", "2026-11")["warnings"]
-    assert len(w) == 4
-    assert "Could not check BLT." in w and any("PULA 15" in x for x in w)
+    result = pipeline.run(field_path, "label.png", "2026-11")
+    w = result["warnings"]
+    assert len(w) == 3 and any("PULA 15" in x for x in w)
+    assert {"source": "review", "kind": "unchecked", "summary": "Could not check BLT."} in result["plan"]["reasons"]
 
 
 def test_to_json_is_serializable(monkeypatch, field_path):
@@ -198,6 +199,15 @@ def test_imagery_warnings_reach_the_applicator(monkeypatch, field_path):
         "water": [POND], "building": [], "habitat": [], "imagery_date": "2023-07-09",
         "water_source": "usgs", "imagery_warnings": ["Aerial imagery is missing for 37%"]})
     assert pipeline.run(field_path, "label.pdf", "2026-11")["warnings"] == ["Aerial imagery is missing for 37%"]
+
+
+def test_a_failed_scout_keeps_a_clear_field_from_go(monkeypatch, field_path):
+    wire(monkeypatch)
+    monkeypatch.setattr(segment, "find_hazards", lambda p: {
+        "water": [], "building": [], "habitat": [], "imagery_date": "2023-07-09", "water_source": "usgs",
+        "scout_warnings": ["Muse Wonder and SAM 3.1 couldn't check the aerial imagery"]})
+    plan = pipeline.run(field_path, "label.pdf", "2026-11")["plan"]
+    assert plan["status"] == "adjust" and plan["reasons"][-1]["kind"] == "unchecked"
 
 
 def raw_label():

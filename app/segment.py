@@ -92,7 +92,7 @@ def find_hazards(field_path) -> dict:
     empty = meta.get("empty_fraction", 0)
     out["imagery_warnings"] = [f"Aerial imagery is missing for {empty:.0%} of the area around the field, so SAM "
                                "may have missed water, buildings or tree lines there. Check the map."] if empty > 0.01 else []
-    out["imagery_warnings"] += scout_warnings
+    out["scout_warnings"] = scout_warnings  # a failed scout caps the plan at ADJUST (pipeline -> buffers.plan)
     return out
 
 

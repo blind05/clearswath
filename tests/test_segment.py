@@ -133,8 +133,8 @@ def test_failed_scout_warns_and_is_not_cached(tmp_path, monkeypatch):
     out = segment.find_hazards(field)
     assert out["habitat"] == out["building"] == out["water"] == out["possible_water"] == []
     assert out["water_source"] == "none"
-    (w,) = out["imagery_warnings"]
-    assert "couldn't check the aerial imagery" in w and "Check the field" in w
+    (w,) = out["scout_warnings"]
+    assert "couldn't check the aerial imagery" in w and "Check the field" in w and out["imagery_warnings"] == []
     segment.find_hazards(field)
     assert calls == ["scout", "scout"]  # retried, not cached as "nothing found"
 

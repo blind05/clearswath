@@ -55,14 +55,14 @@ def assemble(field, label, hazards: dict, bulletin: dict, month: str, method: st
     if dropped_buffers:
         gaps.append(f"{len(dropped_buffers)} buffer rule(s) on the label could not be verified, so a required "
                     "setback may be missing. Check the label, or try again.")
+    # Sources that failed but aren't the water map: never a clean GO (also covers a label with no EPA Reg. No.)
+    unchecked = ([] if bulletin["checked"] else [bulletin["citation"]]) + list(hazards.get("scout_warnings") or [])
     plan = buffers.plan(field, hazards, [r.model_dump() for r in rules], bulletin["restricted"], method,
-                        bulletin["prohibited"], gaps, hazards.get("managed") or (), wind_from_deg)
+                        bulletin["prohibited"], gaps, hazards.get("managed") or (), wind_from_deg, unchecked)
 
     warnings = [f"You unticked: {label.rules[i].summary} (label p.{label.rules[i].page}"
                 + (f", only when {label.rules[i].condition}" if label.rules[i].condition else "") + ")."
                 for i in excluded]
-    if not bulletin["checked"]:  # also covers a label with no usable EPA Reg. No.
-        warnings.append(bulletin["citation"])
     unread = [x for x in bulletin["limitations"] if not bulletins.PROHIBITS.search(x["limitation"] or "")]
     for x in unread:
         warnings.append(f"Bulletin limitation (PULA {x['pula_id']}, code {x['code']}) must be read "

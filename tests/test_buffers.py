@@ -33,6 +33,12 @@ def test_go_without_hazards():
     assert out["spray_acres"] == out["field_acres"] == pytest.approx(39.54, abs=0.01)
 
 
+def test_a_source_that_could_not_be_checked_is_never_a_clean_go():
+    out = plan(FIELD, {}, [rule()], unchecked=["Could not check BLT."])
+    assert out["status"] == "adjust" and out["spray_acres"] == pytest.approx(39.54, abs=0.01)  # map unchanged
+    assert out["reasons"] == [{"source": "review", "kind": "unchecked", "summary": "Could not check BLT."}]
+
+
 def test_label_buffer_in_feet():
     out = plan(FIELD, {"water": [POND]}, [rule(100, "ft")])
     assert out["status"] == "adjust"
