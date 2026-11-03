@@ -6,7 +6,7 @@ import MapGL, { Layer, NavigationControl, Source, type MapLayerMouseEvent, type 
 import { TerraDraw, TerraDrawPolygonMode, TerraDrawRectangleMode, TerraDrawSelectMode } from "terra-draw";
 import { TerraDrawMapLibreGLAdapter } from "terra-draw-maplibre-gl-adapter";
 import * as stylex from "@stylexjs/stylex";
-import { color, font } from "@/tokens.stylex";
+import { color, font, media } from "@/tokens.stylex";
 import type { Overlay, Plan, Reason } from "@/types";
 
 // The map's own controls sit over imagery, so they are the one place with a shadow (DESIGN.md).
@@ -25,6 +25,7 @@ const s = stylex.create({
   tool: {
     borderRadius: 3, paddingInline: 10, paddingBlock: 6, textAlign: "left", fontSize: 13, fontWeight: 500,
     font: "inherit", border: 0, cursor: "pointer", color: color.ink, backgroundColor: { default: "transparent", ":hover": color.page },
+    minHeight: { default: null, [media.mobile]: 44 },  // phone tap targets
   },
   toolOn: { color: "#FFFFFF", backgroundColor: { default: color.ink, ":hover": color.ink } },
   key: { bottom: 32, right: 12, minWidth: 200, paddingInline: 12, paddingBlock: 8, fontSize: 13 },
@@ -34,7 +35,8 @@ const s = stylex.create({
   },
   hint: { fontWeight: 400, color: color.muted },
   keyList: { marginTop: 6, display: "grid", gap: 4, listStyle: "none", padding: 0 },
-  keyRow: { display: "flex", alignItems: "center", gap: 8, cursor: "pointer" },
+  keyRow: { display: "flex", alignItems: "center", gap: 8, cursor: "pointer",
+            minHeight: { default: null, [media.mobile]: 44 } },  // phone tap targets
   tick: { accentColor: color.ink },
   swatch: { display: "inline-block", width: 14, height: 10, flex: "none" },
 });
@@ -103,12 +105,14 @@ export function MapView({ plan, onDrawing, clearDrawing }: Props) {
   const roles = useRef(new Map<string | number, DrawTarget>());
   const [target, setTarget] = useState<DrawTarget>("field");
   const [tool, setTool] = useState<"polygon" | "rectangle" | "select" | null>(null);
+  const [drawOpen, setDrawOpen] = useState(false);  // with a plan, the tools hide behind one button
   const [revealed, setRevealed] = useState(false);
   const [hidden, setHidden] = useState<Record<string, boolean>>({});
   const [keyOpen, setKeyOpen] = useState(() => window.innerWidth >= 800);
   // a click inside the field: which checked reasons hold that spot back (empty = none)
   const [why, setWhy] = useState<{ x: number; y: number; reasons: number[] } | null>(null);
   useEffect(() => setWhy(null), [plan]);
+  useEffect(() => setDrawOpen(false), [plan]);  // a new plan collapses the tools again
 
   const onClick = useCallback((e: MapLayerMouseEvent) => {
     if (tool || !plan) return setWhy(null);
@@ -196,9 +200,9 @@ export function MapView({ plan, onDrawing, clearDrawing }: Props) {
   };
 
   return (
-    <div {...stylex.props(s.wrap)}>
+    <div {...stylex.props(s.wrap)} data-mapview>
       <MapGL ref={mapRef} onLoad={onLoad} onClick={onClick} interactiveLayerIds={plan ? ["field-hit", "reasons-hit"] : []}
-           mapStyle={BASEMAP} initialViewState={{ longitude: -101, latitude: 43, zoom: 3.6 }}
+           mapStyle={BASEMAP} initialViewState={{ longitude: -114.03866, latitude: 46.70371, zoom: 15.2 }}
            maxZoom={21} style={{ width: "100%", height: "100%" }}
            attributionControl={{ compact: window.innerWidth < 800, customAttribution: overlay?.credit ?? undefined }}>
         {present.map((l) => {
@@ -243,10 +247,17 @@ export function MapView({ plan, onDrawing, clearDrawing }: Props) {
                                product={plan.label.product_name || "The label"} onClose={() => setWhy(null)} />}
 
       <div {...stylex.props(s.card, s.tools)} role="toolbar" aria-label="Draw on the map">
-        <ToolButton active={tool === "polygon" && target === "field"} onClick={() => pick("field", "polygon")}>Draw field</ToolButton>
-        <ToolButton active={tool === "rectangle" && target === "field"} onClick={() => pick("field", "rectangle")}>Rectangle</ToolButton>
-        <ToolButton active={tool !== null && target === "managed"} onClick={() => pick("managed", "polygon")}>Managed land</ToolButton>
-        <ToolButton active={tool === "select"} onClick={() => setTool((c) => (c === "select" ? null : "select"))}>Edit</ToolButton>
+        {plan && !drawOpen ? (
+          <button type="button" onClick={() => setDrawOpen(true)} aria-expanded={false}
+                  {...stylex.props(s.tool)}>Draw your own field</button>
+        ) : (
+          <>
+            <ToolButton active={tool === "polygon" && target === "field"} onClick={() => pick("field", "polygon")}>Draw field</ToolButton>
+            <ToolButton active={tool === "rectangle" && target === "field"} onClick={() => pick("field", "rectangle")}>Rectangle</ToolButton>
+            <ToolButton active={tool !== null && target === "managed"} onClick={() => pick("managed", "polygon")}>Managed land</ToolButton>
+            <ToolButton active={tool === "select"} onClick={() => setTool((c) => (c === "select" ? null : "select"))}>Edit</ToolButton>
+          </>
+        )}
       </div>
 
       {(present.length > 0 || overlay) && (

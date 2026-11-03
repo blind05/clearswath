@@ -35,6 +35,8 @@ const s = stylex.create({
   welcomeTitle: { fontSize: { default: 28, [media.mobile]: 24 }, lineHeight: 1.15, fontWeight: 600, letterSpacing: "-0.01em" },
   welcomeBody: { color: color.muted, fontSize: 15, lineHeight: 1.5, marginTop: 10, maxWidth: 340 },
   welcomeAction: { marginTop: 16 },
+  credit: { marginTop: 12 },
+  loading: { fontSize: 15, color: color.ink, paddingTop: 12 },
   // phone: the map goes first by order, not column-reverse, which starts a scroller at its end (map scrolled away)
   map: { minHeight: 0, height: { default: null, [media.mobile]: "55vh" }, flex: { default: null, [media.mobile]: "none" },
          order: { default: null, [media.mobile]: -1 } },
@@ -133,12 +135,15 @@ export function App() {
                     <Button id="explore" variant="primary" label="Explore the Montana example" isDisabled={busy}
                             onClick={() => { demoField.current = "mt"; run(demo); }} />
                   </div>
+                  <p {...stylex.props(text.small, s.credit)}>Label read by Muse Spark. Tree lines by Muse Wonder and SAM 3.1. Weeds by a DINOv2 model. Notes by Muse Voice Transcribe.</p>
                 </section>
               )}
               <SetupForm setup={setup} onChange={setSetup} open={formOpen} onOpenChange={setFormOpen}
                          fieldDrawn={!!drawing.field} managedCount={drawing.managed.length} busy={busy}
                          onPlan={planLive} onDemo={() => { demoField.current = "mt"; run(demo); }} />
-              {busy && <p {...stylex.props(text.small)}>Reading the label, mapping hazards and checking the bulletin…</p>}
+              <div aria-live="polite">
+                {busy && <p {...stylex.props(s.loading)}>Reading the label, mapping hazards and checking the bulletin…</p>}
+              </div>
               {error && <p role="alert" {...stylex.props(text.error)}>{error}</p>}
               {plan && <PlanView plan={plan} agentAsked={setup.agent} onAskLive={askLive} onSwitchDemo={switchDemo}
                                  onUntick={(excluded) => rerun.current && run(rerun.current, excluded)} />}
