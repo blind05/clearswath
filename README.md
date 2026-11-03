@@ -5,8 +5,9 @@
 **Try it: [clearswath.onrender.com](https://clearswath.onrender.com)** (free hosting: the first visit after a quiet spell
 can take a minute to wake up).
 
-A pesticide label is a legal document of 20 to 70 pages: setbacks from water, wind limits, rates, endangered-species
-bulletins. A drone can now spray single patches of weeds, but nothing reads the label for it. ClearSwath does. Give it
+A pesticide label is a legal document, often dozens of pages (the two here run 30 and 61): setbacks from water, wind
+limits, rates, endangered-species bulletins. A drone can now spray single patches of weeds, but it doesn't read the
+label. ClearSwath does. Give it
 a field, the label PDF and a drone weed map. It returns:
 
 - **a decision** (No conflicts in checked rules, Adjust, or Do not spray), each reason with the label sentence it
