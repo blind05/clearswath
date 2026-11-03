@@ -42,9 +42,29 @@ by a person.
 
 1. Hunter listens to the video once; optionally replaces the synthetic narration with his own take.
 2. Upload the final MP4 (YouTube unlisted or similar) and open the link in a private window.
-3. Uptime ping on `/api/health` every 10 minutes through Nov 8, so judges don't hit a sleeping server.
+3. Uptime ping on `/api/health` every 10 minutes through Nov 8: `.github/workflows/keepalive.yml` (GitHub may
+   delay scheduled runs; delete the file after judging).
 4. ~~Run the `/api/whoami` checks~~ Done 2026-11-03: the limit read Render's internal proxy, so every visitor
-   shared one budget and one wrong-code lockout. Now reads `CF-Connecting-IP`; deploy, then re-run whoami
-   (`address_used` should be your own address).
+   shared one budget and one wrong-code lockout. Now reads `CF-Connecting-IP` (451cab4); verified live: whoami
+   returns the visitor's own address.
 5. Fill the Cerebral Valley form from `docs/video/SCRIPT.md` (name, one-liner, problem statement, description),
    then tag the release.
+
+## Judge pass (2026-11-03, one self-review against the brief's weights, not organizer scores)
+
+Weights from the brief (Impact 30, Meta tooling 25, Technical 20, Demo 25); not yet checked against the
+participant guide.
+
+| Category | Estimate | Why, skeptically | Top remaining issue |
+|---|---|---|---|
+| Impact | 7/10 | A real operator task (label -> lines on a field) with a usable output; framed as decision support, not approval | No user beyond the builder has tried it |
+| Meta tooling | 7/10 | Spark 1.3 reads the label with quotes checked in code; Wonder + SAM 3.1 scout (measured over 3 runs); Spark agent replayed. DINOv2 is Meta open weights | Voice Transcribe not run on real speech; Spark Open reads a conditional buffer as unconditional |
+| Technical | 8/10 | UTM buffering, quote verification, fail-closed warnings, 447 offline tests, spend cap, per-visitor limit now correct behind Cloudflare | Label accuracy unclaimed: answer keys unreviewed |
+| Demo | 7/10 | Opens on the real map with 9.7 of 24.1 acres; click-for-reason; 2:31 | Synthetic narration; nobody has listened to it yet |
+
+Weighted: about 7.2. Estimates from one reviewer who knows the code, so expect them to be generous.
+
+- **Could disqualify:** a video link that doesn't open for an anonymous viewer, or missing form fields.
+- **Why another team might win:** a live, unscripted demo, or real users. Here the judge sees saved runs.
+- **What would move it:** a human narration take, reviewed answer keys (then label precision and recall can be
+  claimed), and one real voice-note record.
