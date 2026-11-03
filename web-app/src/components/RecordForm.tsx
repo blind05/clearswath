@@ -176,7 +176,7 @@ export function RecordForm({ runId, saved }: { runId: string; saved?: Plan["save
       {error && <p role="alert" {...stylex.props(text.error)}>{error}</p>}
       {shown && (
         <div>
-          {!rec && saved && <p {...stylex.props(text.small, s.gap)}>Saved voice note ({saved.model}, {saved.date}): a real recording, transcribed and filled then.</p>}
+          {!rec && saved && <p {...stylex.props(text.small, s.gap)}>Saved voice note: a {saved.voice}, transcribed by {saved.model} and filled on {saved.date}.</p>}
           {shown.missing.length > 0 && <p role="alert" {...stylex.props(s.missing, s.gap)}>Still needed: {shown.missing.map(label).join(", ")}.</p>}
           <RecordTable fields={RECORD_FIELDS} rec={shown} missing={shown.missing} />
           {shown.part137 && (

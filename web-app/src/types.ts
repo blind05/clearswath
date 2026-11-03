@@ -49,7 +49,7 @@ export interface Plan {
   trace?: TraceStep[];
   mode?: "agent" | "replay" | "pipeline";
   replay?: { model: string; date: string };
-  saved_record?: { record: AppRecord; model: string; date: string };  // a real voice note saved on this demo
+  saved_record?: { record: AppRecord; model: string; date: string; voice: string };  // a voice note saved on this demo
 }
 
 export interface PhotoResult {

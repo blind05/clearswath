@@ -1,0 +1,57 @@
+{
+ "record": {
+  "applicator_name": "Pat Miller",
+  "certification_number": "MT4412",
+  "operator_name": null,
+  "owner_name": null,
+  "owner_address": null,
+  "application_date": "2026-11-03",
+  "start_time": "09:15",
+  "end_time": "10:40",
+  "product_name": "Tordon 22K Specialty Herbicide",
+  "manufacturer": null,
+  "epa_reg_no": "62719-6",
+  "amount_applied": "10 gallons",
+  "rate": "1 quart per acre",
+  "area_treated_acres": 9.73,
+  "pest": "leafy spurge",
+  "crop_or_site": null,
+  "growth_stage": null,
+  "location": "46.70371, -114.03866",
+  "method": "drone",
+  "equipment": "drone",
+  "wind_speed_mph": 5.0,
+  "wind_direction": "W",
+  "temperature_f": 62.0,
+  "notes": "Sprayed Tordon 22K by drone.",
+  "transcript": "Pat Miller, licensed MT4412, sprayed Tordon 22K by drone on leafy spurge one quart per acre about 10 gallons total started 9 15 finished 10 40 wind five miles an hour from the west 62 degrees",
+  "missing": [
+   "owner_name",
+   "owner_address",
+   "manufacturer",
+   "crop_or_site"
+  ],
+  "part137": {
+   "customer_name": null,
+   "customer_address": null,
+   "service_date": "2026-11-03",
+   "material": "Tordon 22K Specialty Herbicide (EPA Reg. No. 62719-6)",
+   "quantity": "10 gallons",
+   "pilot_name": null,
+   "pilot_address": null,
+   "pilot_certificate_number": null,
+   "pilot_knowledge_test_date": null,
+   "missing": [
+    "customer_name",
+    "customer_address",
+    "pilot_name",
+    "pilot_address",
+    "pilot_certificate_number",
+    "pilot_knowledge_test_date"
+   ]
+  }
+ },
+ "model": "muse-voice-transcribe-1.0",
+ "date": "2026-11-03",
+ "voice": "synthetic voice (Kokoro-82M) reading a made-up field note"
+}
