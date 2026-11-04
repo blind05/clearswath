@@ -1,4 +1,4 @@
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import * as stylex from "@stylexjs/stylex";
 import { Button } from "@astryxdesign/core/Button";
 import { Tab, TabList } from "@astryxdesign/core/TabList";
@@ -69,6 +69,9 @@ export function App() {
     field: demoField.current, method: setup.method, month: setup.month, wind_from: setup.windFrom,
     excluded_rules: excluded.join(","), ...(setup.agent ? { agent_answer: "1" } : {}),
   })}`);
+
+  // judges land on the Montana result, not a blank map; the welcome shows while the saved run loads
+  useEffect(() => { run(demo); }, []);  // eslint-disable-line react-hooks/exhaustive-deps
 
   function planLive() {
     const field = drawing.field

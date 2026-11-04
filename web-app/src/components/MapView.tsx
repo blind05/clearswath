@@ -109,6 +109,7 @@ export function MapView({ plan, onDrawing, clearDrawing }: Props) {
   const [tool, setTool] = useState<"polygon" | "rectangle" | "select" | null>(null);
   const [drawOpen, setDrawOpen] = useState(false);  // with a plan, the tools hide behind one button
   const [revealed, setRevealed] = useState(false);
+  const [loaded, setLoaded] = useState(false);  // a plan can arrive before the map does (the landing auto-load)
   const [hidden, setHidden] = useState<Record<string, boolean>>({});
   const [keyOpen, setKeyOpen] = useState(() => window.innerWidth >= 800);
   // a click inside the field: which checked reasons hold that spot back (empty = none)
@@ -134,7 +135,7 @@ export function MapView({ plan, onDrawing, clearDrawing }: Props) {
   useEffect(() => {
     const map = mapRef.current;
     const field = plan?.layers.field;
-    if (!map || !field) return;
+    if (!map || !loaded || !field) return;
     const b = bbox(field);
     const narrow = window.innerWidth < 800;
     if (b) map.fitBounds([[b[0], b[1]], [b[2], b[3]]], {
@@ -143,7 +144,7 @@ export function MapView({ plan, onDrawing, clearDrawing }: Props) {
     setRevealed(false);
     const t = window.setTimeout(() => setRevealed(true), reducedMotion() ? 0 : 850);
     return () => window.clearTimeout(t);
-  }, [plan]);
+  }, [plan, loaded]);
 
   const emit = useCallback(() => {
     const d = draw.current;
@@ -155,6 +156,7 @@ export function MapView({ plan, onDrawing, clearDrawing }: Props) {
 
   const onLoad = useCallback(() => {
     const map = mapRef.current?.getMap();
+    setLoaded(true);
     if (!map || draw.current) return;
     (window as unknown as { __clearswathMap: unknown }).__clearswathMap = map;  // for the Playwright checks
     const td = new TerraDraw({
