@@ -37,5 +37,5 @@ user acts; "replay" means the demo serves a saved real run.
 
 ## Biggest obstacle
 
-The video. The app is live, the scout is measured, and Baseten reads labels; what judges watch in the final round
-doesn't exist yet.
+The video's last mile. The 2:22 cut exists (`docs/submission/VIDEO_QA.md`) with a disclosed synthetic voice; it
+still needs one human listen and a public link checked logged out.

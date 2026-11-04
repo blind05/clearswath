@@ -10,7 +10,7 @@ saved real runs; the DJI file is a planning file, not flight-tested; the video's
 voice.
 
 **Two minutes, no sign-up:**
-1. Press **Explore the Montana example**: a saved real run opens on the drone image: **Adjust**, 9.7 of 24.1 acres
+1. Open the site: the Montana example, a saved real run, opens by itself on the drone image: **Adjust**, 9.7 of 24.1 acres
    to spot spray.
 2. Click a spot on the map: a card quotes the label sentence that holds it back, with its page, or says nothing
    checked does.
@@ -43,7 +43,7 @@ one I know firsthand.
 Click anywhere inside a field on the map: a card says which checked rule holds that spot back, with the label's
 sentence and page, or that nothing checked does. Rules whose quote isn't on the page are listed as not applied.
 
-Press **Explore the Montana example**. The demos replay saved real runs, so they are free and instant.
+The Montana example opens by itself. The demos replay saved real runs, so they are free and instant.
 
 - **Montana rangeland, leafy spurge.** A 24-acre block of a real drone orthomosaic (MPG Ranch, 1.27 cm per
   pixel), sprayed with Tordon 22K. A stream crosses the block; Muse Wonder and SAM 3.1 outline the trees along it.
