@@ -1,7 +1,7 @@
 """Original score, sound cues and the final mix for the demo video. Video tooling only: numpy + ffmpeg.
 
 uv run python scripts/cut_video.py                 # first: the picture and data/video/cut_timeline.json
-uv run python scripts/score_video.py [--vo data/video/voiceover.wav]
+uv run python scripts/score_video.py [--script docs/video/cuts/B.md] [--vo data/video/voiceover.wav]
 
 Every note is generated here: no samples, no third-party music. Stems go to data/video/audio/ (music, music ducked
 for a voiceover, sound cues), so the mix can be redone. The final MP4 is H.264/AAC with fast start, loudness
@@ -94,14 +94,14 @@ def score(duration: float, cues: dict) -> tuple[np.ndarray, np.ndarray]:
     music, sfx = np.zeros(int(duration * SR) + SR), np.zeros(int(duration * SR) + SR)
     bar = 8 * BEAT
     end = cues["end"]
-    pulse_on = [(cues["demo"], cues["sam_alone"]), (cues["wonder"], end)]
+    quiet = cues["quiet"]  # the hook, the label pages and SAM alone: no pulse, a thinner pad
     for k in range(int(duration / bar) + 1):
         at = k * bar
         root, notes = CHORDS[k % 4]
         if at >= end:  # the end card resolves on D
             root, notes = CHORDS[0]
         length = min(bar + 2.2, duration - at + 0.5)
-        thin = cues["label"] <= at < cues["demo"] or cues["sam_alone"] <= at < cues["wonder"]
+        thin = any(s <= at < e for s, e in quiet[1:])
         for i, m in enumerate(notes):
             if thin and i in (1, 3):
                 continue
@@ -110,7 +110,7 @@ def score(duration: float, cues: dict) -> tuple[np.ndarray, np.ndarray]:
             add(music, at, bass_note(root, bar), 0.11)
         for b in range(16):  # eighth notes
             when = at + b * BEAT / 2
-            if any(s <= when < e for s, e in pulse_on) and when < duration - 4:
+            if not any(s <= when < e for s, e in quiet) and when < end and when < duration - 4:
                 m = [notes[0] + 12, notes[2], notes[1] + 12, notes[3], notes[2] + 12, notes[1], notes[3] + 12, notes[0]][b % 8]
                 add(music, when, pluck(m), 0.045 if b % 2 == 0 else 0.03)
     n = np.arange(len(music))
@@ -140,19 +140,25 @@ def ff(*args) -> str:
                           text=True).stderr
 
 
-def main(vo: Path | None, out: Path) -> None:
-    tl = json.loads((VID / "cut_timeline.json").read_text())
+def main(script: Path, vo: Path | None, out: Path | None) -> None:
+    import sys
+    sys.path.insert(0, str(ROOT / "scripts"))
+    from cut_video import work_dir
+    work = work_dir(script)
+    out = out or (VID / "ClearSwath_Meta_Hackathon_Final.mp4" if work == VID else work / f"ClearSwath_{script.stem}.mp4")
+    tl = json.loads((work / "cut_timeline.json").read_text())
     start = {p["part"]: p["start"] for p in tl["parts"]}
-    cues = {"label": start["020"], "pages": [start[f"02{i}"] for i in range(4)], "demo": start["03a"],
-            "sam_alone": start["04a"], "wonder": start["04b"], "files": start["06a"], "go": start["07b"],
-            "end": start["09"]}
+    stop = {a["part"]: b["start"] for a, b in zip(tl["parts"], tl["parts"][1:])} | {tl["parts"][-1]["part"]: tl["duration"]}
+    cues = {"pages": [start[f"02{i}"] for i in range(4)], "wonder": start["04b"], "files": start["06a"],
+            "go": start["07b"], "end": start["09"],
+            "quiet": [(start["01a"], stop["01b"]), (start["020"], stop["023"]), (start["04a"], stop["04a"])]}
     music, sfx = score(tl["duration"], cues)
-    voice = VID / "voice" / "manifest.json"
+    voice = work / "voice" / "manifest.json"
+    firsts = tl["lines"]  # the part each VO line starts on
     if vo is None and voice.exists():  # narration from scripts/narrate_video.py: each line at the start of its shot
-        firsts = ["01a", "020", "03a", "04a", "05", "06a", "06v", "07a", "08", "09"]
         track = np.zeros(int(tl["duration"] * SR) + SR)
         for n, part in enumerate(firsts, 1):
-            with wave.open(str(VID / "voice" / f"shot{n}.wav")) as w:
+            with wave.open(str(work / "voice" / f"shot{n}.wav")) as w:
                 line = np.frombuffer(w.readframes(w.getnframes()), dtype="<i2").astype(float) / 32767
                 rate = w.getframerate()
             line = np.interp(np.arange(0, len(line), rate / SR), np.arange(len(line)), line)  # to 44.1 kHz
@@ -178,13 +184,10 @@ def main(vo: Path | None, out: Path) -> None:
     subs = []
     if voice.exists():  # captions: each line split into sentences, timed by word count within its shot's take
         import re
-        import sys
-        sys.path.insert(0, str(ROOT / "scripts"))
         from narrate_video import lines
         seconds = json.loads(voice.read_text())["seconds"]
-        firsts = ["01a", "020", "03a", "04a", "05", "06a", "06v", "07a", "08", "09"]
         cues_ = []
-        for n, (part, text) in enumerate(zip(firsts, lines()), 1):
+        for n, (part, text) in enumerate(zip(firsts, lines(script)), 1):
             sentences = [x for x in re.split(r"(?<=[.:?!])\s+", text) if x]
             t, span = start[part] + 0.4 + 0.25, seconds[str(n)] - 0.5
             total = sum(len(x.split()) for x in sentences)
@@ -196,7 +199,7 @@ def main(vo: Path | None, out: Path) -> None:
         srt = out.with_suffix(".srt")
         srt.write_text("\n".join(f"{i}\n{stamp(a)} --> {stamp(b)}\n{x}\n" for i, (a, b, x) in enumerate(cues_, 1)))
         subs = ["-i", srt, "-map", "2:s", "-c:s", "mov_text", "-metadata:s:s:0", "language=eng"]
-    ff("-i", VID / "clearswath.mp4", "-i", AUDIO / "mix.wav", *subs[:2], "-map", "0:v", "-map", "1:a", *subs[2:],
+    ff("-i", work / "clearswath.mp4", "-i", AUDIO / "mix.wav", *subs[:2], "-map", "0:v", "-map", "1:a", *subs[2:],
        "-c:v", "copy", "-c:a", "aac", "-b:a", "192k", "-ar", "48000", "-shortest", "-movflags", "+faststart", out)
     report = ff("-i", out, "-af", "ebur128=peak=true", "-f", "null", "-")
     summary = report[report.rfind("Summary:"):]
@@ -207,6 +210,7 @@ def main(vo: Path | None, out: Path) -> None:
 if __name__ == "__main__":
     ap = argparse.ArgumentParser()
     ap.add_argument("--vo", type=Path, help="Hunter's voiceover, one WAV")
-    ap.add_argument("--out", type=Path, default=VID / "ClearSwath_Meta_Hackathon_Final.mp4")
+    ap.add_argument("--script", type=Path, default=ROOT / "docs" / "video" / "SCRIPT.md")
+    ap.add_argument("--out", type=Path, help="default: the Final MP4 for SCRIPT.md, <cut>/ClearSwath_<name>.mp4 for an option")
     a = ap.parse_args()
-    main(a.vo, a.out)
+    main(a.script, a.vo, a.out)

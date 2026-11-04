@@ -61,9 +61,10 @@ def main(port: int, slow: float) -> None:
                 beats.append({"beat": beat, "name": name, "start": round(began, 2), "end": round(time.time() - start, 2)})
 
             page.goto(f"http://127.0.0.1:{port}/")
+            page.wait_for_selector("#demo-switch", timeout=60_000)  # the site opens on the Montana plan by itself
             shot("landing", 3)
             # 1. Montana: the label, the stream, the spurge map and Muse Spark's saved answer
-            page.get_by_role("button", name="Field and label").click()  # the form starts folded under the welcome
+            page.get_by_role("button", name="Field and label").click()  # the form starts folded under the plan
             page.get_by_role("checkbox", name="Ask Muse Spark to explain the plan").click()
             page.click("#demo")
             page.wait_for_selector("text=Saved Muse Spark answer", timeout=120_000)
@@ -72,6 +73,9 @@ def main(port: int, slow: float) -> None:
             page.click(".maplibregl-ctrl-zoom-in")
             page.click(".maplibregl-ctrl-zoom-in")
             shot("montana-spot-spray", 4)
+            # a rule whose quote isn't on the page: listed, not used
+            page.get_by_text("Rules not applied").scroll_into_view_if_needed()
+            shot("montana-dropped", 3)
             page.click("text=How it decided")
             page.locator(".agent").scroll_into_view_if_needed()
             shot("montana-agent", 5)

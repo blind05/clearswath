@@ -1,8 +1,10 @@
 """Cuts the demo video from the recorder's takes, following docs/video/SCRIPT.md. Video tooling only: ffmpeg + PIL.
 
 uv run python scripts/record_demo.py           # first: fresh takes and beats.json in data/video/
-uv run python scripts/cut_video.py [--out data/video/clearswath.mp4]    # picture, plus cut_timeline.json
-uv run python scripts/score_video.py [--vo voiceover.wav]               # music, sound, mix, final MP4
+uv run python scripts/cut_video.py [--script docs/video/cuts/B.md]    # picture, plus cut_timeline.json
+uv run python scripts/score_video.py [--script ...] [--vo voiceover.wav]  # music, sound, mix, final MP4
+
+The script's Scene column sets the order: each scene below is one VO line.
 
 Every shot is the real app (a segment of the recording, or a screenshot held with a slow zoom) or a real saved run;
 the only things added are the script's captions and the end card.
@@ -106,74 +108,108 @@ def clip(start: float, end: float, out: Path, caption: Path | None = None) -> Pa
     return out
 
 
-def main(out: Path) -> None:
+def work_dir(script: Path) -> Path:
+    """Where a cut's takes, voice and films go: data/video/ for SCRIPT.md, data/video/cuts/<name>/ for an option."""
+    return VID if script.name == "SCRIPT.md" else VID / "cuts" / script.stem
+
+
+def scenes(script: Path) -> list[str]:
+    """The script's scene column, in order: one VO line per scene."""
+    import re
+    return [r.split("|")[1].strip() for r in script.read_text().splitlines() if re.match(r"^\| [a-z]+ \|", r)]
+
+
+def main(script: Path) -> None:
+    work = work_dir(script)
+    work.mkdir(parents=True, exist_ok=True)
+    out = work / "clearswath.mp4"
     beats = {b["name"]: b for b in json.loads((VID / "beats.json").read_text())}
     prev = {b["name"]: e["end"] for b, e in zip(list(beats.values())[1:], beats.values())}  # each beat's lead-in
     shot = lambda n: VID / f"{beats[n]['beat']:02d}-{n}.png"  # noqa: E731
     tmp = Path(tempfile.mkdtemp())
     cap = lambda text, name: caption_png(text, tmp / f"cap-{name}.png")  # noqa: E731
-    parts = []
+    order = scenes(script)
     # with narration (scripts/narrate_video.py), each shot lasts at least its line plus a breath
-    manifest = VID / "voice" / "manifest.json"
-    vo = {int(k): v for k, v in json.loads(manifest.read_text())["seconds"].items()} if manifest.exists() else {}
+    manifest = work / "voice" / "manifest.json"
+    vo = {order[int(k) - 1]: v for k, v in json.loads(manifest.read_text())["seconds"].items()} if manifest.exists() else {}
     fit = lambda n, fixed, default: max(default if not vo else 0, vo.get(n, 0) + 0.8 - fixed, 1.5)  # noqa: E731
     span = lambda a, b: b - a  # noqa: E731
 
-    # 1. hook: zoom into the spray cells, as recorded, then hold
-    c = cap("9.7 of 24.1 acres marked to spray", "hook")
-    lead = span(prev["montana-spot-spray"], beats["montana-spot-spray"]["end"])
-    parts += [clip(prev["montana-spot-spray"], beats["montana-spot-spray"]["end"], tmp / "01a.mp4", c),
-              still(shot("montana-spot-spray"), fit(1, lead, 2.0), tmp / "01b.mp4", c)]
-    # 2. the label
-    c = cap("A pesticide label is the law", "label")
-    # label pages, not page 1: that is EPA's cover letter
-    for i, p in enumerate(label_pages(ROOT / "data" / "labels" / "tordon_22k.pdf", [11, 14, 16, 28], tmp)):
-        parts.append(still(p, fit(2, 0, 20.0) / 4, tmp / f"02{i}.mp4", c, zoom=1.04))
-    # 3. the demo, from the landing page to the plan
-    c = cap("Muse Spark reads the label. Code decides.", "plan")
-    lead = span(beats["landing"]["start"], beats["montana-plan"]["end"])
-    parts += [clip(beats["landing"]["start"], beats["montana-plan"]["end"], tmp / "03a.mp4", c),
-              still(shot("montana-plan"), fit(3, lead, 8.0), tmp / "03b.mp4", c)]
-    # 4. the scout: SAM alone, then with Muse Wonder's boxes (a real saved run on the South Dakota tile)
-    parts.append(still(card([("SAM 3.1, asked for \"tree line\"", 600, 52), ("finds 17% of trees on 20 test tiles", 400, 40),
-                             ("here: none", 400, 40)], tmp / "scout-a.png", ROOT / "docs/video/scout-sam-text-only.png"),
-                       fit(4, 0, 30.0) * 0.4, tmp / "04a.mp4", zoom=1.02))
-    parts.append(still(card([("Muse Wonder boxes", 600, 52), ("the tree lines it sees;", 600, 52), ("SAM 3.1 outlines them", 600, 52),
-                             ("62-69% of trees found, 3 runs", 400, 40)], tmp / "scout-b.png", ROOT / "docs/video/scout-wonder-sam.png"),
-                       fit(4, 0, 30.0) * 0.6, tmp / "04b.mp4", zoom=1.02))
-    # 5. the spray cells, close
-    parts.append(still(shot("montana-spot-spray"), fit(5, 0, 25.0), tmp / "05.mp4",
-                       cap("90% of spurge found, 40% of the block sprayed", "weeds"), zoom=1.12))
-    # 6. files for the drone
-    c = cap("Planning files: DJI, GeoJSON, KML", "files")
-    lead = span(prev["montana-dji-export"], beats["montana-dji-export"]["end"])
-    parts += [clip(prev["montana-dji-export"], beats["montana-dji-export"]["end"], tmp / "06a.mp4", c),
-              still(shot("montana-dji-export"), fit(6, lead, 11.0), tmp / "06b.mp4", c)]
-    # 7. the record: the demo's saved voice note (a synthetic voice, said in the VO and on the page)
-    parts.append(still(shot("montana-voice-record"), fit(7, 0, 12.0), tmp / "06v.mp4",
-                       cap("A spoken note fills the record", "record"), zoom=1.04))
-    # 8. South Dakota: the creek buffer, the ULV rule, the corrected outline
-    c = cap("150 ft from water, page 14", "creek")
-    lead = span(prev["dakota-creek-buffer"], beats["dakota-corrected-go"]["end"])
-    parts += [clip(prev["dakota-creek-buffer"], beats["dakota-why-here"]["end"], tmp / "07a.mp4", c),
-              clip(beats["dakota-why-here"]["end"], beats["dakota-corrected-go"]["end"], tmp / "07c.mp4",
-                   cap("Untick the ULV rule, pull the edge back", "fix")),
-              still(shot("dakota-corrected-go"), max(3.0, fit(8, lead, 8.0)), tmp / "07b.mp4",
-                    cap("No conflicts in checked rules", "go"))]
-    # 9. how it decided
-    parts.append(still(shot("montana-agent"), fit(9, 0, 15.0), tmp / "08.mp4",
-                       cap("Muse Spark 1.3 · Muse Wonder · SAM 3.1 · Muse Voice Transcribe · DINOv2 · Muse Spark Open", "models")))
-    # 10. end card
-    parts.append(still(card([("ClearSwath", 600, 96), ("Models read and see. Tested code plans.", 400, 44), ("The applicator decides.", 400, 44), ("", 400, 30),
-                             ("clearswath.onrender.com", 400, 40), ("github.com/blind05/clearswath", 400, 40)],
-                            tmp / "end.png"), max(6.0, fit(10, 0, 10.0)), tmp / "09.mp4", zoom=1.0))
+    def hook():  # zoom into the spray cells, as recorded, then hold
+        c = cap("9.7 of 24.1 acres marked to spray", "hook")
+        lead = span(prev["montana-spot-spray"], beats["montana-spot-spray"]["end"])
+        return [clip(prev["montana-spot-spray"], beats["montana-spot-spray"]["end"], tmp / "01a.mp4", c),
+                still(shot("montana-spot-spray"), fit("hook", lead, 2.0), tmp / "01b.mp4", c)]
+
+    def label():  # label pages, not page 1: that is EPA's cover letter
+        c = cap("A pesticide label is the law", "label")
+        return [still(p, fit("label", 0, 20.0) / 4, tmp / f"02{i}.mp4", c, zoom=1.04)
+                for i, p in enumerate(label_pages(ROOT / "data" / "labels" / "tordon_22k.pdf", [11, 14, 16, 28], tmp))]
+
+    def plan():  # the demo, from the landing page to the plan
+        c = cap("Muse Spark reads the label. Code decides.", "plan")
+        lead = span(beats["landing"]["start"], beats["montana-plan"]["end"])
+        return [clip(beats["landing"]["start"], beats["montana-plan"]["end"], tmp / "03a.mp4", c),
+                still(shot("montana-plan"), fit("plan", lead, 8.0), tmp / "03b.mp4", c)]
+
+    def dropped():  # a rule whose quote isn't on the page is listed and not used
+        return [still(shot("montana-dropped"), fit("dropped", 0, 6.0), tmp / "03c.mp4",
+                      cap("Quote not on the page: rule not used", "dropped"), zoom=1.0)]
+
+    def scout():  # SAM alone, then with Muse Wonder's boxes (a real saved run on the South Dakota tile)
+        return [still(card([("SAM 3.1, asked for \"tree line\"", 600, 52), ("finds 17% of trees on 20 test tiles", 400, 40),
+                            ("here: none", 400, 40)], tmp / "scout-a.png", ROOT / "docs/video/scout-sam-text-only.png"),
+                      fit("scout", 0, 30.0) * 0.4, tmp / "04a.mp4", zoom=1.02),
+                still(card([("Muse Wonder boxes", 600, 52), ("the tree lines it sees;", 600, 52), ("SAM 3.1 outlines them", 600, 52),
+                            ("62-69% of trees found, 3 runs", 400, 40)], tmp / "scout-b.png", ROOT / "docs/video/scout-wonder-sam.png"),
+                      fit("scout", 0, 30.0) * 0.6, tmp / "04b.mp4", zoom=1.02)]
+
+    def weeds():  # the spray cells, close
+        return [still(shot("montana-spot-spray"), fit("weeds", 0, 25.0), tmp / "05.mp4",
+                      cap("90% of spurge found, 40% of the block sprayed", "weeds"), zoom=1.12)]
+
+    def files():  # files for the drone
+        c = cap("Planning files: DJI, GeoJSON, KML", "files")
+        lead = span(prev["montana-dji-export"], beats["montana-dji-export"]["end"])
+        return [clip(prev["montana-dji-export"], beats["montana-dji-export"]["end"], tmp / "06a.mp4", c),
+                still(shot("montana-dji-export"), fit("files", lead, 11.0), tmp / "06b.mp4", c)]
+
+    def record():  # the demo's saved voice note (a synthetic voice, said in the VO and on the page)
+        return [still(shot("montana-voice-record"), fit("record", 0, 12.0), tmp / "06v.mp4",
+                      cap("A spoken note fills the record", "record"), zoom=1.04)]
+
+    def creek():  # South Dakota: the creek buffer, the ULV rule, the corrected outline
+        lead = span(prev["dakota-creek-buffer"], beats["dakota-corrected-go"]["end"])
+        return [clip(prev["dakota-creek-buffer"], beats["dakota-why-here"]["end"], tmp / "07a.mp4",
+                     cap("150 ft from water, page 14", "creek")),
+                clip(beats["dakota-why-here"]["end"], beats["dakota-corrected-go"]["end"], tmp / "07c.mp4",
+                     cap("Untick the ULV rule, pull the edge back", "fix")),
+                still(shot("dakota-corrected-go"), max(3.0, fit("creek", lead, 8.0)), tmp / "07b.mp4",
+                      cap("No conflicts in checked rules", "go"))]
+
+    def agent():  # how it decided
+        return [still(shot("montana-agent"), fit("agent", 0, 15.0), tmp / "08.mp4",
+                      cap("Muse Spark 1.3 · Muse Wonder · SAM 3.1 · Muse Voice Transcribe · DINOv2 · Muse Spark Open", "models"))]
+
+    def end():
+        return [still(card([("ClearSwath", 600, 96), ("Models read and see. Tested code plans.", 400, 44), ("The applicator decides.", 400, 44), ("", 400, 30),
+                            ("clearswath.onrender.com", 400, 40), ("github.com/blind05/clearswath", 400, 40)],
+                           tmp / "end.png"), max(6.0, fit("end", 0, 10.0)), tmp / "09.mp4", zoom=1.0)]
+
+    build = {f.__name__: f for f in (hook, label, plan, dropped, scout, weeds, files, record, creek, agent, end)}
+    parts, lines = [], []  # lines: the part each VO line starts on, for scripts/score_video.py
+    for name in order:
+        made = build[name]()
+        lines.append(made[0].stem)
+        parts += made
 
     timeline, at = [], 0.0  # where each part starts, for scripts/score_video.py
     for p in parts:
         timeline.append({"part": p.stem, "start": round(at, 3)})
         at += float(subprocess.run(["ffprobe", "-v", "error", "-show_entries", "format=duration", "-of", "csv=p=0", p],
                                    capture_output=True, text=True).stdout)
-    (VID / "cut_timeline.json").write_text(json.dumps({"duration": round(at, 3), "parts": timeline}, indent=1))
+    (work / "cut_timeline.json").write_text(json.dumps({"duration": round(at, 3), "parts": timeline, "lines": lines},
+                                                       indent=1))
     listing = tmp / "parts.txt"
     listing.write_text("".join(f"file '{p}'\n" for p in parts))
     silent = tmp / "silent.mp4"
@@ -186,8 +222,9 @@ def main(out: Path) -> None:
 
 if __name__ == "__main__":
     ap = argparse.ArgumentParser()
-    ap.add_argument("--out", type=Path, default=VID / "clearswath.mp4")
+    ap.add_argument("--script", type=Path, default=ROOT / "docs" / "video" / "SCRIPT.md",
+                    help="an option's script, docs/video/cuts/<name>.md, cuts into data/video/cuts/<name>/")
     a = ap.parse_args()
     if not (VID / "beats.json").exists():
         sys.exit("run scripts/record_demo.py first")
-    main(a.out)
+    main(a.script)

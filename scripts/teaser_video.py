@@ -14,7 +14,9 @@ VID = Path(__file__).resolve().parent.parent / "data" / "video"
 
 
 def main() -> None:
-    start = {p["part"]: p["start"] for p in json.loads((VID / "cut_timeline.json").read_text())["parts"]}
+    tl = json.loads((VID / "cut_timeline.json").read_text())
+    start = {p["part"]: p["start"] for p in tl["parts"]}
+    after_hook = start[tl["lines"][1]]  # where the scene after the hook starts
     beats = {b["name"]: b for b in json.loads((VID / "beats.json").read_text())}
     # 07a starts where the beat before the creek ends in the recording; the card opens at the why-here beat
     names = list(beats)
@@ -22,7 +24,7 @@ def main() -> None:
     why = start["07a"] + (beats["dakota-why-here"]["start"] - lead_in) - 0.3
     # (start, end, crop x on the 1920-wide frame: 440 keeps the captions, which start at x=460; audio: "mix" keeps
     # the voice, "music" doesn't)
-    segments = [(0.0, start["020"] - 0.1, 440, "mix"),
+    segments = [(0.0, after_hook - 0.1, 440, "mix"),
                 (start["04b"], start["04b"] + 6.5, 840, "music"),
                 (why, start["07c"], 440, "music"),
                 (start["09"], start["09"] + 6.0, 40, "music")]
