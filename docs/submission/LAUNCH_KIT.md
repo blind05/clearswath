@@ -33,7 +33,7 @@ application record through Muse Voice Transcribe, with anything unsaid marked mi
 still checks weather, licence and the field. Demo and code: (links).
 
 **Don't claim:** that the label said 9.7 acres; that a plan is safe, legal or compliant; that the DJI file was flown;
-label accuracy numbers (keys unreviewed); that the narration is Hunter's voice.
+label accuracy numbers (keys unreviewed); that the field note's applicator is real (it's a sample job, in Hunter's voice).
 
 ## Posting order (after the form is in; from the promotion team, 2026-11-03)
 
@@ -47,5 +47,5 @@ label accuracy numbers (keys unreviewed); that the narration is Hunter's voice.
    by air, 450 ft for ULV, page 14. No cross-posting.
 5. **Meta developer Discord / event channel:** the X link and two lines.
 
-Never: say a plan endorses spraying, that the DJI file was flown, a label-accuracy number, that the narration or the
-voice note is a real applicator, or that the label stated the acreage.
+Never: say a plan endorses spraying, that the DJI file was flown, a label-accuracy number, that the field note is a real
+applicator's job, or that the label stated the acreage.

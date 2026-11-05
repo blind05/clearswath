@@ -5,17 +5,18 @@
 **Try it: [clearswath.onrender.com](https://clearswath.onrender.com)** (free hosting: the first visit after a quiet spell
 can take a minute to wake up).
 
-Decision support, not clearance to spray: it checks the rules it lists, and the applicator decides. Both demos replay
-saved real runs; the DJI file is a planning file, not flight-tested; the video's narration is a disclosed synthetic
-voice.
-
 **Two minutes, no sign-up:**
 1. Open the site: the Montana example, a saved real run, opens by itself on the drone image: **Adjust**, 9.7 of 24.1 acres
    to spot spray.
 2. Click a spot on the map: a card quotes the label sentence that holds it back, with its page, or says nothing
    checked does.
-3. Scroll to **Application record**: a saved voice note filled it. Then follow **Show the South Dakota cropland
-   demo** for a field drawn up to a creek.
+3. Scroll to **Application record**: Hunter's spoken field note filled it, through Muse Voice Transcribe and Muse
+   Spark. Then follow **Show the South Dakota cropland demo** for a field drawn up to a creek.
+
+**Limits, plainly:** decision support, not clearance to spray; it checks the rules it lists and the applicator
+decides. Both demos replay saved real runs (the plan is recomputed in code when you change anything). The DJI file
+is a planning file, not flight-tested. The video is narrated by Hunter; its field note is his voice reading a made-up
+sample job.
 
 A pesticide label is a legal document, often dozens of pages (the two here run 30 and 61): setbacks from water, wind
 limits, rates, endangered-species bulletins. A drone can now spray single patches of weeds, but it doesn't read the
@@ -177,8 +178,10 @@ Everything in this repository was written during the hackathon, starting with th
 Third-party parts are the datasets, models and libraries credited below. Hunter Hagedorn built it with Claude Code
 (Anthropic) as the coding agent. The weed models were trained on Modal; the demo video is cut, scored and mixed by
 `scripts/cut_video.py` and `scripts/score_video.py` from the app's own recorded takes, with original generated music.
-The narration is a synthetic voice (Kokoro-82M, Apache-2.0, `scripts/narrate_video.py`), not Hunter's; its
-intelligibility was checked by transcribing the final mix with Muse Voice Transcribe.
+The narration is Hunter's own voice. The Montana demo's saved voice note is Hunter reading a made-up sample field
+note (the applicator "Pat Miller" isn't real); it went through Muse Voice Transcribe and Muse Spark by
+`scripts/use_note.py`, the same path as the page's "Fill the record". Earlier drafts used a synthetic voice
+(Kokoro-82M, `scripts/narrate_video.py`) for timing only.
 
 ## Data and credits
 

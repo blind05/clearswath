@@ -37,5 +37,5 @@ user acts; "replay" means the demo serves a saved real run.
 
 ## Biggest obstacle
 
-The video's last mile. The 2:22 cut exists (`docs/submission/VIDEO_QA.md`) with a disclosed synthetic voice; it
-still needs one human listen and a public link checked logged out.
+The video's last mile. The 2:31 cut in Hunter's voice exists (`docs/submission/VIDEO_QA.md`); it needs one
+watch-through and a public link checked logged out.

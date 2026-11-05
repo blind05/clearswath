@@ -5,7 +5,7 @@
   "operator_name": null,
   "owner_name": null,
   "owner_address": null,
-  "application_date": "2026-11-03",
+  "application_date": "2026-11-04",
   "start_time": "09:15",
   "end_time": "10:40",
   "product_name": "Tordon 22K Specialty Herbicide",
@@ -23,8 +23,8 @@
   "wind_speed_mph": 5.0,
   "wind_direction": "W",
   "temperature_f": 62.0,
-  "notes": "Sprayed Tordon 22K by drone.",
-  "transcript": "Pat Miller, licensed MT4412, sprayed Tordon 22K by drone on leafy spurge one quart per acre about 10 gallons total started 9 15 finished 10 40 wind five miles an hour from the west 62 degrees",
+  "notes": "Tordon 22K applied by drone.",
+  "transcript": "Pat Miller, license MT4412, sprayed today Tordon 22K by drone on leafy spurge one quart per acre 10 gallons 915 to 1040 wind five five from the west 62 degrees",
   "missing": [
    "owner_name",
    "owner_address",
@@ -34,7 +34,7 @@
   "part137": {
    "customer_name": null,
    "customer_address": null,
-   "service_date": "2026-11-03",
+   "service_date": "2026-11-04",
    "material": "Tordon 22K Specialty Herbicide (EPA Reg. No. 62719-6)",
    "quantity": "10 gallons",
    "pilot_name": null,
@@ -52,6 +52,6 @@
   }
  },
  "model": "muse-voice-transcribe-1.0",
- "date": "2026-11-03",
- "voice": "synthetic voice (Kokoro-82M) reading a made-up field note"
+ "date": "2026-11-04",
+ "voice": "sample field note in Hunter Hagedorn's own voice"
 }

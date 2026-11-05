@@ -83,8 +83,8 @@ def test_demo_record_uses_the_plan(client, monkeypatch):
 
 
 def test_montana_demo_shows_its_saved_voice_note(client):
-    saved = demo(client, "mt")["saved_record"]  # a synthetic-voice note, run through the real pipeline on 2026-11-03
-    assert "synthetic voice" in saved["voice"] and saved["model"] == "muse-voice-transcribe-1.0"
+    saved = demo(client, "mt")["saved_record"]  # Hunter's spoken sample note, run through the real pipeline on 2026-11-04
+    assert "sample field note" in saved["voice"] and saved["model"] == "muse-voice-transcribe-1.0"
     rec = saved["record"]
     assert "Tordon 22K" in rec["transcript"] and rec["pest"] == "leafy spurge" and rec["wind_direction"] == "W"
     assert rec["area_treated_acres"] == 9.73  # the plan's acres, not the "about ten gallons" heard

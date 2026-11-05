@@ -3,7 +3,7 @@
 uv run python scripts/teaser_video.py   # after score_video.py; writes data/video/ClearSwath_teaser_square.mp4
 
 The hook keeps its narration; the other moments play over the music alone (no sentence is cut in half).
-Each segment is cropped to a square around what matters in it.
+Each segment is cropped to a square around what matters in it, or fitted whole when it's already zoomed in.
 """
 
 import json
@@ -17,24 +17,21 @@ def main() -> None:
     tl = json.loads((VID / "cut_timeline.json").read_text())
     start = {p["part"]: p["start"] for p in tl["parts"]}
     after_hook = start[tl["lines"][1]]  # where the scene after the hook starts
-    beats = {b["name"]: b for b in json.loads((VID / "beats.json").read_text())}
-    # 07a starts where the beat before the creek ends in the recording; the card opens at the why-here beat
-    names = list(beats)
-    lead_in = beats[names[names.index("dakota-creek-buffer") - 1]]["end"]
-    why = start["07a"] + (beats["dakota-why-here"]["start"] - lead_in) - 0.3
-    # (start, end, crop x on the 1920-wide frame: 440 keeps the captions, which start at x=460; audio: "mix" keeps
-    # the voice, "music" doesn't)
-    segments = [(0.0, after_hook - 0.1, 440, "mix"),
-                (start["04b"], start["04b"] + 6.5, 840, "music"),
-                (why, start["07c"], 440, "music"),
-                (start["09"], start["09"] + 6.0, 40, "music")]
+    # (start, end, crop x on the 1920-wide frame, or None to fit the whole frame in the square; audio: "mix" keeps the
+    # voice, "music" doesn't). The hook and the scout crop to the right, where the captions sit; the label card and its
+    # PDF page, and the end card, are already zoomed, so they fit whole.
+    segments = [(0.0, after_hook - 0.1, 840, "mix"),
+                (start["07w"], start["07p"] + 4.0, None, "music"),
+                (start["04b"], start["04b"] + 5.0, 840, "music"),
+                (start["09"], start["09"] + 5.0, None, "music")]
     final, music = VID / "ClearSwath_Meta_Hackathon_Final.mp4", VID / "audio" / "music.wav"
     inputs, graph, labels = [], [], []
     for i, (a, b, x, audio) in enumerate(segments):
         inputs += ["-ss", f"{a:.3f}", "-to", f"{b:.3f}", "-i", str(final)]
         inputs += ["-ss", f"{a:.3f}", "-to", f"{b:.3f}", "-i", str(final if audio == "mix" else music)]
         v, s = 2 * i, 2 * i + 1
-        graph.append(f"[{v}:v]crop=1080:1080:{x}:0,setpts=PTS-STARTPTS,fps=30[v{i}]")
+        frame = f"crop=1080:1080:{x}:0" if x is not None else "scale=1080:-2,pad=1080:1080:0:(oh-ih)/2:color=0xF2F4F1"
+        graph.append(f"[{v}:v]{frame},setsar=1,setpts=PTS-STARTPTS,fps=30[v{i}]")
         graph.append(f"[{s}:a]aresample=48000,aformat=channel_layouts=stereo,afade=t=in:d=0.2,"
                      f"afade=t=out:st={b - a - 0.4:.3f}:d=0.4,asetpts=PTS-STARTPTS[a{i}]")
         labels.append(f"[v{i}][a{i}]")

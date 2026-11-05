@@ -73,12 +73,6 @@ def soft(noise: np.ndarray, width: int) -> np.ndarray:
     return np.convolve(noise, np.ones(width) / width, mode="same")
 
 
-def page_turn() -> np.ndarray:
-    t = t_of(0.45)
-    y = soft(RNG.normal(0, 1, len(t)), 6) - soft(RNG.normal(0, 1, len(t)), 60)  # band-limited hiss
-    return y * np.sin(np.pi * np.minimum(1, t / 0.45)) ** 3
-
-
 def thump() -> np.ndarray:
     t = t_of(0.7)
     phase = 2 * np.pi * (42 * t + 30 * (1 - np.exp(-t * 18)) / 18)
@@ -116,8 +110,6 @@ def score(duration: float, cues: dict) -> tuple[np.ndarray, np.ndarray]:
     n = np.arange(len(music))
     music *= np.minimum(1, n / (1.5 * SR)) * np.clip((duration * SR - n) / (4 * SR), 0, 1)  # in and out
     add(sfx, 0.25, thump(), 0.35)
-    for at in cues["pages"]:
-        add(sfx, at + 0.05, page_turn(), 0.16)
     add(sfx, cues["wonder"] + 0.3, chime(88), 0.09)
     add(sfx, cues["files"] + 0.5, tick(), 0.12)
     add(sfx, cues["go"] + 0.2, chime(86), 0.08)
@@ -149,9 +141,10 @@ def main(script: Path, vo: Path | None, out: Path | None) -> None:
     tl = json.loads((work / "cut_timeline.json").read_text())
     start = {p["part"]: p["start"] for p in tl["parts"]}
     stop = {a["part"]: b["start"] for a, b in zip(tl["parts"], tl["parts"][1:])} | {tl["parts"][-1]["part"]: tl["duration"]}
-    cues = {"pages": [start[f"02{i}"] for i in range(4)], "wonder": start["04b"], "files": start["06a"],
-            "go": start["07b"], "end": start["09"],
-            "quiet": [(start["01a"], stop["01b"]), (start["020"], stop["023"]), (start["04a"], stop["04a"])]}
+    pages = [p for p in ("020", "021", "022", "023") if p in start]
+    cues = {"wonder": start["04b"], "files": start["06a"],
+            "go": start.get("07b", start.get("07g")), "end": start["09"],
+            "quiet": [(start["01a"], stop["01b"]), (start["020"], stop[pages[-1]]), (start["04a"], stop["04a"])]}
     music, sfx = score(tl["duration"], cues)
     voice = work / "voice" / "manifest.json"
     firsts = tl["lines"]  # the part each VO line starts on

@@ -13,4 +13,4 @@
 | DJI prescription | Planning file, not flight-tested | none |
 | Photo mode | Live on Modal; trained on cotton and sugar beet | DINOv3 ViT-S/16 + head |
 | Voice record | Live behind the access code: mic or any audio file, converted in the browser; checked on a person's speech | Muse Voice Transcribe, Muse Spark |
-| Video narration | Synthetic voice, Kokoro-82M (Apache-2.0); not Hunter's voice | none (Muse Voice Transcribe used only to check intelligibility) |
+| Video narration | Hunter's own voice (15 takes, cut E) | Muse Voice Transcribe split and checked the takes; his field note fills the demo record through Voice Transcribe and Muse Spark |

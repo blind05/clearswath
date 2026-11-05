@@ -34,13 +34,13 @@ Conditions: one listen by Hunter, the video uploaded to a public link, and the s
 
 ## Video
 
-See `VIDEO_QA.md`. 2:22 (cut C, proof first), 1920x1080 H.264, AAC 48 kHz, -16.4 LUFS, subtitles embedded and as
-SRT. Narration is a disclosed synthetic voice (Kokoro-82M); 94% of script words heard back by Muse Voice Transcribe. Not yet listened to
-by a person.
+See `VIDEO_QA.md`. 2:31 (cut E), 1920x1080 H.264, AAC 48 kHz, -16.1 LUFS, subtitles embedded and as SRT.
+Narrated by Hunter; the record scene plays his own field note, which Muse Voice Transcribe and Muse Spark turned into
+the demo's record. Hunter recorded it; a final watch-through is still his.
 
 ## Remaining, in order
 
-1. Hunter listens to the video once; optionally replaces the synthetic narration with his own take.
+1. Hunter watches the final video once, with sound.
 2. Upload the final MP4 (YouTube unlisted or similar) and open the link in a private window.
 3. Uptime ping on `/api/health` every 10 minutes through Nov 8: `.github/workflows/keepalive.yml` (GitHub may
    delay scheduled runs; delete the file after judging).
@@ -60,14 +60,14 @@ participant guide.
 | Impact | 7/10 | A real operator task (label -> lines on a field) with a usable output; framed as decision support, not approval | No user beyond the builder has tried it |
 | Meta tooling | 7/10 | Spark 1.3 reads the label with quotes checked in code; Wonder + SAM 3.1 scout (measured over 3 runs); Spark agent replayed. DINOv2 is Meta open weights | Voice Transcribe checked on one person's 7 s note only; Spark Open reads a conditional buffer as unconditional |
 | Technical | 8/10 | UTM buffering, quote verification, fail-closed warnings, 447 offline tests, spend cap, per-visitor limit now correct behind Cloudflare | Label accuracy unclaimed: answer keys unreviewed |
-| Demo | 7/10 | Opens on the real map with 9.7 of 24.1 acres; click-for-reason; a spoken note fills the record; 2:22, the creek proof at 0:13 | Synthetic narration; nobody has listened to it yet |
+| Demo | 7/10 | Opens on the real map with 9.7 of 24.1 acres; click-for-reason; Hunter's own spoken note fills the record; 2:31, in his voice, his note recorded live on the page | Saved runs, not a live demo; the field note is a sample job |
 
 Weighted: about 7.2. Estimates from one reviewer who knows the code, so expect them to be generous.
 
 - **Could disqualify:** a video link that doesn't open for an anonymous viewer, or missing form fields.
 - **Why another team might win:** a live, unscripted demo, or real users. Here the judge sees saved runs.
-- **What would move it:** a human narration take, reviewed answer keys (then label precision and recall can be
-  claimed), and one real voice-note record.
+- **What would move it:** reviewed answer keys (then label precision and recall can be claimed), and a real
+  applicator's reaction.
 
 ## Meta credits used on 2026-11-03
 
